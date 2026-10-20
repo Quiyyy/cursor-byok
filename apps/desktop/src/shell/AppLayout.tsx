@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import type { IconifyIcon } from "@iconify/react/offline";
 import KeepAliveRouteOutlet from "keepalive-for-react-router";
 import { NavLink, useLocation } from "react-router-dom";
-import cursorIconUrl from "../shared/assets/icons/cursor.svg";
 import { api } from "../shared/api";
 import { PageLayout } from "./layout/PageLayout";
 import { Card } from "../shared/ui/Card";
@@ -10,7 +9,8 @@ import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import controls from "../shared/ui/Controls.module.scss";
 import { Icon } from "../shared/ui/Icon";
 import { TooltipTrigger } from "../shared/ui/TooltipTrigger";
-import { flatColorAboutIcon, flatColorAreaChartIcon, flatColorCrystalOscillatorIcon, flatColorSalesPerformanceIcon, flatColorSettingsIcon, refreshIcon } from "../shared/ui/icons";
+import { refreshIcon } from "../shared/ui/icons";
+import { accountsIcon, callsIcon, connectionIcon, guideIcon, modelsIcon, overviewIcon, preferencesIcon } from "../shared/ui/workbenchIcons";
 import { useMessage } from "../shared/ui/message";
 import { VirtualList } from "../shared/virtual/VirtualList";
 import { appStore, useAppStore } from "../shared/store/appStore";
@@ -18,12 +18,9 @@ import { useUpdateStore } from "../shared/store/updateStore";
 import styles from "./AppLayout.module.scss";
 import { PageActionsTarget } from "./PageActions";
 
-type MenuItem =
-  | { kind: "page"; path: string; label: string; icon: IconifyIcon | string }
-  | { kind: "external"; id: string; label: string; icon: IconifyIcon | string }
-  | { kind: "group"; label: string };
+type MenuItem = { path: string; label: string; icon: IconifyIcon };
 
-const keptAlivePages = ["/", "/calls", "/settings", "/harness/cursor", "/plugins"];
+const keptAlivePages = ["/", "/calls", "/settings", "/models", "/providers"];
 const tutorialReadStorageKey = "cursor-byok:tutorial-read";
 const tutorialUrl = "https://github.com/Quiyyy/cursor-byok/blob/main/README-CN.md";
 
@@ -34,6 +31,7 @@ export function AppLayout() {
   const location = useLocation();
   const [leftActionTarget, setLeftActionTarget] = useState<HTMLDivElement | null>(null);
   const [rightActionTarget, setRightActionTarget] = useState<HTMLDivElement | null>(null);
+  const [filterTarget, setFilterTarget] = useState<HTMLDivElement | null>(null);
   const [confirmTutorial, setConfirmTutorial] = useState(false);
   const [tutorialRead, setTutorialRead] = useState(() => {
     try {
@@ -43,15 +41,12 @@ export function AppLayout() {
     }
   });
   const menuItems: MenuItem[] = [
-    { kind: "page", path: "/", label: t("数据概览"), icon: flatColorAreaChartIcon },
-    { kind: "page", path: "/calls", label: t("调用详细"), icon: flatColorSalesPerformanceIcon },
-    { kind: "group", label: t("模型配置") },
-    { kind: "page", path: "/harness/cursor", label: "Cursor", icon: cursorIconUrl },
-    { kind: "group", label: t("设置") },
-    { kind: "page", path: "/plugins", label: t("插件配置"), icon: flatColorCrystalOscillatorIcon },
-    { kind: "page", path: "/settings", label: t("系统设置"), icon: flatColorSettingsIcon },
-    { kind: "external", id: "tutorial", label: t("使用教程"), icon: flatColorAboutIcon },
+    { path: "/", label: t("运行概览"), icon: overviewIcon },
+    { path: "/models", label: t("模型管理"), icon: modelsIcon },
+    { path: "/providers", label: t("账号连接"), icon: accountsIcon },
+    { path: "/calls", label: t("调用记录"), icon: callsIcon },
   ];
+  const connected = cursorHarness?.integration === "enabled" && cursorHarness.settings_applied && cursorHarness.ca === "ready";
 
   const openTutorial = useCallback(() => {
     setConfirmTutorial(false);
@@ -70,45 +65,34 @@ export function AppLayout() {
   return <PageLayout className={styles.root}>
     <Card as="aside" className={styles.menuCard}>
       <nav className={styles.navigation} aria-label={t("主菜单")}>
+        <div className={styles.navigationGroup}>{t("工作空间")}</div>
         <VirtualList
           items={menuItems}
-          itemKey={(item) => item.kind === "group" ? `group-${item.label}` : item.kind === "external" ? `external-${item.id}` : item.path}
-          estimatedItemHeight={36}
+          itemKey="path"
+          estimatedItemHeight={40}
           itemGap={3}
           className={`${styles.navigationList} scroll-shadow-bottom`}
         >
-          {(item) => item.kind === "group"
-          ? <div className={styles.navigationGroup} key={`group-${item.label}`}>{item.label}</div>
-          : item.kind === "external"
-          ? <div className={styles.navigationRow} key={item.id}>
-            <button
-              type="button"
-              aria-label={`${item.label}${tutorialRead ? "" : `，${t("未读")}`}`}
-              onClick={() => setConfirmTutorial(true)}
-            >
-              {typeof item.icon === "string"
-                ? <Icon src={item.icon} size="1.3em" />
-                : <Icon icon={item.icon} size="1.3em" />}
-              <span>{item.label}</span>
-              {!tutorialRead && <span className={styles.menuIndicatorDot} aria-hidden="true" />}
-            </button>
-          </div>
-          : <div className={styles.navigationRow} key={item.path}>
+          {(item) => <div className={styles.navigationRow} key={item.path}>
             <NavLink to={item.path} end={item.path === "/"}>
-              {typeof item.icon === "string"
-                ? <Icon src={item.icon} size="1.3em" />
-                : <Icon icon={item.icon} size="1.3em" />}
+              <Icon icon={item.icon} size="1.2em" />
               <span>{item.label}</span>
-              {item.path === "/harness/cursor" && cursorHarness && <span
-                className={styles.menuStatusTag}
-                data-taken={cursorHarness.settings_applied || undefined}
-              >
-                {cursorHarness.settings_applied ? t("已接管") : t("未接管")}
-              </span>}
-              {item.path === "/settings" && availableVersion && <span className={styles.menuIndicatorDot} aria-hidden="true" />}
             </NavLink>
           </div>}
         </VirtualList>
+        <div className={styles.navigationFooter}>
+          {document.documentElement.dataset.demo && <span className={styles.demoNotice}>{t("演示模式 · 数据仅保存在内存")}</span>}
+          <NavLink to="/models" className={styles.connectionStatus} data-connected={connected || undefined}>
+            <Icon icon={connectionIcon} />
+            <span>{!cursorHarness ? t("正在检查接入") : connected ? t("Cursor 已接管") : cursorHarness.integration === "degraded" ? t("Cursor 接入需检查") : t("Cursor 未接管")}</span>
+          </NavLink>
+          <div className={styles.navigationRow}>
+            <NavLink to="/settings"><Icon icon={preferencesIcon} size="1.2em" /><span>{t("系统设置")}</span>{availableVersion && <span className={styles.menuIndicatorDot} aria-hidden="true" />}</NavLink>
+          </div>
+          <div className={styles.navigationRow}>
+            <button type="button" onClick={() => setConfirmTutorial(true)} aria-label={t("使用教程")}><Icon icon={guideIcon} size="1.2em" /><span>{t("使用教程")}</span>{!tutorialRead && <span className={styles.menuIndicatorDot} aria-hidden="true" />}</button>
+          </div>
+        </div>
       </nav>
     </Card>
     <ConfirmDialog
@@ -132,7 +116,8 @@ export function AppLayout() {
           <div ref={setRightActionTarget} className={styles.pageActions} />
         </Card>
       </div>
-      <PageActionsTarget.Provider value={{ left: leftActionTarget, right: rightActionTarget }}>
+      <div ref={setFilterTarget} className={styles.filterRegion} />
+      <PageActionsTarget.Provider value={{ left: leftActionTarget, right: rightActionTarget, filters: filterTarget }}>
         <KeepAliveRouteOutlet
           activeCacheKey={location.pathname}
           include={keptAlivePages}

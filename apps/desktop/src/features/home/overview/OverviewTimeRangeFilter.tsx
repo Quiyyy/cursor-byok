@@ -5,6 +5,7 @@ import { parseTimeInput } from "../../../shared/utils/parseTimeInput";
 import controls from "../../../shared/ui/Controls.module.scss";
 import { Icon } from "../../../shared/ui/Icon";
 import { ModelSelect, type ModelSelectOption } from "../../../shared/ui/ModelSelect";
+import { Select } from "../../../shared/ui/Select";
 import { TooltipTrigger } from "../../../shared/ui/TooltipTrigger";
 import { refreshIcon } from "../../../shared/ui/icons";
 import styles from "./OverviewTimeRangeFilter.module.scss";
@@ -31,9 +32,9 @@ export function OverviewTimeRangeFilter({ value, quick, customOpen, customStart,
   onRefresh: () => void;
 }) {
   const presets: Array<{ value: Exclude<OverviewRangePreset, "custom">; label: string }> = [
+    { value: "ten-minutes", label: t("近10分钟") },
     { value: "hour", label: t("近1小时") },
     { value: "today", label: t("近1自然日") },
-    { value: "ten-minutes", label: t("近10分钟") },
     { value: "week", label: t("近一周") },
     { value: "month", label: t("近一个月") },
   ];
@@ -74,6 +75,9 @@ export function OverviewTimeRangeFilter({ value, quick, customOpen, customStart,
   const parsedEnd = parseTimeInput(customEnd);
   const customValid = parsedStart !== null && parsedEnd !== null && parsedStart < parsedEnd;
   return <div className={styles.root} aria-label={t("概览时间范围")}>
+    <div className={styles.compactPicker}><Select ariaLabel={t("概览时间范围")} value={value}
+      options={[...presets, { value: "custom", label: t("自定义") }]}
+      onChange={(next) => next === "custom" ? onCustomOpenChange(true) : onSelect(next as Exclude<OverviewRangePreset, "custom">)} /></div>
     <div className={styles.presets}>
       {presets.map((preset) => <button
         key={preset.value}
@@ -81,7 +85,9 @@ export function OverviewTimeRangeFilter({ value, quick, customOpen, customStart,
         aria-pressed={value === preset.value}
         onClick={() => onSelect(preset.value)}
       >{preset.label}</button>)}
+    </div>
       <button
+        className={`${controls.secondary} ${styles.customButton}`}
         ref={customButton}
         type="button"
         aria-haspopup="dialog"
@@ -90,7 +96,6 @@ export function OverviewTimeRangeFilter({ value, quick, customOpen, customStart,
         aria-pressed={value === "custom"}
         onClick={() => onCustomOpenChange(!customOpen)}
       >{t("自定义")}</button>
-    </div>
     <TooltipTrigger label={t("刷新")}><button className={controls.iconButton} aria-label={t("刷新")} disabled={busy} onClick={onRefresh}>
       <Icon className={busy ? controls.spin : ""} icon={refreshIcon} size="1.1em" />
     </button></TooltipTrigger>

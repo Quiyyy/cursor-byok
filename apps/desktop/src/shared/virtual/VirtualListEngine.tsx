@@ -297,7 +297,9 @@ export function VirtualList<TItem>(props: VirtualListProps<TItem>) {
   }, [onRangeChange, renderRange.end, renderRange.start])
 
   const measure = useCallback((index: number, node: HTMLElement | null) => {
-    if (!node) return
+    // KeepAlive hides cached pages; zero layout there is not a new row height.
+    // Preserve the last measurement so rows do not overlap on reactivation.
+    if (!node || node.getClientRects().length === 0) return
 
     const rangeMap = rangeMapRef.current
     const currentScrollState = scrollStateRef.current

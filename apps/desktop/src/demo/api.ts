@@ -4,15 +4,17 @@ import type {
   ExternalApiSettings,
   LlmCall,
   Model,
+  ModelInput,
   Overview,
   OverviewTokenUsageBucket,
   ProxySettings,
   StatisticsStorage,
   TabSettings,
 } from "../shared/api";
+import { demoPlugins } from "./plugins";
 
 const API_ROOT = "/__byok-api__/api";
-const FIXED_NOW = Date.UTC(2026, 7, 27, 8, 0, 0);
+const FIXED_NOW = Date.now();
 
 const models: Model[] = [
   createModel({ hash: "mock-claude-sonnet", order: 1, name: "Claude Sonnet 4", type: "anthropic", url: "https://api.anthropic.com", modelId: "claude-sonnet-4-20250514" }),
@@ -111,19 +113,48 @@ export function installDemoApi() {
     const body = await readBody(input, init);
 
     if (path === "/models" && method === "GET") return json(models);
-    if (path === "/models" && method === "POST") return json(models);
-    if (path === "/models/order") return json(models);
+    if (path === "/models" && method === "POST") {
+      const created = (body as { models: ModelInput[] }).models.map((input) => ({ ...input, model_hash: crypto.randomUUID(), created_at_ms: Date.now(), updated_at_ms: Date.now() }));
+      models.push(...created);
+      return json(created);
+    }
+    if (path === "/models/order") {
+      const hashes = (body as { model_hashes: string[] }).model_hashes;
+      models.forEach((model) => { model.sort_order = hashes.indexOf(model.model_hash); });
+      models.sort((a, b) => a.sort_order - b.sort_order);
+      return json(models);
+    }
     if (path === "/models/discover") return json({ models: models.map((model) => model.model_id) });
     if (path === "/models/import-v0049" && method === "GET") {
       return json({ source: "demo", total: 0, new_models: 0, existing_models: 0, models: [] });
     }
     if (path === "/models/import-v0049") return json({ imported: 0, skipped: 0, total: 0 });
     if (/^\/models\/[^/]+\/test\/[^/]+$/.test(path) && method === "POST") {
+      await demoDelay(init?.signal ?? (input instanceof Request ? input.signal : undefined));
+      if (decodeURIComponent(path).includes("demo.grok")) return json({ message: "Demo: authorization expired (401)" }, 502);
       return json({ duration_ms: 1_284, first_valid_response_ms: 418, output_tokens: 42, tokens_per_second: 38.6, tokens_estimated: false, output: "Mock connectivity test passed." });
     }
-    if (/^\/models\/[^/]+\/test\/[^/]+$/.test(path) || /^\/models\/[^/]+$/.test(path)) {
-      return method === "DELETE" ? empty() : json(models[0]);
+    if (/^\/models\/[^/]+\/test\/[^/]+$/.test(path)) return empty();
+    if (/^\/models\/[^/]+$/.test(path)) {
+      const hash = decodeURIComponent(path.slice("/models/".length));
+      const index = models.findIndex((model) => model.model_hash === hash);
+      if (index < 0) return json({ message: "Demo model not found" }, 404);
+      if (method === "DELETE") { models.splice(index, 1); return empty(); }
+      models[index] = { ...models[index], ...(body as ModelInput), updated_at_ms: Date.now() };
+      return json(models[index]);
     }
+    if (path === "/plugins") return json(demoPlugins);
+    if (path === "/plugins/runtime") return json({ state: "ready", version: "2.9.6", target: "demo", phase: null, downloaded_bytes: 0, total_bytes: null, error: null });
+    if (/^\/plugins\/[^/]+\/providers\/[^/]+\/models\/enabled$/.test(path)) {
+      const plugin = demoPlugins.find((entry) => entry.id === decodeURIComponent(path.split("/")[2]));
+      const enabled = body as { modelId: string; enabled: boolean };
+      const model = plugin?.providers.flatMap((entry) => entry.models).find((entry) => entry.modelId === enabled.modelId);
+      if (model) model.enabled = enabled.enabled;
+      return empty();
+    }
+    if (path.startsWith("/plugins/") && path.endsWith("/refresh")) return empty();
+    if (path.startsWith("/plugins/") && path.endsWith("/sync")) return json({ models: demoPlugins.find((plugin) => plugin.id === decodeURIComponent(path.split("/")[2]))?.providers[0].models.length ?? 0 });
+    if (path === "/settings/pricing") return json({ input_per_million: 5, output_per_million: 25, cache_read_per_million: 0.5, cache_write_per_million: 6.25 });
     if (path === "/overview") return json(createOverview(url.searchParams));
     if (path === "/llm-calls") return json(calls);
     if (path.startsWith("/llm-calls/")) return json(createCallDetail(path.slice("/llm-calls/".length)));
@@ -181,10 +212,17 @@ export function installDemoApi() {
       }
       return empty();
     }
-    if (path.endsWith("/dismissals")) return empty();
-
     return json({ message: `Unhandled demo endpoint: ${method} ${path}` }, 404);
   };
+}
+
+function demoDelay(signal?: AbortSignal | null) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
+    const abort = () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); };
+    const timer = window.setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, 3000);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 }
 
 function createModel({ hash, order, name, type, url, modelId, endpoint = "/v1/responses" }: {

@@ -9,16 +9,24 @@
   overflow: hidden;
 }
 
+.headerBackdrop {
+  position: absolute;
+  z-index: 20;
+  inset: 0 0 auto;
+  height: calc(var(--app-content-top) - 12px);
+  background: var(--vscode-editor-background);
+  pointer-events: none;
+}
+
 .title {
   position: absolute;
   z-index: 21;
-  top: var(--app-content-top);
+  top: calc(var(--window-safe-top) + 15px);
   left: max(var(--app-page-padding), calc((100% - var(--app-page-max-width)) / 2));
   margin: 0;
   padding-left:0;
-  font-size: type.$font-size-xxl;
-  font-weight: bolder;
-  transform: translateY(-150%);
+  font-size: type.$font-size-base;
+  font-weight: 600;
   -webkit-user-select: none;
   user-select: none;
   -webkit-user-select: none;

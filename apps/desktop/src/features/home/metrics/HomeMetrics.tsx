@@ -3,7 +3,6 @@ import { useAppStore } from "../../../shared/store/appStore";
 import { Icon } from "../../../shared/ui/Icon";
 import { useTooltip, type TooltipAnchor } from "../../../shared/ui/Tooltip";
 import { informationOutlineIcon } from "../../../shared/ui/icons";
-import { CacheHitRateChart } from "./CacheHitRateChart";
 import styles from "./HomeMetrics.module.scss";
 
 export type HomeMetricsData = {
@@ -59,7 +58,7 @@ function InfoTooltip({ content }: { content: string }) {
   ><Icon icon={informationOutlineIcon} size="1.1em" /></button>;
 }
 
-export function HomeMetrics({ data, refreshVersion = 0 }: { data: HomeMetricsData; refreshVersion?: number }) {
+export function HomeMetrics({ data }: { data: HomeMetricsData }) {
   const { pricing } = useAppStore();
   const inputTokens = Math.max(0, data.promptTokens - data.cacheReadTokens - data.cacheWriteTokens);
   const outputTokens = Math.max(0, data.tokenUsage - data.promptTokens);
@@ -76,7 +75,6 @@ export function HomeMetrics({ data, refreshVersion = 0 }: { data: HomeMetricsDat
     cacheWrite: priceTokens(data.cacheWriteTokens, pricing.cache_write_per_million),
   };
   const totalCost = costs.input + costs.output + costs.cacheRead + costs.cacheWrite;
-  const cacheCost = costs.cacheRead + costs.cacheWrite;
   const cacheTooltip = [
     t("当前：{rate}", { rate: formatRate(defaultCacheHitRate) }),
     t("公式：缓存读取 /（缓存读取 + 非缓存输入）"),
@@ -136,10 +134,6 @@ export function HomeMetrics({ data, refreshVersion = 0 }: { data: HomeMetricsDat
   return <div className={styles.scroller}>
     <section className={styles.root} aria-label={t("调用统计")}>
       <article className={styles.metric}>
-        <div className={styles.label}>{t("缓存命中率")}<InfoTooltip content={cacheTooltip} /></div>
-        <CacheHitRateChart rate={defaultCacheHitRate ?? 0} animationKey={refreshVersion} />
-      </article>
-      <article className={styles.metric}>
         <div className={styles.label}>{t("LLM 调用")}<InfoTooltip content={callsTooltip} /></div>
         <div className={styles.body}>
           <div className={styles.value} title={formatInteger(data.llmCalls)}>{formatCompactInteger(data.llmCalls)}</div>
@@ -157,10 +151,17 @@ export function HomeMetrics({ data, refreshVersion = 0 }: { data: HomeMetricsDat
         </div>
       </article>
       <article className={styles.metric}>
+        <div className={styles.label}>{t("缓存命中率")}<InfoTooltip content={cacheTooltip} /></div>
+        <div className={styles.body}>
+          <div className={styles.value}>{formatRate(defaultCacheHitRate)}</div>
+          <div className={styles.secondary}>{t("缓存读取占可命中输入的比例")}</div>
+        </div>
+      </article>
+      <article className={styles.metric}>
         <div className={styles.label}>{t("价值估算")}<InfoTooltip content={costTooltip} /></div>
         <div className={styles.body}>
           <div className={styles.value} title={formatUSD(totalCost)}>{formatUSD(totalCost)}</div>
-          <div className={styles.secondary}>{t("缓存读写 {cost}", { cost: formatUSD(cacheCost) })}</div>
+          <div className={styles.secondary}>{t("按配置单价估算，非实际账单")}</div>
         </div>
       </article>
     </section>

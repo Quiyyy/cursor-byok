@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, pluginText, type PluginDescriptor, type PluginImportFile, type PluginRuntimePhase, type PluginRuntimeStatus } from "../../shared/api";
 import { useI18n } from "../../i18n/store";
 import { PageContent } from "../../shell/layout/PageContent";
@@ -8,7 +9,7 @@ import { Button } from "../../shared/ui/Button";
 import { Card } from "../../shared/ui/Card";
 import { Modal } from "../../shared/ui/Modal";
 import { useMessage } from "../../shared/ui/message";
-import { TruncatedButton } from "../../shared/ui/TruncatedButton";
+import { PageActions } from "../../shell/PageActions";
 import { PluginAddPanel, PluginSettingsPanel } from "./PluginResourcePanels";
 import styles from "./PluginManagementPage.module.scss";
 
@@ -17,8 +18,21 @@ export function PluginManagementPage() {
   const [progressOpen, setProgressOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   const [selected, setSelected] = useState<{ pluginId: string; mode: "add" | "settings" } | null>(null);
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const requestedPlugin = params.get("plugin");
   const cancelRequested = useRef(false);
   const selectedPlugin = selected ? plugins.find((plugin) => plugin.id === selected.pluginId) ?? null : null;
+
+  useEffect(() => {
+    if (requestedPlugin && plugins.some((plugin) => plugin.id === requestedPlugin)) {
+      setSelected({ pluginId: requestedPlugin, mode: "settings" });
+    }
+  }, [requestedPlugin, plugins]);
+  const closeSelected = () => {
+    setSelected(null);
+    if (requestedPlugin) setParams({}, { replace: true });
+  };
 
   useEffect(() => {
     if (!pluginRuntime) void appStore.refreshPluginRuntime();
@@ -61,9 +75,13 @@ export function PluginManagementPage() {
     : 320;
 
   return <>
+    <PageActions><Button onClick={() => navigate("/models")}>{t("API Key 模型")}</Button></PageActions>
     <PageContent
-      title={t("插件配置")}
-      sections={[{ key: "installed-plugins", estimatedHeight, content }]}
+      title={t("账号连接")}
+      sections={[
+        { key: "connection-guide", estimatedHeight: 24, content: <span className={styles.connectionGuide}>{t("连接账号后，在账号管理中同步并添加模型。API Key 通道在模型管理中配置。")}</span> },
+        { key: "installed-plugins", estimatedHeight, content },
+      ]}
     />
     <RuntimeProgressModal
       open={progressOpen}
@@ -77,11 +95,11 @@ export function PluginManagementPage() {
       title={selected?.mode === "settings"
         ? t("{name} 账号管理", { name: selectedPlugin?.name ?? "" })
         : t("添加 {name} 账号", { name: selectedPlugin?.name ?? "" })}
-      onClose={() => setSelected(null)}
-      onSubmit={() => setSelected(null)}
+      onClose={closeSelected}
+      onSubmit={closeSelected}
       submitLabel={t("确定")}
     >
-      {selected?.mode === "add" && selectedPlugin && <PluginAddPanel plugin={selectedPlugin} onConfigured={() => setSelected(null)} />}
+      {selected?.mode === "add" && selectedPlugin && <PluginAddPanel plugin={selectedPlugin} onConfigured={closeSelected} />}
       {selected?.mode === "settings" && selectedPlugin && <PluginSettingsPanel plugin={selectedPlugin} />}
     </Modal>
   </>;
@@ -138,9 +156,15 @@ function PluginCard({ plugin, onOpen }: {
   const message = useMessage();
   const importInput = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
-  const configured = plugin.providers.some((provider) => provider.configured);
   const accountCount = plugin.resources.reduce((count, resource) => count + resource.resources.length, 0);
+  const configured = plugin.providers.some((provider) => provider.configured);
+  const accounts = plugin.resources.flatMap((resource) => resource.resources);
+  const invalidCount = accounts.filter((resource) => resource.state.status === "invalid").length;
+  const coolingCount = accounts.filter((resource) => resource.state.status === "cooling").length;
+  const readyCount = accounts.filter((resource) => resource.state.status === "ready").length;
   const modelCount = plugin.providers.reduce((count, provider) => count + provider.models.length, 0);
+  const enabledCount = plugin.providers.reduce((count, provider) => count + provider.models.filter((model) => model.enabled).length, 0);
+  const needsAttention = invalidCount > 0 || coolingCount > 0;
   const subtitle = plugin.providers.map((provider) => pluginText(provider.displayName, locale)).join(" · ") || plugin.id;
   const importResource = plugin.resources.find((resource) => resource.import);
   const exportResource = plugin.resources.find((resource) => resource.resources.length > 0);
@@ -171,6 +195,7 @@ function PluginCard({ plugin, onOpen }: {
   };
 
   const moreItems: ActionMenuItem[] = [
+    ...(plugin.author ? [{ id: "author", type: "text" as const, label: plugin.author }] : []),
     ...(importResource
       ? [
           {
@@ -205,42 +230,36 @@ function PluginCard({ plugin, onOpen }: {
   return (
     <Card className={styles.pluginCard}>
       <div className={styles.pluginCardTop}>
-        <img className={styles.pluginIcon} src={plugin.icon} />
+        <img className={styles.pluginIcon} src={plugin.icon} alt="" />
         <div className={styles.pluginIdentity}>
           <span className={styles.pluginName}>{plugin.name}</span>
           <span className={styles.pluginId}>{subtitle}</span>
         </div>
         <span
-          className={`${styles.stateBadge} ${configured ? styles.stateReady : ""}`}
+          className={`${styles.stateBadge} ${needsAttention ? styles.stateAttention : readyCount > 0 || configured ? styles.stateReady : ""}`}
         >
-          {configured ? t("已配置") : t("未配置")}
+          {invalidCount > 0 ? t("需重新授权") : coolingCount > 0 ? t("账号冷却中") : readyCount > 0 ? t("已连接") : configured ? t("已配置") : t("未连接")}
         </span>
       </div>
       <div className={styles.pluginMeta}>
         <span>
-          {t("{accounts} 个账号 · {models} 个模型", {
+          {t("{accounts} 个账号 · 已添加 {enabled} / {models} 个模型", {
             accounts: accountCount,
+            enabled: enabledCount,
             models: modelCount,
           })}
         </span>
-        {plugin.author && (
-          <span className={styles.pluginAuthor}>{plugin.author}</span>
-        )}
       </div>
+      {needsAttention && <span className={styles.accountNotice}>{t("可用 {ready} · 冷却 {cooling} · 失效 {invalid}", { ready: readyCount, cooling: coolingCount, invalid: invalidCount })}</span>}
       <div className={styles.cardActions}>
-        <TruncatedButton
-          size="small"
-          variant="primary"
-          label={t("添加账号")}
-          onClick={() => onOpen(plugin.id, "add")}
-        />
-        {configured && (
-          <TruncatedButton
-            size="small"
-            label={t("账号管理")}
-            onClick={() => onOpen(plugin.id, "settings")}
-          />
+        {(accountCount > 0 || configured) && (
+          <Button size="small" variant="primary" onClick={() => onOpen(plugin.id, "settings")}>{accountCount > 0 ? t("管理账号") : t("模型管理")}</Button>
         )}
+        <Button
+          size="small"
+          variant={accountCount > 0 ? "secondary" : "primary"}
+          onClick={() => onOpen(plugin.id, "add")}
+        >{t("添加账号")}</Button>
         {moreItems.length > 0 && (
           <span className={styles.moreAction}>
             <ActionMenu label={t("更多")} items={moreItems} />

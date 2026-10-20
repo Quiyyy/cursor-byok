@@ -2,18 +2,14 @@
 
 .scroller {
   width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
 }
 
 .root {
   width: 100%;
-  height: 130px;
+  min-height: 130px;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid var(--vscode-sideBar-border);
-  border-radius: var(--oa-overlay-radius);
+  gap: 12px;
   font-family: var(--oa-metrics-font);
 }
 
@@ -23,10 +19,10 @@
   flex-direction: column;
   justify-content: space-between;
   padding: 16px;
-
-  & + & {
-    border-left: 1px solid var(--vscode-sideBar-border);
-  }
+  min-height: 130px;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-sideBar-border);
+  border-radius: var(--oa-card-radius);
 }
 
 .label {
@@ -75,12 +71,15 @@
   margin-top: 12px;
   overflow: hidden;
   color: var(--vscode-descriptionForeground);
-  font-size: 12px;
+  font-size: type.$font-size-2xs;
   line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .tooltipText {
   white-space: pre-wrap;
+}
+
+@container (max-width: 680px) {
+  .root { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

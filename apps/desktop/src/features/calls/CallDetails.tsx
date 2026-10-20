@@ -2,6 +2,7 @@ import type { CallDetail } from "../../shared/api";
 import { JsonEditor } from "../../shared/ui/JsonEditor";
 import { Tabs, type TabItem } from "../../shared/ui/Tabs";
 import styles from "./CallDetails.module.scss";
+import { callStatusLabel } from "./callStatus";
 
 const show = (value: string | number | null) => value ?? "-";
 const timing = (value: number | null) => value == null ? "-" : `${value} ms`;
@@ -26,7 +27,7 @@ export function CallDetails({ detail }: { detail: CallDetail }) {
     [t("显示名称"), call.display_name],
     [t("思考强度"), show(call.reasoning_effort)],
     ["Fast", call.fast == null ? "-" : call.fast ? t("是") : t("否")],
-    [t("状态"), call.status],
+    [t("状态"), callStatusLabel(call.status)],
     ["Finish Reason", show(call.finish_reason)],
     ["HTTP Status", show(call.http_status)],
     ["Created At", `${call.created_at_ms} · ${new Date(call.created_at_ms).toLocaleString()}`],

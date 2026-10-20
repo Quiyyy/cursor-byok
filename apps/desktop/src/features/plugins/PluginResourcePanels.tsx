@@ -265,7 +265,7 @@ function ProviderRow({ provider, busy, syncing, onManageModels, onSync }: {
         {" · "}
         {provider.models.length > 0 ? t("{count} 个模型", { count: provider.models.length }) : t("尚未同步模型")}
         {" · "}
-        {provider.configured ? t("可调用") : t("未就绪")}
+        {provider.configured ? t("已配置") : t("未就绪")}
       </span>
     </div>
     {provider.hasModels && <div className={styles.actions}>
