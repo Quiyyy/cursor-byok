@@ -64,12 +64,12 @@ async function invoke(
       {
         url: CHAT_URL,
         model: input.model.id,
-        // Grok 4.6 accepts xhigh; Cursor's max is an alias for the highest supported effort.
+        // Grok 4.6 and 4.7 accept xhigh; Cursor's max is an alias for the highest supported effort.
         request: {
           ...input.request,
           reasoning: {
             enabled: true,
-            effort: input.model.id === "grok-4.6"
+            effort: ["grok-4.6", "grok-4.7"].includes(input.model.id)
               ? (input.request.reasoning.effort === "max"
                 ? "xhigh"
                 : input.request.reasoning.effort)

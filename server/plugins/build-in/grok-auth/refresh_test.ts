@@ -156,10 +156,14 @@ Deno.test("a token that expires during a failed refresh is not reused", async ()
   Date.now = () => now;
   try {
     const resource = account(120);
-    const patch = await prepareAccount(resource, null, context(async () => {
-      now += 180_000;
-      throw new Error("network timeout after sleep");
-    }));
+    const patch = await prepareAccount(
+      resource,
+      null,
+      context(async () => {
+        now += 180_000;
+        throw new Error("network timeout after sleep");
+      }),
+    );
     assert(patch?.state?.status === "cooling");
   } finally {
     Date.now = originalNow;
@@ -197,13 +201,29 @@ Deno.test("quota denial remains a quota error, not an expired login", async () =
   assert(patch.state?.status === "cooling" && data(patch).refreshToken === "refresh-old");
 });
 
-for (const effort of ["xhigh", "max"]) {
-  Deno.test(`Grok 4.6 transmits ${effort} as xhigh`, async () => {
+const reasoningCases: Array<[string, string | null, string | undefined]> = [
+  ["grok-4.7", "low", "low"],
+  ["grok-4.7", "medium", "medium"],
+  ["grok-4.7", "high", "high"],
+  ["grok-4.7", "xhigh", "xhigh"],
+  ["grok-4.7", "max", "xhigh"],
+  ["grok-4.7", null, undefined],
+  ["grok-4.6", "xhigh", "xhigh"],
+  ["grok-4.6", "max", "xhigh"],
+  ["grok-4.5", "xhigh", "high"],
+  ["grok-4.5", "max", "high"],
+];
+
+for (const [modelId, effort, expected] of reasoningCases) {
+  Deno.test(`${modelId} maps ${effort ?? "default"} effort to ${expected ?? "provider default"}`, async () => {
     const ctx = context(async () => {
       throw new Error("unexpected fetch");
     });
     ctx.network.stream = async (_url, init) => {
-      assert(JSON.parse(init?.body ?? "{}").reasoning_effort === "xhigh");
+      const body = JSON.parse(init?.body ?? "{}");
+      assert(body.model === modelId);
+      assert(body.reasoning_effort === expected);
+      if (expected === undefined) assert(!("reasoning_effort" in body));
       return {
         status: 200,
         headers: {},
@@ -214,7 +234,7 @@ for (const effort of ["xhigh", "max"]) {
     };
     const result = await grokProvider.invoke(
       {
-        model: { id: "grok-4.6", displayName: "Grok" },
+        model: { id: modelId, displayName: "Grok" },
         resource: account(3600),
         request: {
           instructions: "",

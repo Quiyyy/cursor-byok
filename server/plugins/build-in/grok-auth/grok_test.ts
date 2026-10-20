@@ -186,6 +186,7 @@ Deno.test("model discovery falls back to known models when the account cannot li
     }),
   );
   assertEquals(models, FALLBACK_MODELS);
+  assert(models.some((model) => model.id === "grok-4.7"), "fallback discovery lost Grok 4.7");
 });
 
 Deno.test("device OAuth begins with a host-held session and completes with a resource draft", async () => {

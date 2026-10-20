@@ -7,6 +7,11 @@ const MODELS_URL = "https://api.x.ai/v1/models";
 /** 免费账号无权调用模型列表接口(403 spending-limit);退回已知模型。 */
 export const FALLBACK_MODELS: ModelDefinition[] = [
   {
+    id: "grok-4.7",
+    displayName: "Grok 4.7",
+    capabilities: { images: true },
+  },
+  {
     id: "grok-4.6",
     displayName: "Grok 4.6",
     capabilities: { images: true },
