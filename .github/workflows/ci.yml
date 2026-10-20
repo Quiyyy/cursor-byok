@@ -54,7 +54,7 @@ jobs:
       - name: Test plugin credential lifecycle
         env:
           DENO_TEST_EXECUTABLE: deno
-        run: cargo test --package cursor-server --lib plugin:: -- --include-ignored
+        run: "cargo test --package cursor-server --lib plugin:: -- --include-ignored"
 
   frontend:
     name: Frontend
@@ -106,4 +106,4 @@ jobs:
       - name: Test plugin credential lifecycle
         env:
           DENO_TEST_EXECUTABLE: deno
-        run: cargo test --package cursor-server --lib plugin:: -- --include-ignored
+        run: "cargo test --package cursor-server --lib plugin:: -- --include-ignored"
