@@ -215,7 +215,14 @@ fn wire_content(content: &ProjectedContent, model: &str) -> Result<Value> {
             calls,
         } => {
             let mut parts = Vec::new();
-            if !thinking.is_empty() || replay_state.is_some() {
+            let native_parts = replay_state
+                .as_ref()
+                .filter(|state| state.provider_kind == "cursor_opaque")
+                .and_then(|state| state.value.get("parts"))
+                .and_then(Value::as_array);
+            if let Some(native_parts) = native_parts {
+                parts.extend(native_parts.iter().cloned());
+            } else if !thinking.is_empty() || replay_state.is_some() {
                 let mut reasoning = json!({
                     "type": "reasoning",
                     "text": thinking,

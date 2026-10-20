@@ -48,8 +48,12 @@ jobs:
         with:
           deno-version: v2.9.6
 
-      - name: Test Grok OAuth and reasoning behavior
-        run: deno test --config server/plugins/build-in/grok-auth/deno.json server/plugins/build-in/grok-auth/
+      - name: Test built-in plugins and OAuth renewal
+        run: |
+          deno test --config server/plugins/build-in/grok-auth/deno.json server/plugins/build-in/grok-auth/
+          deno test --config server/plugins/build-in/codex-auth/deno.json server/plugins/build-in/codex-auth/
+          deno test --config server/plugins/build-in/antigravity-auth/deno.json server/plugins/build-in/antigravity-auth/
+          deno test --import-map server/src/plugin/sdk/import-map.json server/src/plugin/sdk/oauth_test.ts
 
       - name: Test plugin credential lifecycle
         env:

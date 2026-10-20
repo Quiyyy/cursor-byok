@@ -49,7 +49,7 @@ pub async fn consume_model_cycle(
     let mut thinking_started = None::<Instant>;
     let mut tools = BTreeMap::<usize, OpenTool>::new();
     let mut call_ids = std::collections::HashSet::new();
-    let mut replay_state = None;
+    let mut replay_state: Option<ProviderReplayState> = None;
     let mut usage = None;
     let mut finish = None;
 
@@ -246,9 +246,10 @@ pub async fn consume_model_cycle(
                 None => Err("provider ended an unknown tool index"),
             },
             ModelEvent::ProviderReplayState(state) => {
-                if replay_state.replace(state).is_some() {
-                    Err("provider emitted duplicate ProviderReplayState")
+                if let Some(current) = replay_state.as_mut() {
+                    current.append(state)
                 } else {
+                    replay_state = Some(state);
                     Ok(())
                 }
             }
@@ -377,7 +378,7 @@ fn failure(
         RunFailure::Protocol(_) => true,
         RunFailure::Provider(message) if is_rejected_request(message) => false,
         RunFailure::Provider(_) => true,
-        RunFailure::Store(_) | RunFailure::Client(_) => false,
+        RunFailure::ProviderRefusal(_) | RunFailure::Store(_) | RunFailure::Client(_) => false,
     };
     Box::new(ModelCycleFailure {
         failure,

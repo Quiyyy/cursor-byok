@@ -28,15 +28,12 @@ pub(crate) async fn compile_user_message_action(
     compiler: &PromptCompiler,
     blobs: &BlobSynchronizer,
 ) -> Result<CanonicalMessage> {
-    let user = action
+    let mut user = action
         .user_message
         .as_ref()
-        .ok_or_else(|| Error::Protocol("Cursor user message action has no UserMessage".into()))?;
-    if user.message_id.is_empty() {
-        return Err(Error::Protocol(
-            "Cursor user message action has no message_id".into(),
-        ));
-    }
+        .ok_or_else(|| Error::Protocol("Cursor user message action has no UserMessage".into()))?
+        .clone();
+    user.message_id = super::run::user_message_id(&user);
     let mode = if user.mode == pb::AgentMode::Unspecified as i32 {
         current_mode
     } else {
@@ -59,7 +56,7 @@ pub(crate) async fn compile_user_message_action(
     compile(
         format!("user-message:{}", user.message_id),
         super::run::mode_from_proto(mode)?,
-        user,
+        &user,
         action.request_context.as_ref().unwrap_or(&empty_context),
         &action_context.join("\\n\\n"),
         compiler,
@@ -82,19 +79,15 @@ pub(crate) async fn compile_injection(
     let event_id = format!("inject-context:{}", injection.injection_id);
     match injection.payload.as_ref() {
         Some(pb::inject_context_action::Payload::UserContext(context)) => {
-            let user = context.user_message.as_ref().ok_or_else(|| {
+            let mut user = context.user_message.as_ref().ok_or_else(|| {
                 Error::Protocol("InjectContextAction UserContext has no UserMessage".into())
-            })?;
-            if user.message_id.is_empty() {
-                return Err(Error::Protocol(
-                    "InjectContextAction UserMessage has no message_id".into(),
-                ));
-            }
+            })?.clone();
+            user.message_id = super::run::user_message_id(&user);
             let empty_context = pb::RequestContext::default();
             compile(
                 event_id,
                 super::run::mode_from_proto(mode)?,
-                user,
+                &user,
                 context.request_context.as_ref().unwrap_or(&empty_context),
                 "",
                 compiler,

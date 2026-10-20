@@ -1,0 +1,2 @@
+# Prompt assets are embedded verbatim; keep identical bytes on every platform.
+server/prompt/** text eol=lf

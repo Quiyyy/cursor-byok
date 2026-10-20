@@ -1,5 +1,10 @@
 //! Orchestrates plugin capabilities: resources, model catalogs, and invocation.
-use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use async_stream::try_stream;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -136,12 +141,27 @@ pub struct PluginInvocationPlan {
 
 impl PluginRegistry {
     pub fn managed(store: Store, runtime: PluginRuntime, app_version: String) -> Result<Self> {
-        let data = PluginDataStore::managed()?;
+        Self::in_directory(
+            store,
+            runtime,
+            app_version,
+            crate::config::managed_data_dir()?.join("plugins"),
+        )
+    }
+
+    /// Use an explicit plugin root without reading or modifying the user's installation.
+    pub fn in_directory(
+        store: Store,
+        runtime: PluginRuntime,
+        app_version: String,
+        root: PathBuf,
+    ) -> Result<Self> {
+        let data = PluginDataStore::new(root.join("data"))?;
         Ok(Self {
             inner: Arc::new(RegistryInner {
                 store,
                 runtime,
-                catalog: PluginCatalog::managed(app_version)?,
+                catalog: PluginCatalog::in_directory(root, app_version)?,
                 state: PluginStateStore::new(data),
                 entries: RwLock::new(None),
                 workers: Mutex::new(HashMap::new()),
@@ -1561,6 +1581,14 @@ mod auth_retry_tests {
             std::env::var_os("DENO_TEST_EXECUTABLE").expect("set DENO_TEST_EXECUTABLE"),
         );
         let root = tempfile::tempdir().unwrap();
+        #[cfg(unix)]
+        {
+            // Exercise Deno's grants through a filesystem alias on every Unix
+            // runner, not only macOS where /var already aliases /private/var.
+            let installed = root.path().join("physical-plugins");
+            std::fs::create_dir_all(&installed).unwrap();
+            std::os::unix::fs::symlink(&installed, root.path().join("installed")).unwrap();
+        }
         let directory = root.path().join("installed/test");
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(directory.join("plugin.json"), r#"{"apiVersion":1,"id":"dev.refresh","name":"Refresh test","version":"0.1.0","minAppVersion":"0.1.0","entry":"main.ts","icon":"icon.svg","permissions":{"network":[]}}"#).unwrap();
@@ -1610,11 +1638,10 @@ mod auth_retry_tests {
             .unwrap()
             .remove(0);
         let catalog = PluginCatalog::for_test(root.path().to_owned());
-        let entry = catalog
-            .entries(&executable)
-            .await
-            .pop()
-            .expect("test plugin loads");
+        let entry =
+            super::super::catalog::load_plugin(&directory, catalog.loader(), &executable, "0.1.7")
+                .await
+                .expect("test plugin loads");
         let registry = PluginRegistry {
             inner: Arc::new(RegistryInner {
                 store,

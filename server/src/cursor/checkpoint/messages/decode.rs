@@ -171,7 +171,9 @@ fn decode_assistant(value: &Value, internal_id: &str) -> Result<MessageContent> 
     let mut text = String::new();
     let mut thinking = String::new();
     let mut calls = Vec::new();
-    let mut replay_state = None;
+    let mut replay_state: Option<crate::model::ProviderReplayState> = None;
+    let mut reasoning_parts = Vec::new();
+    let mut opaque_signatures = 0;
     for part in value
         .get("content")
         .and_then(Value::as_array)
@@ -184,13 +186,23 @@ fn decode_assistant(value: &Value, internal_id: &str) -> Result<MessageContent> 
             }
             Some("reasoning") => {
                 thinking.push_str(part.get("text").and_then(Value::as_str).unwrap_or_default());
+                reasoning_parts.push(part.clone());
                 if let Some(signature) = part.get("signature").and_then(Value::as_str) {
-                    if replay_state.is_some() {
-                        return Err(Error::Protocol(
-                            "Cursor assistant has multiple reasoning signatures".into(),
-                        ));
+                    let next = decode_replay_state(signature)?;
+                    if next.provider_kind == "cursor_opaque" {
+                        opaque_signatures += 1;
                     }
-                    replay_state = Some(decode_replay_state(signature)?);
+                    if let Some(current) = replay_state.as_mut() {
+                        if current.provider_kind != "cursor_opaque"
+                            || next.provider_kind != "cursor_opaque"
+                        {
+                            current
+                                .append(next)
+                                .map_err(|message| Error::Protocol(message.into()))?;
+                        }
+                    } else {
+                        replay_state = Some(next);
+                    }
                 }
             }
             Some("tool-call") => calls.push(ToolCallContent {
@@ -201,6 +213,12 @@ fn decode_assistant(value: &Value, internal_id: &str) -> Result<MessageContent> 
             }),
             _ => {}
         }
+    }
+    if opaque_signatures > 0 && reasoning_parts.len() > 1 {
+        replay_state = Some(crate::model::ProviderReplayState {
+            provider_kind: "cursor_opaque".into(),
+            value: serde_json::json!({ "parts": reasoning_parts }),
+        });
     }
     Ok(MessageContent::Assistant {
         text,

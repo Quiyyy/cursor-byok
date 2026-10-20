@@ -12,7 +12,7 @@ use super::{
     descriptor::PluginModuleDefinition,
     manifest::{validate_id, PluginManifest},
 };
-use crate::{config, Error, Result};
+use crate::{Error, Result};
 
 const MANIFEST_FILE_NAME: &str = "plugin.json";
 const MAX_ICON_BYTES: u64 = 1024 * 1024;
@@ -42,8 +42,8 @@ impl PluginCatalog {
             app_version: "0.1.7".into(),
         }
     }
-    pub fn managed(app_version: String) -> Result<Self> {
-        let installed = config::managed_data_dir()?.join("plugins/installed");
+    pub(super) fn in_directory(root: PathBuf, app_version: String) -> Result<Self> {
+        let installed = root.join("installed");
         fs::create_dir_all(&installed)?;
         #[cfg(unix)]
         {
@@ -63,7 +63,7 @@ impl PluginCatalog {
         let roots = vec![installed];
         Ok(Self {
             roots,
-            definition_loader: PluginDefinitionLoader::managed()?,
+            definition_loader: PluginDefinitionLoader::in_directory(root.join("runtime/sdk/v1"))?,
             app_version,
         })
     }
@@ -163,22 +163,25 @@ fn require_app_version(manifest: &PluginManifest, app_version: &str) -> Result<(
     )))
 }
 
-async fn load_plugin(
+pub(super) async fn load_plugin(
     directory: &Path,
     loader: &PluginDefinitionLoader,
     executable: &Path,
     app_version: &str,
 ) -> Result<PluginEntry> {
+    // The entry URL and Deno's read grant must use the same physical path.
+    // For example, macOS /var is a symlink to /private/var.
+    let directory = directory.canonicalize()?;
     let manifest: PluginManifest =
         serde_json::from_slice(&fs::read(directory.join(MANIFEST_FILE_NAME))?)?;
-    manifest.validate(directory)?;
+    manifest.validate(&directory)?;
     require_app_version(&manifest, app_version)?;
-    let icon = icon_data_url(directory, &manifest.icon)?;
+    let icon = icon_data_url(&directory, &manifest.icon)?;
     let entry = directory.join(&manifest.entry).canonicalize()?;
-    let definition = loader.load(executable, directory, &entry).await?;
+    let definition = loader.load(executable, &directory, &entry).await?;
     validate_definition(&manifest.id, &definition)?;
     Ok(PluginEntry {
-        directory: directory.to_path_buf(),
+        directory,
         entry,
         manifest,
         definition,

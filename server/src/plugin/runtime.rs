@@ -113,10 +113,11 @@ impl PluginRuntime {
         }
     }
     pub fn managed() -> Result<Self> {
-        Self::new(config::managed_data_dir()?.join("plugins").join("runtime"))
+        Self::in_directory(config::managed_data_dir()?.join("plugins").join("runtime"))
     }
 
-    fn new(root: PathBuf) -> Result<Self> {
+    /// Keep embedded runtimes and tests independent of the current user's installation.
+    pub fn in_directory(root: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&root)?;
         #[cfg(unix)]
         {

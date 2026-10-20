@@ -111,7 +111,7 @@ async function invoke(
   } catch (error) {
     if (error instanceof HttpError) {
       if (error.status === 401) {
-        return invalidResult(error.message, "ChatGPT authorization expired; sign in again");
+        return { status: "auth-error", message: "ChatGPT authorization rejected; refresh required" };
       }
       if (isQuotaHttpError(error)) {
         return {

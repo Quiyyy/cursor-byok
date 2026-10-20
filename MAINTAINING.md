@@ -11,11 +11,13 @@
 
 ## 已合入的改动
 
-- Grok 登录凭据在启动加载、模型调用、模型发现和手动刷新时按需续期。
+- Grok、ChatGPT 和 Google 登录凭据共用 SDK 续期逻辑，在启动加载、模型调用、模型发现和手动刷新时按需续期。
 - 同账号刷新串行化；刷新后的凭据先保存再调用模型，避免请求取消或并发结果覆盖新凭据。
 - 区分临时网络错误与失效授权；首次、尚未输出内容的 401 可以刷新后重试一次。
 - Grok 4.7 模型发现与思考参数适配；Grok 4.6 / 4.7 的 `max` 映射为 `xhigh`。
-- CI 覆盖 Grok 插件行为及 Linux、Windows、macOS 的宿主凭据生命周期。
+- 移除广告弹窗、广告菜单、广告请求、广告缓存读写和仅供广告使用的安装标识。
+- 修复子代理接入与 Steer 后结果回传、MCP Schema 整数、Responses 文字回放、多段思考签名、Anthropic 拒绝处理、代理缓存失效及 SQLite 连接回收。范围与上游来源见[排查记录](./UPSTREAM-BUG-AUDIT.md)。
+- CI 覆盖三类内置插件、共享 OAuth SDK，以及 Linux、Windows、macOS 的宿主凭据生命周期。
 
 自动续期不能恢复服务商已撤销的授权。`invalid_grant` 等终止错误仍需要用户重新登录。
 
@@ -30,6 +32,9 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
 deno test --config server/plugins/build-in/grok-auth/deno.json server/plugins/build-in/grok-auth/
+deno test --config server/plugins/build-in/codex-auth/deno.json server/plugins/build-in/codex-auth/
+deno test --config server/plugins/build-in/antigravity-auth/deno.json server/plugins/build-in/antigravity-auth/
+deno test --import-map server/src/plugin/sdk/import-map.json server/src/plugin/sdk/oauth_test.ts
 ```
 
 宿主凭据测试需要额外设置 `DENO_TEST_EXECUTABLE` 为 Deno 的可执行文件路径，再运行：
@@ -37,6 +42,8 @@ deno test --config server/plugins/build-in/grok-auth/deno.json server/plugins/bu
 ```sh
 cargo test --package cursor-server --lib plugin:: -- --include-ignored
 ```
+
+集成测试必须使用临时目录中的 `PluginRuntime::in_directory` 和 `PluginRegistry::in_directory`。测试中禁止调用 `managed()`，后者用于正式应用，可能安装内置插件并读取当前用户的账号。测试不需要真实账号、网络令牌或用户数据库。
 
 本地启动使用 `make dev-web` 或 `make dev-desktop`。桌面生产构建使用 Tauri CLI（`npm --prefix apps/desktop run tauri:build`）或 `make build-desktop`，确保前端资源被嵌入。
 
@@ -53,7 +60,7 @@ cargo test --package cursor-server --lib plugin:: -- --include-ignored
 
 ## 待处理的问题
 
-- 为 ChatGPT 插件补齐凭据刷新生命周期；现有 Grok 续期实现不代表 ChatGPT 插件已经自动续期。
+- 补充 Remote SSH、语音输入 HTTP/2 透传的真实客户端验证；未确认项见排查记录。
 - 对 Cursor 聊天中的 Windows 本地文件链接进行规范化。已观察到部分 Cursor 版本会移除裸盘符 Markdown 链接的 `href`，而 Canvas 文件可通过原生入口打开。
 - 跟进 Cursor 协议变化，并用真实客户端验证工具调用、取消、会话恢复及 Canvas 接入。
 

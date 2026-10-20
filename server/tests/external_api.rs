@@ -62,8 +62,14 @@ async fn setup() -> (
 ) {
     let (directory, store) = fixtures::temp_store().await;
     store.create_model(&model_input()).await.unwrap();
-    let runtime = PluginRuntime::managed().unwrap();
-    let plugins = PluginRegistry::managed(store.clone(), runtime.clone(), "0.1.0".into()).unwrap();
+    let runtime = PluginRuntime::in_directory(directory.path().join("plugins/runtime")).unwrap();
+    let plugins = PluginRegistry::in_directory(
+        store.clone(),
+        runtime.clone(),
+        "0.1.0".into(),
+        directory.path().join("plugins"),
+    )
+    .unwrap();
     let provider = fake_provider::FakeProvider::default();
     let shared_provider = Arc::new(provider.clone());
     let control = control::ControlService::new(
@@ -72,7 +78,6 @@ async fn setup() -> (
         runtime,
         plugins.clone(),
         NetworkClients::new(store.clone()),
-        "0.1.0".into(),
     )
     .unwrap();
     let router = byok::router(store.clone(), plugins, shared_provider, None)
@@ -598,7 +603,7 @@ async fn all_protocols_preserve_cached_usage_in_streaming_and_complete_responses
 
 #[tokio::test]
 async fn all_entry_and_upstream_protocol_pairs_preserve_cache_usage() {
-    let (_directory, store) = fixtures::temp_store().await;
+    let (directory, store) = fixtures::temp_store().await;
     store.create_model(&model_input()).await.unwrap();
     store
         .set_external_api_settings(ExternalApiSettings {
@@ -607,8 +612,14 @@ async fn all_entry_and_upstream_protocol_pairs_preserve_cache_usage() {
         })
         .await
         .unwrap();
-    let runtime = PluginRuntime::managed().unwrap();
-    let plugins = PluginRegistry::managed(store.clone(), runtime, "0.1.0".into()).unwrap();
+    let runtime = PluginRuntime::in_directory(directory.path().join("plugins/runtime")).unwrap();
+    let plugins = PluginRegistry::in_directory(
+        store.clone(),
+        runtime,
+        "0.1.0".into(),
+        directory.path().join("plugins"),
+    )
+    .unwrap();
     let fake = fake_provider::FakeProvider::default();
     let inner = byok::router(store.clone(), plugins.clone(), Arc::new(fake.clone()), None);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -763,8 +774,14 @@ async fn matching_http_protocols_forward_native_requests_and_responses() {
         })
         .await
         .unwrap();
-    let runtime = PluginRuntime::managed().unwrap();
-    let plugins = PluginRegistry::managed(store.clone(), runtime, "0.1.0".into()).unwrap();
+    let runtime = PluginRuntime::in_directory(directory.path().join("plugins/runtime")).unwrap();
+    let plugins = PluginRegistry::in_directory(
+        store.clone(),
+        runtime,
+        "0.1.0".into(),
+        directory.path().join("plugins"),
+    )
+    .unwrap();
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<(HeaderMap, Value)>();
     let upstream = Router::new().route(
         "/{*path}",

@@ -8,7 +8,7 @@ use std::{
 use tokio::io::AsyncReadExt;
 
 use super::descriptor::PluginModuleDefinition;
-use crate::{config, Error, Result};
+use crate::{Error, Result};
 
 const DEFINITION_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_OUTPUT_BYTES: u64 = 2 * 1024 * 1024;
@@ -24,17 +24,14 @@ pub struct PluginDefinitionLoader {
 }
 
 impl PluginDefinitionLoader {
-    pub fn managed() -> Result<Self> {
-        Self::in_directory(config::managed_data_dir()?.join("plugins/runtime/sdk/v1"))
-    }
-
     #[cfg(test)]
     pub(super) fn for_test(root: &Path) -> Result<Self> {
         Self::in_directory(root.join(".plugin-sdk"))
     }
 
-    fn in_directory(sdk_dir: PathBuf) -> Result<Self> {
+    pub(super) fn in_directory(sdk_dir: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&sdk_dir)?;
+        let sdk_dir = sdk_dir.canonicalize()?;
         std::fs::create_dir_all(sdk_dir.join("protocol"))?;
         let import_map = sdk_dir.join("import-map.json");
         let collector = sdk_dir.join("collect.ts");
@@ -51,6 +48,7 @@ impl PluginDefinitionLoader {
                 include_str!("sdk/provider.ts"),
             ),
             (&sdk_dir.join("model.ts"), include_str!("sdk/model.ts")),
+            (&sdk_dir.join("oauth.ts"), include_str!("sdk/oauth.ts")),
             (
                 &sdk_dir.join("resource.ts"),
                 include_str!("sdk/resource.ts"),
