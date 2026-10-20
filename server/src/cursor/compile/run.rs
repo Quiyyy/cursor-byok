@@ -415,25 +415,6 @@ pub(crate) fn user_message_id(user: &pb::UserMessage) -> String {
     )
 }
 
-#[cfg(test)]
-mod identity_tests {
-    use super::*;
-
-    #[test]
-    fn missing_identity_is_stable_and_includes_more_than_visible_text() {
-        let mut user = pb::UserMessage {
-            text: "inspect this".into(),
-            ..Default::default()
-        };
-        let id = user_message_id(&user);
-        assert_eq!(id, user_message_id(&user));
-        user.subagent_system_reminder = Some("different task context".into());
-        assert_ne!(id, user_message_id(&user));
-        user.message_id = "client-provided-id".into();
-        assert_eq!(user_message_id(&user), "client-provided-id");
-    }
-}
-
 fn action(request: &pb::AgentRunRequest) -> Result<ActionProjection> {
     let conversation_mode = request
         .conversation_state
@@ -643,5 +624,24 @@ fn exec_context(
             .unwrap_or_default(),
         admin_command_denylist: request_context.admin_command_denylist.clone(),
         mcp_routes: context::meta_mcp_routes(request_context),
+    }
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+
+    #[test]
+    fn missing_identity_is_stable_and_includes_more_than_visible_text() {
+        let mut user = pb::UserMessage {
+            text: "inspect this".into(),
+            ..Default::default()
+        };
+        let id = user_message_id(&user);
+        assert_eq!(id, user_message_id(&user));
+        user.subagent_system_reminder = Some("different task context".into());
+        assert_ne!(id, user_message_id(&user));
+        user.message_id = "client-provided-id".into();
+        assert_eq!(user_message_id(&user), "client-provided-id");
     }
 }

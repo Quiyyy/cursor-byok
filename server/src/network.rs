@@ -357,7 +357,19 @@ mod tests {
             let task = tokio::spawn(async move {
                 let (mut socket, _) = listener.accept().await.unwrap();
                 let mut request = [0_u8; 4096];
-                socket.read(&mut request).await.unwrap();
+                let mut received = 0;
+                loop {
+                    let read = socket.read(&mut request[received..]).await.unwrap();
+                    assert!(read > 0, "proxy request ended before its headers");
+                    received += read;
+                    if request[..received].ends_with(b"\r\n\r\n") {
+                        break;
+                    }
+                    assert!(
+                        received < request.len(),
+                        "proxy request headers are too large"
+                    );
+                }
                 let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                     body.len()
