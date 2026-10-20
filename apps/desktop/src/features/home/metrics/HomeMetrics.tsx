@@ -104,7 +104,7 @@ export function HomeMetrics({ data }: { data: HomeMetricsData }) {
     t("缓存读写已计入提示词侧统计。"),
   ].join("\n");
   const costTooltip = [
-    t("按配置的 Token 价格估算。"),
+    t("按配置单价估算，非实际账单"),
     t("缓存统计策略：默认口径（{rate}）", { rate: formatRate(defaultCacheHitRate) }),
     "",
     t("普通输入：{tokens} × ${price}/1M = {cost}", {
@@ -131,39 +131,22 @@ export function HomeMetrics({ data }: { data: HomeMetricsData }) {
     t("合计：{cost}", { cost: formatUSD(totalCost) }),
   ].join("\n");
 
-  return <div className={styles.scroller}>
-    <section className={styles.root} aria-label={t("调用统计")}>
-      <article className={styles.metric}>
-        <div className={styles.label}>{t("LLM 调用")}<InfoTooltip content={callsTooltip} /></div>
-        <div className={styles.body}>
-          <div className={styles.value} title={formatInteger(data.llmCalls)}>{formatCompactInteger(data.llmCalls)}</div>
-          <div className={styles.secondary}>{t("成功 {successful} / 异常 {failed}", {
-            successful: formatCompactInteger(data.successfulCalls),
-            failed: formatCompactInteger(data.failedCalls),
-          })}</div>
-        </div>
-      </article>
-      <article className={styles.metric}>
-        <div className={styles.label}>{t("Token 消耗")}<InfoTooltip content={tokensTooltip} /></div>
-        <div className={styles.body}>
-          <div className={styles.value} title={formatInteger(data.tokenUsage)}>{formatCompactInteger(data.tokenUsage)}</div>
-          <div className={styles.secondary}>{t("提示词 {tokens}", { tokens: formatCompactInteger(data.promptTokens) })}</div>
-        </div>
-      </article>
-      <article className={styles.metric}>
-        <div className={styles.label}>{t("缓存命中率")}<InfoTooltip content={cacheTooltip} /></div>
-        <div className={styles.body}>
-          <div className={styles.value}>{formatRate(defaultCacheHitRate)}</div>
-          <div className={styles.secondary}>{t("缓存读取占可命中输入的比例")}</div>
-        </div>
-      </article>
-      <article className={styles.metric}>
-        <div className={styles.label}>{t("价值估算")}<InfoTooltip content={costTooltip} /></div>
-        <div className={styles.body}>
-          <div className={styles.value} title={formatUSD(totalCost)}>{formatUSD(totalCost)}</div>
-          <div className={styles.secondary}>{t("按配置单价估算，非实际账单")}</div>
-        </div>
-      </article>
-    </section>
-  </div>;
+  return <section className={styles.root} aria-label={t("调用统计")}>
+    <article className={styles.metric}>
+      <div className={styles.label}>{t("LLM 调用")}<InfoTooltip content={callsTooltip} /></div>
+      <div className={styles.value} title={formatInteger(data.llmCalls)}>{formatCompactInteger(data.llmCalls)}</div>
+    </article>
+    <article className={styles.metric}>
+      <div className={styles.label}>{t("Token 消耗")}<InfoTooltip content={tokensTooltip} /></div>
+      <div className={styles.value} title={formatInteger(data.tokenUsage)}>{formatCompactInteger(data.tokenUsage)}</div>
+    </article>
+    <article className={styles.metric}>
+      <div className={styles.label}>{t("缓存命中率")}<InfoTooltip content={cacheTooltip} /></div>
+      <div className={styles.value}>{formatRate(defaultCacheHitRate)}</div>
+    </article>
+    <article className={styles.metric}>
+      <div className={styles.label}>{t("价值估算")}<InfoTooltip content={costTooltip} /></div>
+      <div className={styles.value} title={formatUSD(totalCost)}>{formatUSD(totalCost)}</div>
+    </article>
+  </section>;
 }

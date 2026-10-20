@@ -25,6 +25,7 @@
   align-items: center;
   gap: 8px;
 }
+.actions { flex-wrap: wrap; }
 
 .deviceCode {
   display: flex;
@@ -83,50 +84,7 @@
     min-width: 180px;
     flex: 1 1 220px;
   }
-}
-
-.modelToolbar {
-  display: flex;
-  gap: 8px;
-}
-
-.modelTableWrap {
-  min-width: min(520px, 70vw);
-}
-
-.modelTable {
-  width: 100%;
-  table-layout: fixed;
-  border-collapse: collapse;
-
-  th,
-  td {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--vscode-sideBar-border);
-    text-align: left;
-  }
-
-  th:last-child,
-  td:last-child {
-    width: 72px;
-    text-align: center;
-  }
-
-  td:first-child {
-    min-width: 0;
-  }
-
-  .modelName {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-
-  td span {
-    color: var(--vscode-descriptionForeground);
-    font-size: type.$font-size-xs;
-  }
+  > button { width: 140px; flex: 0 0 140px; }
 }
 
 .resourceSection {
@@ -141,25 +99,33 @@
   gap: 8px;
 }
 
-.providerRow,
 .resourceRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 12px;
+  flex-wrap: wrap;
 
   > div:first-child {
     min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 3px;
+    flex: 1 1 180px;
   }
 
   span {
     color: var(--vscode-descriptionForeground);
     font-size: type.$font-size-xs;
   }
+}
+.resourceIdentity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  > span { flex: 0 0 auto; }
 }
 
 .actionBody {

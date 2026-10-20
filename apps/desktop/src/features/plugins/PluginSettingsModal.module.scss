@@ -1,0 +1,39 @@
+@use "../../styles/typography" as type;
+
+.banner { display: flex; flex-direction: column; gap: 10px; }
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--vscode-sideBar-border);
+
+  button {
+    padding: 8px 12px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--vscode-descriptionForeground);
+    font-size: type.$font-size-base;
+    &[aria-pressed="true"] { color: var(--vscode-textLink-foreground); border-bottom-color: currentColor; }
+  }
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  > :first-child { flex: 1; min-width: 0; }
+  > button:not(:first-child) { flex: 0 0 auto; }
+}
+.summary { color: var(--vscode-descriptionForeground); font-size: type.$font-size-xs; }
+.error { color: var(--vscode-errorForeground); font-size: type.$font-size-xs; }
+.catalog { display: flex; flex-direction: column; }
+.model {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--vscode-sideBar-border);
+  > span { margin-left: 24px; color: var(--vscode-descriptionForeground); font-size: type.$font-size-xs; overflow-wrap: anywhere; }
+}
+.pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; font-size: type.$font-size-xs; }
+.empty { margin: 32px 0; text-align: center; color: var(--vscode-descriptionForeground); }

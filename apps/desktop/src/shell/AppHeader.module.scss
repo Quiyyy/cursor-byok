@@ -7,7 +7,8 @@
   right: 0;
   left: 0;
   height: var(--window-header-height);
-  background: transparent;
+  background: var(--vscode-editorWidget-background);
+  border-bottom: 1px solid var(--vscode-sideBar-border);
   -webkit-user-select: none;
   user-select: none;
 }
@@ -34,11 +35,11 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   min-width: 0;
   color: var(--vscode-foreground);
   font-size: type.$font-size-base;
-  font-weight: 500;
+  font-weight: 600;
   pointer-events: none;
 
   img {
@@ -46,4 +47,10 @@
     height: 20px;
     flex: 0 0 auto;
   }
+}
+
+// Leave the native macOS traffic lights and their drag area unobstructed.
+.root[data-macos] .identity {
+  position: absolute;
+  left: 80px;
 }

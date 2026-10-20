@@ -3,20 +3,22 @@
 .root {
   --app-region-gap: 16px;
   --app-toolbar-height: 36px;
-  --app-page-max-width: 1280px;
+  --app-page-max-width: 100%;
   --app-page-padding: 24px;
-  --app-content-left: calc(var(--app-edge) + var(--app-menu-width) );
+  --app-content-left: var(--app-menu-width);
   --app-content-top: calc(var(--window-safe-top) + 60px);
   background: var(--vscode-editor-background);
 }
 
-.menuCard {
+.sidebar {
   position: fixed;
   z-index: 10;
-  top: calc(var(--window-menu-top));
-  bottom: var(--app-edge);
-  left: var(--app-edge);
+  top: var(--window-safe-top);
+  bottom: 0;
+  left: 0;
   width: var(--app-menu-width);
+  border-right: 1px solid var(--vscode-sideBar-border);
+  background: color-mix(in srgb, var(--vscode-sideBar-border) 18%, var(--vscode-editor-background));
   overflow: hidden;
 }
 
@@ -26,7 +28,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 12px 8px 8px;
+  padding: 8px 10px max(10px, var(--window-corner-safe-bottom));
   -webkit-user-select: none;
   user-select: none;
 }
@@ -38,13 +40,10 @@
   min-height: 0;
 }
 
-.navigationGroup {
-  display: flex;
-  align-items: center;
-  color: var(--vscode-descriptionForeground);
-  font-size: type.$font-size-xs;
-  font-weight: normal;
-  padding: 4px 11px 12px;
+.navigationHeader {
+  flex: 0 0 auto;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--vscode-sideBar-border);
 }
 
 .navigationRow {
@@ -52,8 +51,7 @@
   display: flex;
   align-items: stretch;
 
-  a,
-  button {
+  a {
     width: 100%;
     height: 40px;
     display: flex;
@@ -73,13 +71,6 @@
       background: color-mix(in srgb, var(--vscode-textLink-foreground) 9%, var(--vscode-editorWidget-background));
       font-weight: 600;
     }
-  }
-
-  button {
-    font: inherit;
-    text-align: left;
-    background: transparent;
-    border: 0;
   }
 }
 
@@ -103,7 +94,7 @@
   container-type: inline-size;
 
   &:has(.filterRegion:not(:empty)) {
-    --app-content-top: calc(var(--window-safe-top) + 112px);
+    --app-content-top: calc(var(--window-safe-top) + 96px);
   }
 }
 
@@ -163,7 +154,7 @@
 .filterRegion {
   position: absolute;
   z-index: 22;
-  top: calc(var(--window-safe-top) + 60px);
+  top: calc(var(--window-safe-top) + 52px);
   left: max(var(--app-page-padding), calc((100% - var(--app-page-max-width)) / 2));
   right: max(var(--app-page-padding), calc((100% - var(--app-page-max-width)) / 2));
   background: var(--vscode-editor-background);
@@ -178,18 +169,6 @@
   margin-top: 12px;
 }
 .demoNotice { display: block; margin: 10px; color: var(--vscode-descriptionForeground); font-size: type.$font-size-2xs; }
-
-.connectionStatus {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 14px 10px 8px;
-  font-size: type.$font-size-xs;
-  text-decoration: none;
-  color: var(--vscode-descriptionForeground);
-
-  &[data-connected] { color: var(--vscode-testing-iconPassed, var(--vscode-gitDecoration-addedResourceForeground)); }
-}
 
 @media (max-width: 900px) {
   .root { --app-page-padding: 16px; }

@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import controls from "./Controls.module.scss";
 
-export type ButtonVariant = "primary" | "secondary";
+export type ButtonVariant = "primary" | "secondary" | "ghost";
 export type ButtonSize = "medium" | "small";
 
 export function Button({

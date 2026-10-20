@@ -1,0 +1,28 @@
+@use "../../styles/typography" as type;
+
+.control {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: type.$font-size-xs;
+  color: var(--vscode-descriptionForeground);
+
+  label { min-width: 0; line-height: 1.4; cursor: pointer; }
+  &[data-degraded] { color: var(--vscode-editorWarning-foreground); }
+}
+
+.switch { flex: 0 0 auto; }
+.setup { display: flex; flex-direction: column; gap: 14px; }
+.command {
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  color: var(--vscode-textLink-foreground);
+  background: var(--vscode-textCodeBlock-background);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  user-select: text;
+}

@@ -1,6 +1,4 @@
-@use "../../../styles/typography" as type;
 .root {
-  summary { color: var(--vscode-foreground); font-size: type.$font-size-base; cursor: pointer; }
-  summary span { margin-left: 12px; color: var(--vscode-descriptionForeground); font-size: type.$font-size-xs; }
+  min-height: 112px;
+  color: var(--vscode-descriptionForeground);
 }
-.content { margin-top: 16px; color: var(--vscode-descriptionForeground); }

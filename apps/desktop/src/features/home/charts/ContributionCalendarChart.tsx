@@ -110,7 +110,9 @@ export function ContributionCalendarChart({ data }: ContributionCalendarChartPro
       renderer: "canvas",
       width: 1,
       height: 1,
-      useDirtyRect: true,
+      // The calendar changes both canvas size and every cell during a window resize.
+      // A full repaint avoids retaining stale dirty rectangles after maximizing.
+      useDirtyRect: false,
     });
 
     const handleMouseOver = (event: ElementEvent) => {

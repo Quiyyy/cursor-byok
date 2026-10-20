@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
-import appIcon from "../../src-tauri/icons/32x32.png";
-import { currentAppVersion } from "../shared/native/appLifecycle";
+import appIcon from "../../src-tauri/icons/icon.svg";
 import type { DesktopPlatform } from "../shared/native/platform";
 import { WindowControls } from "./WindowControls";
 import { MacTrafficLights } from "./MacTrafficLights";
@@ -14,27 +12,15 @@ type AppHeaderProps = {
 export function AppHeader({ platform, nativeDesktop }: AppHeaderProps) {
   const showMacTrafficLights = !nativeDesktop && platform === "macos";
   const showNativeUi = nativeDesktop && platform !== "macos";
-  const [version, setVersion] = useState("…");
-
-  useEffect(() => {
-    let disposed = false;
-    void currentAppVersion().then((next) => {
-      if (!disposed) setVersion(next);
-    });
-    return () => { disposed = true; };
-  }, []);
-
-  return <header className={styles.root}>
+  return <header className={styles.root} data-macos={platform === "macos" || undefined}>
     <div className={styles.dragLayer} data-tauri-drag-region aria-hidden="true" />
     <div className={styles.uiLayer}>
       {showMacTrafficLights && <MacTrafficLights />}
-      {showNativeUi && <>
-        <div className={styles.identity} aria-label="Cursor BYOK">
-          <img src={appIcon} alt="" />
-          <span>{t("Cursor 助手 v{version}", { version })}</span>
-        </div>
-        <WindowControls />
-      </>}
+      <div className={styles.identity} aria-label="Cursor BYOK">
+        <img src={appIcon} alt="" />
+        <span>Cursor BYOK</span>
+      </div>
+      {showNativeUi && <WindowControls />}
     </div>
   </header>;
 }

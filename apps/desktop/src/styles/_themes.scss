@@ -22,6 +22,7 @@
   @include vscode-theme((
     foreground: #e7edf5,
     errorForeground: #ff9c9c,
+    editorWarning-foreground: #e2b769,
     descriptionForeground: #a3b0c0,
     focusBorder: #69d5be,
     textLink-foreground: #69d5be,
@@ -73,6 +74,7 @@
   @include vscode-theme((
     foreground: #202c3a,
     errorForeground: #b13b3b,
+    editorWarning-foreground: #93661c,
     descriptionForeground: #637183,
     focusBorder: #087e70,
     textLink-foreground: #087e70,
