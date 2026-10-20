@@ -192,12 +192,23 @@ fn is_local_path(path: &str) -> bool {
 }
 
 fn should_route_locally(path: &str, tab_mode: TabMode) -> bool {
-    is_local_path(path) || (is_tab_path(path) && tab_mode != TabMode::Direct)
+    is_local_path(path) || (is_tab_path(path) && tab_mode == TabMode::Custom)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tab_uses_official_routes_by_default_and_local_forwarding_only_when_custom() {
+        for path in crate::cursor::services::tab::TAB_PATHS {
+            assert!(!should_route_locally(path, TabMode::default()));
+            assert!(should_route_locally(path, TabMode::Custom));
+        }
+        for mode in [TabMode::Direct, TabMode::Custom] {
+            assert!(should_route_locally("/agent.v1.AgentService/RunSSE", mode));
+        }
+    }
 
     #[test]
     fn cursor_cli_transport_and_model_metadata_routes_stay_local() {

@@ -1,225 +1,87 @@
-> **持续维护分支：**原仓库归档后，由 [Quiyyy/cursor-byok](https://github.com/Quiyyy/cursor-byok) 继续开发。
-> 包含 Grok / ChatGPT / Google OAuth 自动续期、Grok 4.7 思考强度适配和无广告界面。上游稳定性问题的修复范围见[排查记录](./UPSTREAM-BUG-AUDIT.md)，开发与发布见[维护说明](./MAINTAINING.md)。
-> 安装包见本 fork 的 [Releases](https://github.com/Quiyyy/cursor-byok/releases)，也可按维护说明从源码构建。从上游安装版切换时，需先手动安装本 fork，后续通过独立更新通道升级。
-
 <div align="center">
 
-# cursor-byok
+<img src="./apps/desktop/src-tauri/icons/icon.svg" width="76" alt="Cursor BYOK" />
 
-cursor-byok 是一个运行在本机的 Cursor 模型网关，帮助你在 Cursor 中使用自己配置的模型服务。
+# Cursor BYOK
 
-[English README](./README.md) · [维护与开发](./MAINTAINING.md) · [发布版本](https://github.com/Quiyyy/cursor-byok/releases) · [提交问题](https://github.com/Quiyyy/cursor-byok/issues)
+在 Cursor 中使用自己的模型服务，并在本地管理模型、账号与调用记录。
+
+[English](./README.md) · [下载安装](https://github.com/Quiyyy/cursor-byok/releases) · [维护与开发](./MAINTAINING.md) · [问题反馈](https://github.com/Quiyyy/cursor-byok/issues)
 
 [![CI](https://github.com/Quiyyy/cursor-byok/actions/workflows/ci.yml/badge.svg)](https://github.com/Quiyyy/cursor-byok/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/Quiyyy/cursor-byok?style=flat-square)](./LICENSE)
-[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Quiyyy/cursor-byok/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 </div>
 
-![将 cursor-byok 连接到多种模型 API](./images/en-brand-1.png)
+Cursor BYOK 是一个本地模型网关与桌面管理工具。应用在本机运行 Rust 服务，将 Cursor 的请求接入你配置的模型 API 或账号通道。
 
-![cursor-byok 控制面板](./images/en-home-1.png)
+项目的开发、文档、问题跟踪和版本发布统一由 **[Quiyyy/cursor-byok](https://github.com/Quiyyy/cursor-byok)** 维护。
 
-## 项目简介
-
-cursor-byok 是一个开源的本地模型网关。它在你的设备上运行服务，接收 Cursor 发出的 Agent 请求，将请求转发到你配置的模型服务，并尽可能保留 Cursor Agent 的工具调用、Skills、MCP 和多轮对话能力。
-
-你可以连接兼容 OpenAI 或 Anthropic 协议的服务，自定义服务地址、模型 ID、API Key 和请求参数，也可以使用 Cursor 平台默认选项之外的模型通道。
-
-> [!IMPORTANT]
-> cursor-byok 免费且开源，但你连接的模型服务商可能会按用量收费。本项目是独立项目，与 Cursor 或其开发者没有关联，也未获得其认可。
+![运行概览，数据为演示数据](./images/overview-zh.png)
 
 ## 主要功能
 
-- **自定义模型通道**：配置自己的 API 地址、凭据和模型 ID。
-- **多种 API 协议**：支持 OpenAI Responses API、OpenAI Chat Completions API 和 Anthropic Messages API 兼容服务。
-- **模型管理**：添加、复制、编辑、排序模型配置，并批量测试连接。
-- **连接性能测试**：查看首字延迟、生成速度、总耗时和原始服务商响应。
-- **Agent 工作流**：继续使用工具调用、Skills、MCP 和多轮对话。
-- **会话指标**：查看 Token 用量、缓存命中率、对话轮次和估算价值。
-- **TAB 补全服务**：在公益服务、官方直连和自定义服务之间选择连接方式。
-- **跨平台运行**：支持 macOS、Windows 和 Linux。
+- **模型接入**：支持 OpenAI Responses、OpenAI Chat Completions 和 Anthropic Messages 兼容接口，可配置请求头、思考参数与额外参数。
+- **账号连接**：内置 Codex、Grok 和 Google 接入，支持模型同步、账号状态展示与可用凭据的自动续期。
+- **模型管理**：添加、编辑、复制草稿、分组、排序及连通性测试；配置和测试无需先开启 Cursor 接管。
+- **全局接管开关**：左上角直接开启或关闭 Cursor 本地集成。首次开启前需完成证书准备；关闭时清理应用管理的本地代理配置。
+- **用量与诊断**：查看调用记录、Token 用量、缓存统计、估算价值及每日活动。
+- **跨平台桌面**：支持 Windows、macOS、Linux，中英葡三种语言，以及浅色、深色主题。
+
+模型请求会发送至你选择的服务商，费用与账号权限由对应服务商决定。本项目独立维护，与 Cursor 没有官方隶属关系。
 
 ## 快速开始
 
-1. 按[维护说明](./MAINTAINING.md)从源码构建，或在本 fork [发布安装包](https://github.com/Quiyyy/cursor-byok/releases)后下载对应版本。
-2. 启动 cursor-byok，打开 **Cursor 配置**，按提示初始化本地 CA（证书颁发机构）。
-3. 在模型设置中添加模型，填写服务地址、API Key 和模型名称，然后保存并运行 **测试**。
-4. 确认测试通过后，保持 cursor-byok 运行。
-5. **首次升级 Cursor 或首次配置模型后，完全退出并重新启动 Cursor，然后新开一个对话**。在模型列表中选择已配置的模型，开始使用 Agent。
+1. 从 [Releases](https://github.com/Quiyyy/cursor-byok/releases) 下载对应平台的安装包。
+2. 打开 **模型管理 → 添加模型**，填写服务地址、API Key 和模型名称；也可在 **账号连接** 中登录，再从模型目录勾选需要的模型并保存。
+3. 保存模型并运行 **测试**，确认连接可用。
+4. 打开左上角 **Cursor 接管**。若出现证书准备提示，按应用指引完成安装和信任，刷新状态后再开启开关。
+5. 保持 Cursor BYOK 运行。首次配置完成后，完全退出并重新启动 Cursor，新建对话，手动选择已配置的模型；**Auto 不会选择 BYOK 模型**。
 
-完整的安装步骤、配置说明和常见问题，请参阅[中文使用指南](https://docs.leokun.cn/zh/docs)。
+详细步骤和常见问题见[使用指南](./docs/GETTING_STARTED.md)。已有安装若使用不同更新通道，需先手动安装本仓库的版本，再使用应用内更新。
 
-> [!TIP]
-> 首次升级 Cursor 或首次完成配置后，必须完全退出并重新启动 Cursor，再新开一个对话。配置前已经打开的对话不会加载新连接；使用自定义模型时，请在模型列表中手动选择该模型，不要选择 **Auto**。
+截图来自当前源码的演示模式，数据均为示例；已发布安装包的界面可能早于当前源码。
 
-## 模型配置
+## 模型与账号
 
-每个模型配置都是独立的上游通道，可以单独设置服务商、协议、凭据和生成参数。
+![模型管理](./images/models-zh.png)
 
-![模型设置页面](./images/en-model-1.png)
+点击模型名称或编辑按钮即可配置模型。常用操作保留在列表中，分组与排序方式收在页面右上角 **⋯**。高级参数按需展开。
 
-### 类型与协议选择
+![账号连接](./images/accounts-zh.png)
 
-| 模型系列 | 模型类型 | 请求协议 |
-| --- | --- | --- |
-| Claude 系列 | **Anthropic** | Messages API |
-| GPT / OpenAI 系列 | **OpenAI** | **Responses API** |
-| 其他模型 | **OpenAI** | **Chat Completions API** |
+账号与模型目录共用一个管理弹窗，模型选择在保存后生效。服务商撤销的授权需要重新登录。
 
-GPT 系列建议使用 **Responses API**。如果使用 Chat Completions，可能无法保留提示词缓存，导致速度变慢和费用增加。
-
-### 常用字段
-
-- **模型类型**：选择 OpenAI 或 Anthropic，决定上游接口格式。
-- **请求协议**：OpenAI 类型需要继续选择 Responses API 或 Chat Completions API。
-- **服务器地址**：可以填写服务商基础地址，让应用按协议追加标准端点，也可以填写完整请求 URL 并原样使用。
-- **API Key**：填写上游服务要求的访问密钥。密钥保存在本机，用于发送模型请求。
-- **模型名称**：填写服务商接口接受的模型标识，也可以使用 **获取模型** 读取服务商返回的模型列表。
-- **显示名称**：Cursor 模型列表中显示的名称，不会改变发送给上游的模型标识。
-- **备注**：显示在 Cursor 的模型说明中。
-
-还可以根据模型能力设置上下文窗口 Token、最大输出 Token、推理或思考强度、自定义 Headers，以及 OpenAI 或 Anthropic 的额外参数。自定义 Headers 和额外参数必须是 JSON 对象，只应填写服务商明确支持的字段。
-
-保存配置后运行 **测试**，确认地址、协议、API Key、模型标识和流式响应都正常，再在 Cursor 中使用该模型。
-
-## TAB 补全服务
-
-Cursor 的 Tab 补全由独立的 TAB 服务处理，不经过模型通道。你可以在 **系统设置 → TAB 设置** 中选择以下模式：
-
-- **使用公益服务（默认）**：使用项目作者部署的公共服务，无需额外配置。
-- **直连**：直接连接当前 Cursor 账号对应的官方 TAB 服务，适合账号拥有官方额度的情况。
-- **自定义**：自行部署 [`cursor-tab-server`](https://github.com/leookun/cursor-byok/tree/archive/v0.0.49/cursor-tab-server)，然后填写 TAB 服务地址。
-
-修改 TAB 设置后，建议重启 Cursor 并新开一个对话，确保新的连接方式生效。
-
-## 与官方账号并存
-
-新版设计支持 cursor-byok 与 Cursor 官方服务并存：
-
-- 直接在 Cursor 中登录自己的账号。如果之前使用旧版生成的 fake 账户，请先退出该账户，再登录自己的账号。
-- 账号拥有官方额度时，官方模型和本地模型可以随时切换混用。
-- **Auto 只使用官方模型**，不会自动使用你配置的本地模型。账号没有官方额度时，请手动选择自己配置的模型。
-- 插件、代码库索引等 Cursor 功能可以继续使用。
-
-## 数据流转
+## 请求路径
 
 ```text
-Cursor 客户端
-    │
-    │ Agent 请求与工具结果
-    ▼
-cursor-byok 本地服务
-    │
-    │ OpenAI / Anthropic 兼容请求
-    ▼
-你配置的模型 API
+Cursor → 本地接管 → Cursor 协议适配 → 运行时
+                                      │
+                                      ├─ 自定义模型 API
+                                      └─ 账号插件 → 服务商 API
+                                      │
+Cursor ← 流式响应、工具调用与结果 ←─────┘
 ```
 
-API Key、模型配置和应用设置保存在本机。模型请求仍会发送到你选择的上游服务商，请根据对应服务商的隐私政策和计费规则使用。
+配置、账号数据和调用记录保存在本机。TAB 补全默认官方直连，也可填写自定义服务地址，与聊天模型分开处理。
 
-## 项目结构
+## 文档入口
 
-```text
-cursor-byok/
-├── apps/
-│   ├── desktop/
-│   │   ├── src/
-│   │   │   ├── features/ # 首页、模型、调用记录与设置
-│   │   │   ├── shell/    # 窗口框架、页面布局与广告外壳
-│   │   │   ├── shared/   # UI、虚拟列表、状态、API 与平台能力
-│   │   │   ├── i18n/     # 本地化运行时与语言目录
-│   │   │   └── styles/   # 全局主题与排版令牌
-│   │   └── src-tauri/    # Tauri 桌面生命周期
-├── server/
-│   ├── src/
-│   │   ├── cursor/    # Cursor 协议适配
-│   │   ├── run/       # 通用 Agent Runtime 与内部 Port
-│   │   ├── provider/  # 模型供应商适配
-│   │   ├── model/     # 聚合领域模型
-│   │   ├── store/     # SQLite Repository
-│   │   ├── control/   # 管理面 API
-│   │   ├── harness/   # Cursor 本地集成
-│   │   └── search/    # Web 与 Semble 搜索接入
-│   ├── prompt/
-│   └── migrations/
-├── crates/
-│   └── semble-core/   # 本地代码索引与搜索核心库
-├── protocols/
-│   └── cursor/        # Cursor 协议定义的唯一来源
-├── support/                     # 仓库辅助设施
-│   ├── cursor-protocol-extractor/ # Cursor 协议提取与 Go 代码生成工具
-│   ├── cursor-capture/            # Cursor 协议抓取和调试工具
-│   └── benchmarks/                # 代码搜索和索引基准测试
-├── images/            # README 展示图片
-├── Cargo.toml         # Rust 工作区配置
-└── Makefile           # 常用开发、检查和构建命令
-```
+| 文档 | 用途 |
+| --- | --- |
+| [使用指南](./docs/GETTING_STARTED.md) | 安装、模型配置、接管与排障 |
+| [维护与开发](./MAINTAINING.md) | 开发命令、检查、隔离调试与发布 |
+| [架构说明](./docs/ARCHITECTURE.md) | 目录职责、运行时边界与数据流 |
+| [维护状态](./docs/MAINTENANCE_STATUS.md) | 已验证修复及待验收事项 |
+| [资产说明](./docs/ASSETS.md) | 图标、截图、字体及更新方式 |
+| [第三方说明](./docs/THIRD_PARTY.md) | 依赖来源与许可边界 |
 
-## 本地开发
+## 参与维护
 
-### 环境要求
+通过本仓库的 [Issues](https://github.com/Quiyyy/cursor-byok/issues) 和 [Pull Requests](https://github.com/Quiyyy/cursor-byok/pulls) 反馈与贡献。问题报告请附应用版本、操作系统、复现步骤及脱敏错误信息，不要公开 API Key、账号凭据或私有源码。
 
-- Rust 工具链和 Cargo
-- Node.js 与 npm
-- Tauri 2 的系统构建依赖
-- Docker（仅在构建 Docker 镜像时需要）
-
-### 安装依赖
-
-```bash
-npm --prefix apps/desktop install
-```
-
-### 启动开发环境
-
-启动桌面前端：
-
-```bash
-make dev-web
-```
-
-启动桌面应用：
-
-```bash
-make dev-desktop
-```
-
-### 检查与构建
-
-运行完整检查：
-
-```bash
-make check
-```
-
-分别构建各部分：
-
-```bash
-make build-web       # 构建桌面前端
-make build-server    # 构建 Rust 本地服务
-make build-desktop   # 构建 Tauri 桌面安装包
-make build-docker    # 构建 Docker 镜像
-```
-
-## 路线图
-
-项目将继续改进模型兼容性、Agent 工具、本地运行稳定性和自托管体验，并探索支持更多 IDE、聊天和 Agent 工作流。
-
-计划与进展请参阅[维护说明](./MAINTAINING.md)和 [Issues](https://github.com/Quiyyy/cursor-byok/issues)。
-
-## 社区与反馈
-
-- [维护与开发说明](./MAINTAINING.md)
-- [GitHub Issues](https://github.com/Quiyyy/cursor-byok/issues)
-- [原项目中文使用指南](https://docs.leokun.cn/zh/docs)
-
-提交问题时，请附上操作系统、cursor-byok 版本、模型类型、请求协议、已脱敏的服务地址、错误信息和复现步骤。请勿公开 API Key 或其他凭据。
-
-## 参与贡献
-
-欢迎提交 Issue 和 Pull Request。提交代码前请先阅读项目中的开发说明，并运行 `make check` 确认格式、测试和前端构建检查通过。
+提交代码前阅读 [AGENTS.md](./AGENTS.md) 和[维护说明](./MAINTAINING.md)。合并 PR 不会自动发布新版本。
 
 ## 许可证
 
-本项目采用 [MIT License](./LICENSE) 开源。
+采用 [MIT License](./LICENSE)。现有版权声明与 Git 作者历史保持完整。

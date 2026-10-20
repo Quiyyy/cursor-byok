@@ -136,7 +136,7 @@
         },
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 40,
+          "line": 39,
           "column": 98
         }
       ]
@@ -369,7 +369,7 @@
         },
         {
           "file": "features/home/charts/DailyTokenUsageChart.tsx",
-          "line": 168,
+          "line": 169,
           "column": 15
         }
       ]
@@ -1211,7 +1211,7 @@
         },
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 36,
+          "line": 35,
           "column": 66
         },
         {
@@ -1585,7 +1585,7 @@
         },
         {
           "file": "features/home/charts/DailyTokenUsageChart.tsx",
-          "line": 150,
+          "line": 151,
           "column": 15
         }
       ]
@@ -1741,7 +1741,7 @@
       "refs": [
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 68,
+          "line": 66,
           "column": 21
         }
       ]
@@ -1860,7 +1860,7 @@
         },
         {
           "file": "features/home/charts/DailyTokenUsageChart.tsx",
-          "line": 141,
+          "line": 142,
           "column": 15
         }
       ]
@@ -2080,7 +2080,7 @@
         },
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 81,
+          "line": 79,
           "column": 81
         }
       ]
@@ -2308,12 +2308,12 @@
         },
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 32,
+          "line": 31,
           "column": 12
         },
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 60,
+          "line": 58,
           "column": 41
         }
       ]
@@ -2387,7 +2387,7 @@
       "refs": [
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 44,
+          "line": 43,
           "column": 90
         }
       ]
@@ -2534,17 +2534,17 @@
       "refs": [
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 67,
+          "line": 65,
           "column": 22
         },
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 73,
+          "line": 71,
           "column": 25
         },
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 84,
+          "line": 82,
           "column": 20
         }
       ]
@@ -2572,23 +2572,6 @@
           "file": "features/settings/SettingsPage.tsx",
           "line": 238,
           "column": 21
-        }
-      ]
-    },
-    "5a3bd99fa69a40c1": {
-      "source": "使用公益服务",
-      "kind": "text",
-      "placeholders": [],
-      "refs": [
-        {
-          "file": "features/settings/TabSettingsCard.tsx",
-          "line": 30,
-          "column": 35
-        },
-        {
-          "file": "features/settings/TabSettingsCard.tsx",
-          "line": 58,
-          "column": 41
         }
       ]
     },
@@ -2731,7 +2714,7 @@
         },
         {
           "file": "features/home/charts/DailyTokenUsageChart.tsx",
-          "line": 159,
+          "line": 160,
           "column": 15
         }
       ]
@@ -3706,7 +3689,7 @@
       "refs": [
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 52,
+          "line": 51,
           "column": 21
         }
       ]
@@ -3893,17 +3876,17 @@
       "refs": [
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 51,
+          "line": 50,
           "column": 22
         },
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 56,
+          "line": 55,
           "column": 24
         },
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 80,
+          "line": 78,
           "column": 20
         }
       ]
@@ -4320,7 +4303,7 @@
         },
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 37,
+          "line": 36,
           "column": 103
         },
         {
@@ -4404,7 +4387,7 @@
       "refs": [
         {
           "file": "features/home/charts/DailyTokenUsageChart.tsx",
-          "line": 182,
+          "line": 183,
           "column": 24
         }
       ]
@@ -4734,16 +4717,6 @@
           "file": "features/settings/CommitSettingsCard.tsx",
           "line": 59,
           "column": 63
-        },
-        {
-          "file": "features/settings/TabSettingsCard.tsx",
-          "line": 31,
-          "column": 35
-        },
-        {
-          "file": "features/settings/TabSettingsCard.tsx",
-          "line": 59,
-          "column": 41
         }
       ]
     },
@@ -4907,6 +4880,23 @@
           "file": "features/home/metrics/HomeMetrics.tsx",
           "line": 100,
           "column": 5
+        }
+      ]
+    },
+    "b770360c5980c5e7": {
+      "source": "官方直连",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/TabSettingsCard.tsx",
+          "line": 30,
+          "column": 35
+        },
+        {
+          "file": "features/settings/TabSettingsCard.tsx",
+          "line": 57,
+          "column": 41
         }
       ]
     },
@@ -6662,7 +6652,7 @@
         },
         {
           "file": "features/settings/TabSettingsCard.tsx",
-          "line": 37,
+          "line": 36,
           "column": 91
         }
       ]

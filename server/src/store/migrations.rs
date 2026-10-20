@@ -456,9 +456,78 @@ mod tests {
             .unwrap();
 
             assert_eq!(checksum_after, checksum_before);
-            assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+            assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
             assert_eq!(checkpoint_table_exists, 1);
             assert_eq!(argument_error_column_exists, 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn retiring_public_tab_preserves_custom_addresses_and_other_settings() {
+        for original_mode in ["public", "direct", "custom"] {
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .unwrap();
+            let historical = migrator_with_line_endings(MigrationLineEndings::Lf);
+            let before_removal = Migrator {
+                migrations: Cow::Owned(
+                    historical
+                        .iter()
+                        .filter(|migration| migration.version < 10)
+                        .cloned()
+                        .collect(),
+                ),
+                ..Migrator::DEFAULT
+            };
+            before_removal.run(&pool).await.unwrap();
+            let original = serde_json::json!({
+                "mode": original_mode,
+                "address": "https://my-tab.example.com/base"
+            });
+            sqlx::query(
+                "INSERT INTO service_settings(setting_key, value_json, updated_at_ms) VALUES (?, ?, 42)",
+            )
+            .bind("cursor_tab")
+            .bind(original.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO service_settings(setting_key, value_json, updated_at_ms) VALUES (?, ?, 24)",
+            )
+            .bind("unrelated-setting")
+            .bind(r#"{"mode":"public"}"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            run(&pool, Path::new("retire-public-tab.db")).await.unwrap();
+            let (json, timestamp): (String, i64) = sqlx::query_as(
+                "SELECT value_json, updated_at_ms FROM service_settings WHERE setting_key = 'cursor_tab'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let saved: super::super::TabSettings = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                saved.mode,
+                if original_mode == "custom" {
+                    super::super::TabMode::Custom
+                } else {
+                    super::super::TabMode::Direct
+                }
+            );
+            assert_eq!(saved.address, "https://my-tab.example.com/base");
+            assert_eq!(timestamp, 42);
+            let unrelated: String = sqlx::query_scalar(
+                "SELECT value_json FROM service_settings WHERE setting_key = 'unrelated-setting'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(unrelated, r#"{"mode":"public"}"#);
         }
     }
 
