@@ -30,12 +30,13 @@ Build on the components and theme system already present in `apps/desktop`. Pres
 
 ## Page layout
 
-- Build every full-height page with `components/layout/PageLayout.tsx`; do not hand-roll page shells with grid rows.
+- Use `shell/layout/PageLayout.tsx` for the full-height shell and `shell/layout/PageContent.tsx` for titled page content; do not hand-roll page shells with grid rows.
 - Put page-level commands and controls such as create, import, export, filtering, sorting, and view options in the shared page action region through `PageActions`. Keep only operations that target one concrete list item, such as edit and delete, inside that item's row. Do not add duplicate action bars or panel-header controls inside page content.
 - Never render a title region above a data table or flat data list. Use the page title for context, keep column labels in the table header, place page-level controls in `PageActions`, and wrap the table in a titleless `Card`. A hierarchy label that identifies parent data in a grouped parent-child view is not a table title.
 - Keep the main scroll viewport full-height and `position: relative`; place the page title and action region absolutely over it.
 - Reserve the absolute title/action region with `padding-top` on the scroll content, never by shortening or offsetting the scroll viewport itself.
-- Keep the menu Card fixed and reserve it with the content area's `margin-left`; do not place Header, menu, and content in a flow grid.
+- Keep the flat sidebar fixed and reserve it with the content area's `margin-left`. Separate regions with subtle borders; do not reintroduce a surrounding sidebar Card.
+- Keep the global Cursor takeover switch above navigation. Its state follows the server response, and switching it off executes directly without a confirmation dialog.
 - Do not use child or section padding to create external spacing. Use flex/grid gaps between siblings and margins or fixed offsets at container boundaries; the scroll-content top padding is reserved only for its absolute title/action overlay.
 - Use a vertical flex layout with these invariants:
   - Header: `flex: 0 0 auto`.
@@ -55,8 +56,8 @@ Build on the components and theme system already present in `apps/desktop`. Pres
 
 ## Scrolling and virtualization
 
-- Use `components/layout/VirtualPage.tsx` for vertically scrolling page content.
-- Use `components/virtual/VirtualList.tsx` for data collections and menus that can grow.
+- Use `shell/layout/VirtualPage.tsx` for vertically scrolling page content.
+- Use `shared/virtual/VirtualList.tsx` for data collections and menus that can grow.
 - Treat `ScrollArea` as the low-level primitive owned by the virtual scrolling implementation. Do not import `ScrollArea` directly in pages or layouts.
 - Use the global `scroll-shadow-top` and `scroll-shadow-bottom` masks for scroll-edge shadows. When a scroll content inset reserves an absolute overlay, source the top shadow distance from the same CSS variable as its `padding-top`.
 - Model non-list pages as a short sequence of measurable top-level virtual sections.
@@ -73,7 +74,7 @@ Build on the components and theme system already present in `apps/desktop`. Pres
 
 ## Charts
 
-- Use ECharts through `components/charts/EChart.tsx`.
+- Use ECharts through `features/home/charts/EChart.tsx`.
 - Register only required ECharts Core charts, components, and renderers.
 - Keep chart components declarative: accept domain data and construct an option without fetching or persisting data.
 - Let `ResizeObserver` resize the chart with its layout container and dispose the instance on unmount.

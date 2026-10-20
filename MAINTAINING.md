@@ -1,32 +1,36 @@
 # 维护与开发
 
-## 代码来源
+本项目由 [Quiyyy/cursor-byok](https://github.com/Quiyyy/cursor-byok) 的维护团队持续开发。`origin`、问题反馈、文档和发布资产均以本仓库为准，日常开发从 `main` 创建 `codex/` 分支。
 
-- 当前维护仓库：[Quiyyy/cursor-byok](https://github.com/Quiyyy/cursor-byok)。
-- 原项目：[leookun/cursor-byok](https://github.com/leookun/cursor-byok)，已归档。
-- 接管基线：`31e9f5cbc98a7d28cffcb5efbb9323cd3e143354`，包含 v1.0.1 及之后的本地应用 External API。
-- 保留上游 Git 历史、作者信息和 MIT 许可证。上游历史 PR [#459](https://github.com/leookun/cursor-byok/pull/459) 的改动在本仓库继续维护。
+先阅读 [AGENTS.md](./AGENTS.md)。产品使用见[使用指南](./docs/GETTING_STARTED.md)，模块职责见[架构说明](./docs/ARCHITECTURE.md)，修复范围见[维护状态](./docs/MAINTENANCE_STATUS.md)。
 
-`origin` 指向当前维护仓库，`upstream` 指向原项目。日常开发使用 `codex/` 前缀的分支，以 `main` 为基线。
+## 环境与启动
 
-## 已合入的改动
+- Rust stable、Cargo、rustfmt 和 Clippy。
+- Node.js 22 或更新的兼容版本，以及 npm。
+- Tauri 2 对应平台的构建依赖；Windows 使用 MSVC 工具链，Linux 依赖可参照 [CI](./.github/workflows/ci.yml) 的安装步骤。
+- Deno 2.9.6 用于插件开发和测试。普通用户可通过应用准备插件运行组件。
 
-- Grok、ChatGPT 和 Google 登录凭据共用 SDK 续期逻辑，在启动加载、模型调用、模型发现和手动刷新时按需续期。
-- 同账号刷新串行化；刷新后的凭据先保存再调用模型，避免请求取消或并发结果覆盖新凭据。
-- 区分临时网络错误与失效授权；首次、尚未输出内容的 401 可以刷新后重试一次。
-- Grok 4.7 模型发现与思考参数适配；Grok 4.6 / 4.7 的 `max` 映射为 `xhigh`。
-- 移除广告弹窗、广告菜单、广告请求、广告缓存读写和仅供广告使用的安装标识。
-- 修复子代理接入与 Steer 后结果回传、MCP Schema 整数、Responses 文字回放、多段思考签名、Anthropic 拒绝处理、代理缓存失效及 SQLite 连接回收。范围与上游来源见[排查记录](./UPSTREAM-BUG-AUDIT.md)。
-- CI 覆盖三类内置插件、共享 OAuth SDK，以及 Linux、Windows、macOS 的宿主凭据生命周期。
-
-自动续期不能恢复服务商已撤销的授权。`invalid_grant` 等终止错误仍需要用户重新登录。
-
-## 开发与验证
-
-先阅读 [AGENTS.md](./AGENTS.md)。需要 Rust stable、Node.js、npm、Deno 2.9.6，以及对应平台的 Tauri 2 构建依赖。
+开发前可按下方隔离调试说明设置独立数据目录，避免读取日常使用的账号与数据库。
 
 ```sh
 npm --prefix apps/desktop ci
+npm --prefix apps/desktop run dev:web
+```
+
+`dev:web` 同时启动 Rust 服务与 Vite。浏览器应访问 Rust 管理服务的 `/__byok-api__/`，开发脚本使用 `http://127.0.0.1:3000/__byok-api__/`；不要把独立 Vite 地址当作管理 API 的来源。
+
+桌面开发：
+
+```sh
+npm --prefix apps/desktop run tauri:dev
+```
+
+`make dev-web`、`make dev-desktop` 是对应快捷入口。独立服务入口为 `server/src/bin/cursor-server.rs`，前端构建后可用 `make dev-server` 启动。
+
+## 检查
+
+```sh
 npm --prefix apps/desktop run check
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
@@ -37,41 +41,66 @@ deno test --config server/plugins/build-in/antigravity-auth/deno.json server/plu
 deno test --import-map server/src/plugin/sdk/import-map.json server/src/plugin/sdk/oauth_test.ts
 ```
 
-宿主凭据测试需要额外设置 `DENO_TEST_EXECUTABLE` 为 Deno 的可执行文件路径，再运行：
+宿主凭据测试需将 `DENO_TEST_EXECUTABLE` 设置为 Deno 可执行文件路径，再运行：
 
 ```sh
 cargo test --package cursor-server --lib plugin:: -- --include-ignored
 ```
 
-集成测试必须使用临时目录中的 `PluginRuntime::in_directory` 和 `PluginRegistry::in_directory`。测试中禁止调用 `managed()`，后者用于正式应用，可能安装内置插件并读取当前用户的账号。测试不需要真实账号、网络令牌或用户数据库。
+集成测试使用临时目录中的 `PluginRuntime::in_directory` 与 `PluginRegistry::in_directory`；不要调用会读取正式账号目录的 `managed()`。基准测试有独立的[运行说明](./support/benchmarks/semble/README.md)。
 
-本地启动使用 `make dev-web` 或 `make dev-desktop`。桌面生产构建使用 Tauri CLI（`npm --prefix apps/desktop run tauri:build`）或 `make build-desktop`，确保前端资源被嵌入。
+CI 包含前端类型与生产构建检查、Linux Rust 检查和测试、Windows/macOS 桌面 Rust 检查，以及插件凭据生命周期测试。
 
-### 本地桌面 UI 调试
+## 本地打包与 UI 调试
 
-`CURSOR_BYOK_DATA_DIR` 可指定绝对路径，将数据库、插件、日志和缓存放入独立目录；未设置时仍使用用户目录下的 `.cursor-byok-v3`。调试时使用新建空目录，不复制正式账号凭据。
+只编译桌面程序：
 
-Windows 上与安装版同时运行时，用临时 Tauri 配置覆盖 `identifier`（例如 `dev.cursorbyok.desktop.ui-debug`），并设置 `bundle.createUpdaterArtifacts` 为 `false`，然后运行 `npm --prefix apps/desktop run tauri:build -- --debug --bundles nsis --config <配置文件绝对路径>`。这样生成包含前端和本地服务的桌面包，不需要正式更新签名私钥。
+```sh
+npm --prefix apps/desktop run tauri:build -- --debug --no-bundle
+```
 
-启动调试可执行文件时，仅在子进程环境中设置 `CURSOR_BYOK_DATA_DIR`，并将 `APPDATA` 指向另一个临时目录，以隔离 Cursor 设置；不要开启接管、安装证书或导入正式凭据。临时应用标识和签名覆盖不得写入正式 `tauri.conf.json`。
+完整本地安装包可使用 `make build-desktop`。该命令生成独立本地签名密钥；它不代表正式发布签名。
 
-应用图标以 `apps/desktop/src-tauri/icons/icon.svg` 为源文件，通过 `tauri icon` 生成 PNG、ICO、ICNS；窗口使用 SVG，托盘和安装包使用相应平台资源。
+`CURSOR_BYOK_DATA_DIR` 可指定绝对路径，将数据库、插件、日志和缓存放入独立目录。未设置时使用用户目录下的 `.cursor-byok-v3`。调试使用新建目录与示例数据，不复制正式账号凭据。
 
-## 独立发布
+Windows 上与安装版同时运行时，创建临时配置，例如：
 
-安装包通过本 fork 的 [GitHub Releases](https://github.com/Quiyyy/cursor-byok/releases) 发布。仓库接管不自动替换本机已安装程序，也不迁移或上传用户账号配置。
+```json
+{
+  "identifier": "dev.cursorbyok.desktop.ui-debug",
+  "bundle": { "createUpdaterArtifacts": false }
+}
+```
 
-- 安装版与 Windows 便携版的更新源均指向 `Quiyyy/cursor-byok` 的 GitHub Releases。
-- fork 使用独立更新签名公钥；对应私钥通过仓库 Actions secret `TAURI_SIGNING_PRIVATE_KEY` 提供，私钥保存在仓库外，禁止提交。
-- 上游旧安装包仍使用上游更新源和公钥。首次切换到本 fork 应手动安装；后续版本才通过本 fork 的签名更新链路升级。
-- 每次发布选择尚未使用的更高版本，同步修改 `apps/desktop/package.json`、`apps/desktop/package-lock.json`、`apps/desktop/src-tauri/Cargo.toml`、`apps/desktop/src-tauri/tauri.conf.json` 和 `Cargo.lock` 中的桌面包版本。
-- 合入 `main` 并完成 CI 后，由仓库所有者推送与应用版本一致的 `v<version>` 标签，触发 `.github/workflows/release.yml`。
-- 不要批量推送上游历史标签来触发发布。
+```sh
+npm --prefix apps/desktop run tauri:build -- --debug --bundles nsis --config <临时配置的绝对路径>
+```
 
-## 待处理的问题
+启动调试程序时，仅在子进程环境中设置 `CURSOR_BYOK_DATA_DIR`，同时将 `APPDATA` 指向独立临时目录，隔离 Cursor 设置。UI 回归使用模拟接管接口，不自动开启真实接管、安装证书或导入正式凭据。
 
-- 补充 Remote SSH、语音输入 HTTP/2 透传的真实客户端验证；未确认项见排查记录。
-- 对 Cursor 聊天中的 Windows 本地文件链接进行规范化。已观察到部分 Cursor 版本会移除裸盘符 Markdown 链接的 `href`，而 Canvas 文件可通过原生入口打开。
-- 跟进 Cursor 协议变化，并用真实客户端验证工具调用、取消、会话恢复及 Canvas 接入。
+临时标识、签名覆盖、数据库和安装包不提交到仓库。正式 `tauri.conf.json` 保持实际应用标识与更新配置。
 
-具体需求和修复在本仓库 [Issues](https://github.com/Quiyyy/cursor-byok/issues) 中跟踪。报告问题时只提供脱敏日志和最小复现，不提交数据库、账号文件、API Key 或 OAuth 凭据。
+截图采用纯前端演示模式，生成步骤见[资产说明](./docs/ASSETS.md)；不需要启动真实账号或模型服务。
+
+## 提交与发布
+
+1. 从当前 `main` 创建分支，保持一个 PR 的变更范围明确。
+2. 更新相关文档与本地化，运行对应检查后提交 PR。
+3. 等待 CI 通过后合入 `main`。
+4. **只有维护者明确要求发布时**，才更新版本、准备发布提交并推送匹配标签。普通合入不触发 Release。
+
+发布入口为 [.github/workflows/release.yml](./.github/workflows/release.yml)，操作规范见 [release 技能](./.agents/skills/release/SKILL.md)。
+
+- 应用版本在 `apps/desktop/package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 和根目录 `Cargo.lock` 中保持一致。
+- 发布标签采用 `v<version>`，必须指向已包含在 `origin/main` 中的提交。
+- 工作流只响应版本标签，并检查发起账号与当前仓库所有者一致。
+- Tauri 更新使用 `latest.json`；Windows 便携更新使用 `portable-latest.json`。当前工作流还生成 `update.json` 供既有客户端使用，移除它应作为单独的更新策略变更。
+- 更新签名私钥通过 GitHub Actions secrets 提供，不能提交或打印；资产来源和打包格式见[资产说明](./docs/ASSETS.md)。
+
+## 文档维护
+
+- README 介绍产品、下载和当前使用路径，不记录个人宣传或临时开发过程。
+- 使用指南与 UI 标签保持一致；源码截图明确标注演示数据，不承诺尚未发布的版本行为。
+- 架构说明只写当前存在的目录；运行时提示文件 `server/prompt/` 属于程序资源，不作为普通说明文档批量修改。
+- 修复结论关联可验证代码、测试或本仓库 PR；未验证的行为保留为待验收项。
+- 图标、字体和第三方代码遵循各自许可，保留 [LICENSE](./LICENSE) 和必要来源记录。

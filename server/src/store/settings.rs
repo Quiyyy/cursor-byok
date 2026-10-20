@@ -18,8 +18,6 @@ const EXTERNAL_API_SETTINGS_KEY: &str = "external_api";
 pub const DEFAULT_COMMIT_PROMPT_ZH_CN: &str = include_str!("../../prompt/cursor/commit/zh-CN.md");
 pub const DEFAULT_COMMIT_PROMPT_EN_US: &str = include_str!("../../prompt/cursor/commit/en-US.md");
 
-pub const PUBLIC_TAB_SERVICE_URL: &str = "https://tab.leokun.cn";
-
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 pub struct PortSettings {
     pub proxy_port: u16,
@@ -69,7 +67,6 @@ impl ProxyMode {
 #[serde(rename_all = "snake_case")]
 pub enum TabMode {
     #[default]
-    Public,
     Direct,
     Custom,
 }
@@ -104,7 +101,6 @@ fn default_true() -> bool {
 impl TabSettings {
     pub fn service_url(&self) -> Option<&str> {
         match self.mode {
-            TabMode::Public => Some(PUBLIC_TAB_SERVICE_URL),
             TabMode::Direct => None,
             TabMode::Custom => Some(&self.address),
         }
@@ -511,7 +507,7 @@ impl Store {
 mod tests {
     use super::{
         read_proxy_settings, CommitPromptLocale, CommitSettings, ExternalApiSettings, ProxyMode,
-        ProxySettingsInput, ProxySettingsSecret, Store, TokenPricingSettings,
+        ProxySettingsInput, ProxySettingsSecret, Store, TabMode, TabSettings, TokenPricingSettings,
         DEFAULT_COMMIT_PROMPT_EN_US, DEFAULT_COMMIT_PROMPT_ZH_CN, PROXY_SETTINGS_KEY,
     };
 
@@ -519,6 +515,78 @@ mod tests {
     /// rename wrote it.
     const LEGACY_PROXY_ROW: &str =
         r#"{"mode":"system","address":"","auth_enabled":false,"username":"","password":""}"#;
+
+    #[test]
+    fn tab_defaults_to_direct_and_rejects_removed_modes() {
+        let settings = TabSettings::default();
+        assert_eq!(settings.mode, TabMode::Direct);
+        assert_eq!(settings.service_url(), None);
+        assert_eq!(
+            serde_json::to_value(&settings).unwrap(),
+            serde_json::json!({ "mode": "direct", "address": "" })
+        );
+        for mode in ["public", "unknown"] {
+            assert!(serde_json::from_value::<TabSettings>(
+                serde_json::json!({ "mode": mode, "address": "" })
+            )
+            .is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn tab_custom_address_round_trips_and_survives_switching_to_direct() {
+        let directory = tempfile::tempdir().unwrap();
+        let url = format!("sqlite://{}", directory.path().join("test.db").display());
+        let store = Store::connect(&url).await.unwrap();
+        assert_eq!(store.tab_settings().await.unwrap(), TabSettings::default());
+
+        let custom = store
+            .set_tab_settings(TabSettings {
+                mode: TabMode::Custom,
+                address: " https://tab.example.com/base/// ".into(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(custom.service_url(), Some("https://tab.example.com/base"));
+        assert_eq!(store.tab_settings().await.unwrap(), custom);
+
+        let direct = TabSettings {
+            mode: TabMode::Direct,
+            address: custom.address.clone(),
+        };
+        store.set_tab_settings(direct.clone()).await.unwrap();
+        let reopened = Store::connect(&url).await.unwrap();
+        let saved = reopened.tab_settings().await.unwrap();
+        assert_eq!(saved, direct);
+        assert_eq!(saved.service_url(), None);
+        assert_eq!(
+            reopened.set_tab_settings(custom.clone()).await.unwrap(),
+            custom
+        );
+    }
+
+    #[tokio::test]
+    async fn tab_rejects_invalid_custom_addresses_without_overwriting_the_setting() {
+        let directory = tempfile::tempdir().unwrap();
+        let url = format!("sqlite://{}", directory.path().join("test.db").display());
+        let store = Store::connect(&url).await.unwrap();
+        for address in [
+            "",
+            "not-a-url",
+            "ftp://tab.example.com",
+            "https://tab.example.com?key=value",
+            "https://tab.example.com#fragment",
+        ] {
+            assert!(store
+                .set_tab_settings(TabSettings {
+                    mode: TabMode::Custom,
+                    address: address.into(),
+                })
+                .await
+                .is_err());
+            assert_eq!(store.tab_settings().await.unwrap(), TabSettings::default());
+        }
+    }
 
     #[test]
     fn commit_prompt_locale_maps_unknown_interface_languages_to_english() {

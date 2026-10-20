@@ -142,7 +142,7 @@ export interface ProxySettingsInput {
   password?: string;
 }
 
-export type TabMode = "public" | "direct" | "custom";
+export type TabMode = "direct" | "custom";
 
 export interface TabSettings {
   mode: TabMode;

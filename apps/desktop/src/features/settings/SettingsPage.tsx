@@ -37,7 +37,7 @@ export function SettingsPage() {
   const [editingProxy, setEditingProxy] = useState(false);
   const [savingProxy, setSavingProxy] = useState(false);
   const [tabSettings, setTabSettings] = useState<TabSettings | null>(null);
-  const [tabDraft, setTabDraft] = useState<TabSettings>({ mode: "public", address: "" });
+  const [tabDraft, setTabDraft] = useState<TabSettings>({ mode: "direct", address: "" });
   const [editingTab, setEditingTab] = useState(false);
   const [savingTab, setSavingTab] = useState(false);
   useEffect(() => {
