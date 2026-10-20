@@ -2,9 +2,8 @@
 
 .pluginGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 12px;
-  padding-top: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
 }
 
 .pluginCard {
@@ -88,23 +87,23 @@
   font-size: type.$font-size-2xs;
 }
 
-.pluginAuthor {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  opacity: 0.85;
-}
-
 .cardActions {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 7px;
 
   > button {
-    min-width: 0;
-    flex: 0 1 auto;
+    flex: 0 0 auto;
   }
+}
+
+.connectionGuide { color: var(--vscode-descriptionForeground); font-size: type.$font-size-xs; }
+.accountNotice { color: var(--vscode-errorForeground); font-size: type.$font-size-xs; }
+.stateAttention {
+  color: var(--vscode-errorForeground);
+  background: color-mix(in srgb, var(--vscode-errorForeground) 7%, var(--vscode-editorWidget-background));
+  border-color: color-mix(in srgb, var(--vscode-errorForeground) 25%, var(--vscode-sideBar-border));
 }
 
 

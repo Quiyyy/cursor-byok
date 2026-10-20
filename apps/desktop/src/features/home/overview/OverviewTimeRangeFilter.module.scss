@@ -9,8 +9,11 @@
 .filterRow { width: 100%; }
 
 .root {
-  gap: 3px;
+  gap: 8px;
+  min-height: 34px;
 }
+.compactPicker { display: none; min-width: 160px; }
+.customButton { font-size: type.$font-size-xs; flex: 0 0 auto; }
 
 .presets {
   overflow: hidden;
@@ -18,7 +21,7 @@
   border-radius: 5px;
 
   button {
-    height: 25px;
+    height: 34px;
     padding: 0 8px;
     color: var(--vscode-descriptionForeground);
     background: transparent;
@@ -31,6 +34,11 @@
     &:hover { color: var(--vscode-foreground); background: var(--vscode-list-hoverBackground); }
     &[aria-pressed="true"] { color: var(--vscode-list-activeSelectionForeground); background: var(--vscode-list-activeSelectionBackground); }
   }
+}
+
+@container (max-width: 760px) {
+  .presets { display: none; }
+  .compactPicker { display: block; }
 }
 
 .popover {

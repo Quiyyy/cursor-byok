@@ -5,7 +5,8 @@ import type { Model, PluginModelDescriptor } from "../../shared/api";
 import { Card } from "../../shared/ui/Card";
 import { Icon } from "../../shared/ui/Icon";
 import { chevronDownIcon, chevronRightIcon, claudeIcon, dragIcon, editIcon, flatColorOrganizationIcon, openAiIcon } from "../../shared/ui/icons";
-import { TruncatedButton } from "../../shared/ui/TruncatedButton";
+import { Button } from "../../shared/ui/Button";
+import { ActionMenu } from "../../shared/ui/ActionMenu";
 import { CursorModelTestResult, type CursorModelTestState } from "./CursorModelTestResult";
 import styles from "./CursorSettings.module.scss";
 
@@ -22,6 +23,7 @@ type CursorModelCardsProps = {
   models: Model[];
   pluginModels: PluginModelDescriptor[];
   grouping: CursorModelGrouping;
+  filtered: boolean;
   disabled: boolean;
   testingModelHashes: Set<string>;
   testResults: Map<string, CursorModelTestState>;
@@ -54,14 +56,15 @@ export function cursorModelGroups(models: Model[], grouping: Exclude<CursorModel
 }
 
 export function CursorModelCards(props: CursorModelCardsProps) {
-  const builtins = props.grouping === "flat"
-    ? <div style={{ paddingTop: "10px" }}><ModelGrid {...props} sortable /></div>
+  const builtins = props.models.length === 0 ? null : props.grouping === "flat"
+    ? <ModelGrid {...props} sortable={!props.filtered} />
     : <div className={styles.modelGroups}>
       {cursorModelGroups(props.models, props.grouping).map((group) => <CollapsibleGroup
         key={group.key}
         label={group.label}
         icon={group.icon}
-        defaultOpen={false}
+        count={group.models.length}
+        settingsDisabled={props.disabled || props.testingModelHashes.size > 0}
         onSettings={props.grouping === "provider" ? () => props.onGroupSettings(group) : undefined}
       >
         {group.models.map((model) => <ModelListRow
@@ -80,10 +83,12 @@ export function CursorModelCards(props: CursorModelCardsProps) {
   return <div className={styles.modelGroups}>
     {builtins}
     {pluginGroups(props.pluginModels).map((group) => <CollapsibleGroup
-      key={`${props.grouping}:${group.pluginId}`}
+      key={`${group.pluginId}:${group.providerId}`}
       label={group.pluginName}
       iconSrc={group.icon}
-      defaultOpen={props.grouping === "flat"}
+      count={group.models.length}
+      onSettings={() => props.onPluginSettings(group.models[0])}
+      settingsLabel={t("管理账号")}
     >
       {group.models.map((model) => <PluginModelRow
         key={model.id}
@@ -99,11 +104,11 @@ export function CursorModelCards(props: CursorModelCardsProps) {
 }
 
 function pluginGroups(models: PluginModelDescriptor[]) {
-  const groups: { pluginId: string; pluginName: string; icon: string; models: PluginModelDescriptor[] }[] = [];
+  const groups: { pluginId: string; providerId: string; pluginName: string; icon: string; models: PluginModelDescriptor[] }[] = [];
   for (const model of models) {
-    let group = groups.find((candidate) => candidate.pluginId === model.pluginId);
+    let group = groups.find((candidate) => candidate.pluginId === model.pluginId && candidate.providerId === model.providerId);
     if (!group) {
-      group = { pluginId: model.pluginId, pluginName: model.pluginName, icon: model.icon, models: [] };
+      group = { pluginId: model.pluginId, providerId: model.providerId, pluginName: model.pluginName, icon: model.icon, models: [] };
       groups.push(group);
     }
     group.models.push(model);
@@ -111,12 +116,15 @@ function pluginGroups(models: PluginModelDescriptor[]) {
   return groups;
 }
 
-function CollapsibleGroup({ label, icon, iconSrc, defaultOpen = true, onSettings, children }: {
+function CollapsibleGroup({ label, icon, iconSrc, count, defaultOpen = true, onSettings, settingsLabel, settingsDisabled, children }: {
   label: string;
   icon?: IconifyIcon;
   iconSrc?: string;
+  count: number;
   defaultOpen?: boolean;
   onSettings?: () => void;
+  settingsLabel?: string;
+  settingsDisabled?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -131,10 +139,11 @@ function CollapsibleGroup({ label, icon, iconSrc, defaultOpen = true, onSettings
         {icon && <Icon icon={icon} size="1.1em" />}
         {iconSrc && <Icon src={iconSrc} size="1.1em" />}
         <span className={styles.groupLabel}>{label}</span>
+        <span className={styles.groupCount}>{t("{count} 个模型", { count })}</span>
       </button>
-      {onSettings && <button type="button" className={styles.groupSettings} onClick={onSettings}>
+      {onSettings && <button type="button" className={styles.groupSettings} disabled={settingsDisabled} onClick={onSettings}>
         <Icon icon={editIcon} size="1em" />
-        {t("分组设置")}
+        {settingsLabel ?? t("分组设置")}
       </button>}
       <button
         type="button"
@@ -167,10 +176,12 @@ function ModelListRow({ model, disabled, testing, result, onTest, onEdit, onDupl
     </div>
     <CursorModelTestResult compact state={result} testing={testing} />
     <div className={styles.modelCardActions}>
-      <TruncatedButton size="small" disabled={disabled && !testing} label={testing ? t("取消测试") : t("测试")} onClick={onTest} />
-      <TruncatedButton size="small" disabled={disabled} label={t("编辑")} onClick={onEdit} />
-      <TruncatedButton size="small" disabled={disabled} label={t("复制")} onClick={onDuplicate} />
-      <TruncatedButton size="small" className={styles.deleteButton} disabled={disabled} label={t("删除")} onClick={onDelete} />
+      <Button size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
+      <Button size="small" disabled={disabled || testing} onClick={onEdit}>{t("配置")}</Button>
+      <ActionMenu label={t("更多")} disabled={disabled || testing} items={[
+        { id: "duplicate", label: t("复制"), onSelect: onDuplicate },
+        { id: "delete", label: t("删除"), onSelect: onDelete },
+      ]} />
     </div>
   </div>;
 }
@@ -190,8 +201,8 @@ function PluginModelRow({ model, disabled, testing, result, onTest, onSettings }
     </div>
     <CursorModelTestResult compact state={result} testing={testing} />
     <div className={styles.modelCardActions}>
-      <TruncatedButton size="small" disabled={disabled && !testing} label={testing ? t("取消测试") : t("测试")} onClick={onTest} />
-      <TruncatedButton size="small" disabled={disabled} label={t("设置")} onClick={onSettings} />
+      <Button size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
+      <Button size="small" disabled={disabled} onClick={onSettings}>{t("管理账号")}</Button>
     </div>
   </div>;
 }
@@ -281,10 +292,12 @@ function ModelGrid({
             <CursorModelTestResult state={result} testing={testing} />
           </div>
           <div className={styles.modelCardActions}>
-            <TruncatedButton size="small" disabled={disabled && !testing} label={testing ? t("取消测试") : t("测试")} onClick={() => onTest(model)} />
-            <TruncatedButton size="small" disabled={disabled} label={t("编辑")} onClick={() => onEdit(model)} />
-            <TruncatedButton size="small" disabled={disabled} label={t("复制")} onClick={() => onDuplicate(model)} />
-            <TruncatedButton size="small" className={styles.deleteButton} disabled={disabled} label={t("删除")} onClick={() => onDelete(model)} />
+            <Button size="small" disabled={disabled && !testing} onClick={() => onTest(model)}>{testing ? t("取消测试") : t("测试")}</Button>
+            <Button size="small" disabled={disabled || testing} onClick={() => onEdit(model)}>{t("配置")}</Button>
+            <ActionMenu label={t("更多")} disabled={disabled || testing} items={[
+              { id: "duplicate", label: t("复制"), onSelect: () => onDuplicate(model) },
+              { id: "delete", label: t("删除"), onSelect: () => onDelete(model) },
+            ]} />
           </div>
         </div>
       </Card>;

@@ -12,11 +12,12 @@ export type DataTableColumn<T> = {
   sticky?: "right";
 };
 
-export function DataTable<T>({ rows, columns, rowKey, minWidth, emptyText = t("暂无数据") }: {
+export function DataTable<T>({ rows, columns, rowKey, minWidth, className, emptyText = t("暂无数据") }: {
   rows: T[];
   columns: DataTableColumn<T>[];
   rowKey: (row: T) => string | number;
   minWidth?: number | string;
+  className?: string;
   emptyText?: ReactNode;
 }) {
   const [page, setPage] = useState(1);
@@ -24,7 +25,7 @@ export function DataTable<T>({ rows, columns, rowKey, minWidth, emptyText = t("�
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
   const pageRows = useMemo(() => rows.slice((page - 1) * pageSize, page * pageSize), [page, pageSize, rows]);
-  return <div className={styles.root}>
+  return <div className={[styles.root, className].filter(Boolean).join(" ")}>
     <div className={styles.tableRegion}>
       <ScrollableContent horizontal className={[styles.viewport, rows.length === 0 ? styles.emptyViewport : ""].filter(Boolean).join(" ")} viewportClassName={styles.tableViewport} contentClassName={styles.tableContent} scrollbarInsetTop="33px">
         <table className={styles.table} style={{ minWidth }}>

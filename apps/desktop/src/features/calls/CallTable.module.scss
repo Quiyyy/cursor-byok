@@ -8,5 +8,14 @@
   font-size: type.$font-size-xs;
 }
 
-.completed { color: #56b870; }
+.completed { color: var(--vscode-testing-iconPassed, var(--vscode-gitDecoration-addedResourceForeground)); }
 .failed { color: var(--vscode-errorForeground, #f48771); }
+.running { color: var(--vscode-textLink-foreground); }
+.model, .time { display: flex; flex-direction: column; gap: 3px; font-variant-numeric: tabular-nums; }
+.model { max-width: 210px; > span { overflow: hidden; text-overflow: ellipsis; } }
+.secondary { font-size: type.$font-size-2xs; color: var(--vscode-descriptionForeground); }
+.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.table {
+  tbody td { height: 54px; padding-block: 7px; }
+  td.numeric, th.numeric { text-align: right; }
+}

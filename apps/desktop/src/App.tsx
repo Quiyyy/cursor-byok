@@ -26,8 +26,8 @@ export function App() {
             <Route element={<AppLayout />}>
               <Route index element={<HomePage />} />
               <Route path="calls" element={<CallsPage />} />
-              <Route path="harness/cursor" element={<CursorSettingsPage />} />
-              <Route path="plugins" element={<PluginManagementPage />} />
+              <Route path="models" element={<CursorSettingsPage />} />
+              <Route path="providers" element={<PluginManagementPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, pluginText, type Overview } from "../../shared/api";
-import { ContributionCalendarChart } from "./charts/ContributionCalendarChart";
+import { OverviewActivity } from "./overview/OverviewActivity";
 import { DailyTokenUsageChart } from "./charts/DailyTokenUsageChart";
 import { HomeMetrics } from "./metrics/HomeMetrics";
 import { PageContent } from "../../shell/layout/PageContent";
@@ -14,25 +14,6 @@ import { claudeIcon, flatColorOrganizationIcon, openAiIcon } from "../../shared/
 import { useI18n } from "../../i18n/store";
 
 type TimeRange = { startMs: number; endMs: number };
-
-const CALENDAR_DAYS = 365;
-const DAY_MS = 24 * 60 * 60_000;
-
-function contributionCalendarData(overview: Overview, endMs: number) {
-  const tokensByDate = new Map<string, number>();
-  for (const bucket of overview.token_usage_series) {
-    const date = new Date(bucket.bucket_start_ms).toISOString().slice(0, 10);
-    const tokens = bucket.input_tokens + bucket.cache_read_tokens + bucket.cache_write_tokens + bucket.output_tokens;
-    tokensByDate.set(date, (tokensByDate.get(date) ?? 0) + tokens);
-  }
-  const lastDay = new Date(Math.max(0, endMs - 1));
-  lastDay.setUTCHours(0, 0, 0, 0);
-  const firstDayMs = lastDay.getTime() - (CALENDAR_DAYS - 1) * DAY_MS;
-  return Array.from({ length: CALENDAR_DAYS }, (_, offset) => {
-    const date = new Date(firstDayMs + offset * DAY_MS).toISOString().slice(0, 10);
-    return { date, tokens: tokensByDate.get(date) ?? 0 };
-  });
-}
 
 function presetRange(preset: Exclude<OverviewRangePreset, "custom">, now = new Date()): TimeRange {
   const endMs = now.getTime();
@@ -66,7 +47,7 @@ export function HomePage() {
   const [rangeOverview, setRangeOverview] = useState<Overview | null>(null);
   const [rangeBusy, setRangeBusy] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
-  const selectedRange = preset === "custom" ? customRange : presetRange(preset);
+  const selectedRange = useMemo(() => preset === "custom" ? customRange : presetRange(preset), [preset, customRange, refreshVersion, overview]);
 
   useEffect(() => {
     if (!selectedRange) return;
@@ -91,7 +72,6 @@ export function HomePage() {
     cacheWriteTokens: bucket.cache_write_tokens,
     outputTokens: bucket.output_tokens,
   }));
-  const contribution = contributionCalendarData(filteredOverview, selectedRange?.endMs ?? Date.now());
   const metrics = {
     llmCalls: filteredOverview.metrics.llm_calls,
     successfulCalls: filteredOverview.metrics.successful_calls,
@@ -159,6 +139,11 @@ export function HomePage() {
   ];
   const sections: VirtualPageSection[] = [
     {
+      key: "metrics",
+      estimatedHeight: 130,
+      content: <HomeMetrics data={metrics} />,
+    },
+    {
       key: "daily-token-usage",
       estimatedHeight: 240,
       content: <DailyTokenUsageChart
@@ -167,20 +152,14 @@ export function HomePage() {
       />,
     },
     {
-      key: "metrics",
-      estimatedHeight: 130,
-      content: <HomeMetrics data={metrics} refreshVersion={refreshVersion} />,
-    },
-
-    {
       key: "activity",
-      estimatedHeight: 106,
-      content: <ContributionCalendarChart data={contribution} />,
+      estimatedHeight: 40,
+      content: <OverviewActivity endMs={selectedRange?.endMs ?? Date.now()} modelHashes={appliedModels} />,
     },
   ];
 
   return <>
-    <PageActions><OverviewTimeRangeFilter
+    <PageActions position="filters"><OverviewTimeRangeFilter
       value={preset}
       quick={quick}
       customOpen={customOpen}
@@ -198,6 +177,6 @@ export function HomePage() {
       onCustomApply={applyCustom}
       onRefresh={() => void refresh()}
     /></PageActions>
-    <PageContent title={t("概览")} sections={sections} />
+    <PageContent title={t("运行概览")} sections={sections} />
   </>;
 }

@@ -4,6 +4,7 @@ import type { TokenUsageGranularity } from "../../../shared/api";
 import { formatCompactInteger } from "../../../shared/utils/numberFormat";
 import { EChart } from "./EChart";
 import styles from "./DailyTokenUsageChart.module.scss";
+import { useAppStore } from "../../../shared/store/appStore";
 
 export type DailyTokenUsage = {
   bucketStartMs: number;
@@ -24,9 +25,6 @@ const seriesColors = {
   output: "#E7B40B",
 } as const;
 const levelLineColor = "#E7B40B";
-const emptyBarColor = "rgba(139, 148, 158, 0.20)";
-const EMPTY_BAR_RATIO = 1;
-const DATA_HEIGHT_RATIO = 1;
 
 const seriesFocus = {
   emphasis: { focus: "series" },
@@ -74,9 +72,10 @@ export function DailyTokenUsageChart({
   granularity: TokenUsageGranularity;
 }) {
   const [hovered, setHovered] = useState(false);
+  const { theme } = useAppStore();
+  const axisColor = theme === "default-light" ? "#637183" : "#a3b0c0";
   const maximumTotal = data.reduce((maximum, day) => Math.max(maximum, totalTokens(day)), 0);
-  const axisMaximum = Math.max(1, maximumTotal / DATA_HEIGHT_RATIO);
-  const emptyBarHeight = axisMaximum * EMPTY_BAR_RATIO;
+  const axisMaximum = Math.max(1, maximumTotal * 1.12);
   const nonZeroTotals = data.map(totalTokens).filter((total) => total !== 0);
   const averageLevel = nonZeroTotals.length === 0
     ? 0
@@ -85,7 +84,8 @@ export function DailyTokenUsageChart({
   const option = useMemo<EChartsCoreOption>(() => ({
     animationDuration: 450,
     animationEasing: "cubicOut",
-    grid: { top: 8, right: 0, bottom: 0, left: 0 },
+    grid: { top: 44, right: 12, bottom: 30, left: 64 },
+    legend: { top: 0, left: 0, textStyle: { color: axisColor }, itemWidth: 10, itemHeight: 10 },
     tooltip: {
       trigger: "axis",
       confine: true,
@@ -99,7 +99,8 @@ export function DailyTokenUsageChart({
       },
       formatter: (params: unknown) => {
         const first = (params as TooltipItem[])[0];
-        const day = data[first.dataIndex];
+        const day = first ? data[first.dataIndex] : undefined;
+        if (!day) return "";
         return [
           formatTooltipTime(day.bucketStartMs, granularity),
           `${t("总请求")}：${formatCompactInteger(totalTokens(day))}`,
@@ -119,29 +120,23 @@ export function DailyTokenUsageChart({
         interval: "auto",
         hideOverlap: true,
         formatter: (_value: string, index: number) => formatAxisLabel(data[index].bucketStartMs, granularity),
-        color: "#8c8c8c",
+        color: axisColor,
         fontFamily: "HFKos",
         margin: 14,
       },
     },
     yAxis: {
       type: "value",
-      show: false,
+      show: true,
+      name: "Token",
+      nameTextStyle: { color: axisColor },
+      axisLabel: { color: axisColor, formatter: (value: number) => formatCompactInteger(value) },
+      splitLine: { lineStyle: { color: theme === "default-light" ? "#e3e8ee" : "#33404d" } },
       min: 0,
+      minInterval: 1,
       max: axisMaximum,
     },
     series: [
-      {
-        name: t("无用量"),
-        type: "bar",
-        stack: "empty-placeholder",
-        data: data.map((day) => totalTokens(day) === 0 ? emptyBarHeight : 0),
-        barMaxWidth: 18,
-        silent: true,
-        z: 0,
-        itemStyle: { color: emptyBarColor, borderRadius: [2, 2, 0, 0] },
-        emphasis: { disabled: true },
-      },
       {
         name: t("输入（非缓存）"),
         type: "bar",
@@ -193,7 +188,7 @@ export function DailyTokenUsageChart({
         ...seriesFocus,
       },
     ],
-  }), [averageLevel, axisMaximum, data, emptyBarHeight, granularity, hovered]);
+  }), [averageLevel, axisMaximum, data, granularity, hovered, axisColor, theme]);
 
   return <EChart
     option={option}
