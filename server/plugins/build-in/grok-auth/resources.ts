@@ -1,3 +1,4 @@
+import { prepareOAuth2Resource } from "cursor-byok:oauth";
 import type { JsonValue, PluginContext } from "cursor-byok:plugin";
 import type {
   ResourceDraft,
@@ -17,7 +18,6 @@ const CREDITS_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits";
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const TOKEN_URL = "https://auth.x.ai/oauth2/token";
 const CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
-const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 export type AccountQuota = {
   planLabel: string | null;
@@ -133,118 +133,14 @@ export function accountData(resource: ResourceSnapshot): AccountData {
   };
 }
 
-export function tokenExpiresAt(data: AccountData): number | null {
-  const exp = number(decodeJwtPayload(data.accessToken)?.exp);
-  return data.expiresAtMs ?? (exp !== null ? exp * 1000 : null);
-}
-
-/** The host holds the account lock and commits this patch BEFORE any inference begins. */
-export async function prepareAccount(
+export function prepareAccount(
   resource: ResourceSnapshot,
   rejectedResource: ResourceSnapshot | null,
   context: PluginContext,
 ): Promise<ResourcePatch | null> {
-  const data = accountData(resource);
-  const now = Date.now();
-  const expiry = tokenExpiresAt(data);
-  const rejected = rejectedResource !== null &&
-    accountData(rejectedResource).accessToken === data.accessToken;
-  const expired = () => expiry !== null && expiry <= Date.now();
-  const stateInvalid = resource.state.status === "invalid";
-  const failure = (message: string, terminal: boolean): ResourcePatch => {
-    const next = { ...data };
-    if (terminal) next.refreshError = message;
-    else next.refreshRetryAtMs = Date.now() + 15_000;
-    return {
-      privateData: next as unknown as JsonValue,
-      state: terminal
-        ? { status: "invalid", message }
-        : (expired() || rejected || stateInvalid)
-        ? { status: "cooling", retryAtMs: next.refreshRetryAtMs!, message }
-        : { status: "ready" },
-    };
-  };
-  if (data.refreshError) return failure(data.refreshError, true);
-  if (!rejected && !stateInvalid && (expiry === null || expiry > now + REFRESH_BUFFER_MS)) {
-    return null;
-  }
-  if (data.refreshRetryAtMs && data.refreshRetryAtMs > now) {
-    // Keep the original deadline; repeated calls must not postpone recovery indefinitely.
-    return (expired() || rejected || stateInvalid)
-      ? {
-        state: {
-          status: "cooling",
-          retryAtMs: data.refreshRetryAtMs,
-          message: "Grok token refresh temporarily unavailable; retry shortly",
-        },
-      }
-      : null;
-  }
-  if (!data.refreshToken) return failure("Grok refresh token is missing; sign in again", true);
-  for (let attempt = 0; attempt < 3; attempt++) {
-    let response;
-    try {
-      response = await context.network.fetch(TOKEN_URL, {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          client_id: CLIENT_ID,
-          refresh_token: data.refreshToken,
-        }).toString(),
-      });
-    } catch {
-      // A lost response may have rotated the token. Do not repeatedly replay it in this call.
-      return failure("Grok token refresh network error; retry shortly", false);
-    }
-    let body: Record<string, unknown> = {};
-    try {
-      body = object(JSON.parse(response.body)) ?? {};
-    } catch { /* classified below */ }
-    if (response.status >= 200 && response.status < 300) {
-      const accessToken = text(body.access_token);
-      const refreshToken = text(body.refresh_token) ?? data.refreshToken;
-      // Even a malformed successful response must not discard a rotated refresh token.
-      if (!accessToken) {
-        data.refreshToken = refreshToken;
-        return failure("Grok token refresh returned no access token; retry shortly", false);
-      }
-      const seconds = number(body.expires_in);
-      const jwtExpiry = number(decodeJwtPayload(accessToken)?.exp);
-      const expiresAtMs = seconds !== null && seconds > 0
-        ? Date.now() + seconds * 1000
-        : jwtExpiry !== null
-        ? jwtExpiry * 1000
-        : undefined;
-      const { refreshError: _error, refreshRetryAtMs: _retry, expiresAtMs: _expiry, ...previous } =
-        data;
-      return {
-        privateData: {
-          ...previous,
-          accessToken,
-          refreshToken,
-          ...(expiresAtMs ? { expiresAtMs } : {}),
-        } as unknown as JsonValue,
-        state: { status: "ready" },
-      };
-    }
-    const code = text(body.error);
-    if (code === "invalid_grant" || code === "invalid_client") {
-      return failure(`Grok refresh authorization rejected (${code}); sign in again`, true);
-    }
-    if ((response.status === 429 || response.status >= 500) && attempt < 2) {
-      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt));
-      continue;
-    }
-    return failure(
-      `Grok token refresh temporarily failed (HTTP ${response.status}); retry shortly`,
-      false,
-    );
-  }
-  return failure("Grok token refresh temporarily unavailable; retry shortly", false);
+  return prepareOAuth2Resource(resource, rejectedResource, context, {
+    name: "Grok", tokenUrl: TOKEN_URL, client: { client_id: CLIENT_ID },
+  });
 }
 
 function clampPercent(value: number): number {

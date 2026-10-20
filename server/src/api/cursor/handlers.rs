@@ -373,13 +373,12 @@ fn parent_headers(headers: &HeaderMap) -> Result<Option<TransportParent>> {
     let tool_call_id = header_text(headers, "x-parent-agent-tool-call-id")?;
     match (request_id, tool_call_id) {
         (None, None) => Ok(None),
-        (Some(request_id), Some(tool_call_id)) => Ok(Some(TransportParent {
-            request_id: request_id.into(),
-            tool_call_id: tool_call_id.into(),
+        // Cursor emits these headers independently. A subagent can carry only
+        // its parent tool call ID (or only its parent request ID).
+        (request_id, tool_call_id) => Ok(Some(TransportParent {
+            request_id: request_id.map(str::to_owned),
+            tool_call_id: tool_call_id.map(str::to_owned),
         })),
-        _ => Err(crate::Error::Protocol(
-            "Cursor subagent request must include both parent headers".into(),
-        )),
     }
 }
 
@@ -389,4 +388,36 @@ fn header_text<'a>(headers: &'a HeaderMap, name: &str) -> Result<Option<&'a str>
         .map(|value| value.to_str())
         .transpose()
         .map_err(|error| crate::Error::Protocol(format!("invalid {name} header: {error}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parent_headers_are_independent() {
+        for (request, tool) in [
+            (None, None),
+            (Some("parent"), None),
+            (None, Some("task")),
+            (Some("parent"), Some("task")),
+        ] {
+            let mut headers = HeaderMap::new();
+            if let Some(value) = request {
+                headers.insert("x-parent-request-id", HeaderValue::from_static(value));
+            }
+            if let Some(value) = tool {
+                headers.insert(
+                    "x-parent-agent-tool-call-id",
+                    HeaderValue::from_static(value),
+                );
+            }
+            let parent = parent_headers(&headers).unwrap();
+            assert_eq!(parent.is_some(), request.is_some() || tool.is_some());
+            if let Some(parent) = parent {
+                assert_eq!(parent.request_id.as_deref(), request);
+                assert_eq!(parent.tool_call_id.as_deref(), tool);
+            }
+        }
+    }
 }

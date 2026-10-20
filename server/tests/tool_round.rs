@@ -43,6 +43,35 @@ fn call(id: &str, name: &str) -> ToolCall {
     }
 }
 
+#[tokio::test]
+async fn model_cycle_accepts_multiple_signed_replay_fragments() {
+    let blocks = [
+        json!({"type":"thinking","thinking":"first","signature":"one"}),
+        json!({"type":"thinking","thinking":"second","signature":"two"}),
+    ];
+    let mut events = vec![Ok(ModelEvent::Start {
+        model_call_id: "signed-call".into(),
+    })];
+    for block in &blocks {
+        events.push(Ok(ModelEvent::ProviderReplayState(
+            cursor_server::model::ProviderReplayState {
+                provider_kind: "anthropic".into(),
+                value: json!({"blocks":[block]}),
+            },
+        )));
+    }
+    events.push(Ok(ModelEvent::Done(FinishReason::Stop)));
+    let (sender, _receiver) = tokio::sync::mpsc::channel(16);
+    let result = consume_model_cycle(
+        Box::pin(futures_util::stream::iter(events)),
+        &sender,
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(result.replay_state.unwrap().value["blocks"], json!(blocks));
+}
+
 fn exec_context() -> ExecContext {
     ExecContext {
         conversation_id: "conversation".into(),

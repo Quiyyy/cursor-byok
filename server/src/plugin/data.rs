@@ -8,7 +8,7 @@ use std::{
 use parking_lot::Mutex;
 use tokio::sync::Mutex as AsyncMutex;
 
-use crate::{config, Error, Result};
+use crate::{Error, Result};
 
 #[derive(Clone)]
 pub struct PluginDataStore {
@@ -17,16 +17,12 @@ pub struct PluginDataStore {
 }
 
 impl PluginDataStore {
-    pub fn managed() -> Result<Self> {
-        Self::new(config::managed_data_dir()?.join("plugins/data"))
-    }
-
     #[cfg(test)]
     pub(super) fn for_test(root: PathBuf) -> Result<Self> {
         Self::new(root)
     }
 
-    fn new(root: PathBuf) -> Result<Self> {
+    pub(super) fn new(root: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&root)?;
         set_directory_permissions(&root)?;
         Ok(Self {

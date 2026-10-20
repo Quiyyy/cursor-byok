@@ -4,10 +4,13 @@
     "cursor-byok:provider": "../../../src/plugin/sdk/provider.ts",
     "cursor-byok:model": "../../../src/plugin/sdk/model.ts",
     "cursor-byok:resource": "../../../src/plugin/sdk/resource.ts",
-    "cursor-byok:protocol/openai-chat": "../../../src/plugin/sdk/protocol/openai_chat.ts"
+    "cursor-byok:protocol/openai-chat": "../../../src/plugin/sdk/protocol/openai_chat.ts",
+    "cursor-byok:oauth": "../../../src/plugin/sdk/oauth.ts"
   },
   "fmt": {
     "lineWidth": 100,
-    "exclude": ["assets"]
+    "exclude": [
+      "assets"
+    ]
   }
 }

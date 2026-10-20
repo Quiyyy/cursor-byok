@@ -12,7 +12,7 @@ use super::{
     descriptor::PluginModuleDefinition,
     manifest::{validate_id, PluginManifest},
 };
-use crate::{config, Error, Result};
+use crate::{Error, Result};
 
 const MANIFEST_FILE_NAME: &str = "plugin.json";
 const MAX_ICON_BYTES: u64 = 1024 * 1024;
@@ -42,8 +42,8 @@ impl PluginCatalog {
             app_version: "0.1.7".into(),
         }
     }
-    pub fn managed(app_version: String) -> Result<Self> {
-        let installed = config::managed_data_dir()?.join("plugins/installed");
+    pub(super) fn in_directory(root: PathBuf, app_version: String) -> Result<Self> {
+        let installed = root.join("installed");
         fs::create_dir_all(&installed)?;
         #[cfg(unix)]
         {
@@ -63,7 +63,7 @@ impl PluginCatalog {
         let roots = vec![installed];
         Ok(Self {
             roots,
-            definition_loader: PluginDefinitionLoader::managed()?,
+            definition_loader: PluginDefinitionLoader::in_directory(root.join("runtime/sdk/v1"))?,
             app_version,
         })
     }
@@ -163,7 +163,7 @@ fn require_app_version(manifest: &PluginManifest, app_version: &str) -> Result<(
     )))
 }
 
-async fn load_plugin(
+pub(super) async fn load_plugin(
     directory: &Path,
     loader: &PluginDefinitionLoader,
     executable: &Path,

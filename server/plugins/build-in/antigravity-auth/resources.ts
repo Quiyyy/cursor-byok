@@ -1,3 +1,4 @@
+import { prepareOAuth2Resource } from "cursor-byok:oauth";
 import type { JsonValue, NetworkRequestInit, PluginContext } from "cursor-byok:plugin";
 import type {
   ResourceDraft,
@@ -219,24 +220,6 @@ function claim(payload: Record<string, unknown> | null, key: string): string | n
   return payload ? text(payload[key]) : null;
 }
 
-export function isJwtExpired(token: string, bufferSeconds = 300): boolean {
-  if (token.startsWith("AIza") || !token.includes(".")) return false;
-  const payload = decodeJwtPayload(token);
-  if (!payload) return false;
-  const exp = typeof payload.exp === "number" ? payload.exp : null;
-  if (!exp) return false;
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  return exp <= (nowSeconds + bufferSeconds);
-}
-
-export function isTokenExpired(data: AccountData, bufferSeconds = 300): boolean {
-  if (!data.refreshToken) return false;
-  if (typeof data.expiresAtMs === "number" && data.expiresAtMs > 0) {
-    return Date.now() >= data.expiresAtMs - bufferSeconds * 1000;
-  }
-  return isJwtExpired(data.accessToken, bufferSeconds);
-}
-
 async function tokenFingerprint(token: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   return Array.from(
@@ -371,69 +354,30 @@ export function presentAccount(resource: ResourceSnapshot): ResourceView {
   };
 }
 
+export function prepareAccount(
+  resource: ResourceSnapshot,
+  rejectedResource: ResourceSnapshot | null,
+  context: PluginContext,
+): Promise<ResourcePatch | null> {
+  return prepareOAuth2Resource(resource, rejectedResource, context, {
+    name: "Google", tokenUrl: REFRESH_TOKEN_URL,
+    client: { client_id: CLIENT_ID, client_secret: CLIENT_SECRET },
+    defaultLifetimeSeconds: 3600,
+  });
+}
+
 export async function refreshAccount(
   resource: ResourceSnapshot,
   context: PluginContext,
 ): Promise<ResourcePatch> {
   const data = accountData(resource);
-  let accessToken = data.accessToken;
-  let refreshToken = data.refreshToken;
-  let projectId = data.projectId ?? "bamboo-precept-lgxtn";
-  let expiresAtMs = data.expiresAtMs ?? null;
-
-  if (refreshToken) {
-    const response = await context.network.fetch(REFRESH_TOKEN_URL, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }).toString(),
-    });
-
-    if (response.status < 200 || response.status >= 300) {
-      const bodyText = response.body.toLowerCase();
-      // Only mark invalid if token is revoked or client is invalid
-      if (bodyText.includes("invalid_grant") || bodyText.includes("unauthorized_client")) {
-        return {
-          state: {
-            status: "invalid",
-            message: "Google authorization expired or revoked; please sign in again",
-          },
-        };
-      }
-      // On network glitches or temporary Google server errors, keep ready
-      return {
-        state: { status: "ready" },
-      };
-    }
-
-    const body = object(JSON.parse(response.body));
-    accessToken = text(body?.access_token) ?? accessToken;
-    refreshToken = text(body?.refresh_token) ?? refreshToken;
-    const expiresIn = typeof body?.expires_in === "number" ? body.expires_in : 3600;
-    expiresAtMs = Date.now() + expiresIn * 1000;
-  }
-
-  // Fetch real-time quota and project ID
-  const result = await queryAccountQuota(accessToken, context.network);
-  projectId = result.projectId || projectId;
-
-  const updatedData: AccountData = {
-    ...data,
-    accessToken,
-    refreshToken,
-    projectId,
-    expiresAtMs,
-    quota: result.quota ?? data.quota,
-  };
+  const result = await queryAccountQuota(data.accessToken, context.network);
   return {
-    privateData: updatedData as unknown as JsonValue,
+    privateData: {
+      ...data,
+      projectId: result.projectId || data.projectId || "bamboo-precept-lgxtn",
+      quota: result.quota ?? data.quota,
+    } as unknown as JsonValue,
     state: { status: "ready" },
   };
 }

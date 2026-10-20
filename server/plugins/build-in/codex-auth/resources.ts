@@ -1,3 +1,4 @@
+import { prepareOAuth2Resource } from "cursor-byok:oauth";
 import type { JsonValue, PluginContext } from "cursor-byok:plugin";
 import type {
   ResourceAction,
@@ -486,6 +487,18 @@ export function presentAccount(resource: ResourceSnapshot): ResourceView {
     ...(data.quota?.planLabel ? { description: data.quota.planLabel } : {}),
     ...(metrics.length > 0 ? { metrics } : {}),
   };
+}
+
+export function prepareAccount(
+  resource: ResourceSnapshot,
+  rejectedResource: ResourceSnapshot | null,
+  context: PluginContext,
+): Promise<ResourcePatch | null> {
+  return prepareOAuth2Resource(resource, rejectedResource, context, {
+    name: "ChatGPT",
+    tokenUrl: "https://auth.openai.com/oauth/token",
+    client: { client_id: "app_EMoamEEZ73f0CkXaXp7hrann" },
+  });
 }
 
 export async function refreshAccount(

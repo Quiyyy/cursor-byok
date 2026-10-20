@@ -49,6 +49,36 @@ pub struct ProviderReplayState {
     pub value: Value,
 }
 
+impl ProviderReplayState {
+    /// A provider can emit several signed blocks within one assistant message.
+    pub(crate) fn append(&mut self, next: Self) -> Result<(), &'static str> {
+        if self.provider_kind != next.provider_kind {
+            return Err("assistant replay fragments belong to different providers");
+        }
+        let array_key = match self.provider_kind.as_str() {
+            "anthropic" => "blocks",
+            "openai_responses" => "items",
+            "openai_chat" => {
+                let current = self.value.get("reasoning_content").and_then(Value::as_str);
+                let incoming = next.value.get("reasoning_content").and_then(Value::as_str);
+                let (Some(current), Some(incoming)) = (current, incoming) else {
+                    return Err("OpenAI Chat replay fragment is missing reasoning_content");
+                };
+                self.value["reasoning_content"] = Value::String(format!("{current}{incoming}"));
+                return Ok(());
+            }
+            _ => return Err("unsupported replay fragment format"),
+        };
+        let incoming = next.value.get(array_key).and_then(Value::as_array);
+        let current = self.value.get_mut(array_key).and_then(Value::as_array_mut);
+        let (Some(current), Some(incoming)) = (current, incoming) else {
+            return Err("provider replay fragment is missing its signed blocks");
+        };
+        current.extend(incoming.iter().cloned());
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentPart {

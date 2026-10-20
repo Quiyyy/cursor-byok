@@ -6,6 +6,7 @@ import {
   credentialImport,
   listResetCardsAction,
   presentAccount,
+  prepareAccount,
   refreshAccount,
   RESOURCE_TYPE,
 } from "./resources.ts";
@@ -20,5 +21,6 @@ export default defineProviderPlugin({
     present: presentAccount,
     actions: [listResetCardsAction, consumeResetCardAction],
     refresh: refreshAccount,
+    prepare: prepareAccount,
   }],
 });

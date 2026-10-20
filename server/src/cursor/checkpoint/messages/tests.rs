@@ -11,6 +11,65 @@ use crate::model::{
 use super::{decode, decode_pending, encode::wire_message, staged_tool_round};
 
 #[test]
+fn multiple_native_reasoning_signatures_preserve_their_text_and_order() {
+    let parts = json!([
+        {"type":"reasoning","text":"first thought","signature":"signature-one"},
+        {"type":"reasoning","text":"unsigned thought"},
+        {"type":"reasoning","text":"second thought","signature":"signature-two"},
+    ]);
+    let wire = json!({"role":"assistant","id":"1","content":parts});
+    let message = decode(&serde_json::to_vec(&wire).unwrap(), "native-many".into()).unwrap();
+    let projected = project_messages(&[message]).unwrap();
+    let encoded = wire_message(&projected[0], "model", None).unwrap();
+    assert_eq!(encoded["content"], parts);
+}
+
+#[test]
+fn multiple_provider_replay_envelopes_preserve_all_signed_blocks() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let blocks = [
+        json!({"type":"thinking","thinking":"first","signature":"one"}),
+        json!({"type":"thinking","thinking":"second","signature":"two"}),
+    ];
+    let parts = blocks
+        .iter()
+        .map(|block| {
+            let state = ProviderReplayState {
+                provider_kind: "anthropic".into(),
+                value: json!({"blocks":[block]}),
+            };
+            json!({
+                "type":"reasoning",
+                "text":block["thinking"],
+                "signature":format!("{}{}", super::REPLAY_ENVELOPE_PREFIX,
+                    STANDARD.encode(serde_json::to_vec(&state).unwrap())),
+            })
+        })
+        .collect::<Vec<_>>();
+    let wire = json!({"role":"assistant","id":"1","content":parts});
+    let message = decode(&serde_json::to_vec(&wire).unwrap(), "enveloped-many".into()).unwrap();
+    let MessageContent::Assistant {
+        replay_state: Some(state),
+        ..
+    } = &message.content
+    else {
+        panic!("replay state missing");
+    };
+    assert_eq!(state.value["blocks"], json!(blocks));
+    let projected = project_messages(&[message]).unwrap();
+    let encoded = wire_message(&projected[0], "model", None).unwrap();
+    let decoded = decode(&serde_json::to_vec(&encoded).unwrap(), "again".into()).unwrap();
+    let MessageContent::Assistant {
+        replay_state: Some(state),
+        ..
+    } = decoded.content
+    else {
+        panic!("round-trip lost replay state");
+    };
+    assert_eq!(state.value["blocks"], json!(blocks));
+}
+
+#[test]
 fn pending_tool_round_is_one_complete_assistant_message_and_round_trips() {
     let replay_state = ProviderReplayState {
         provider_kind: "anthropic".into(),
