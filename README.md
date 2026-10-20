@@ -1,19 +1,17 @@
-## 👋Is Cursor getting too heavy?  ✨ **New from the same author** → [BaoCode](https://github.com/baocode-dev/baocode) — an awesome desktop GUI for Claude Code: polished, ultra-small, ultra-light.
+> **Maintained fork:** development continues at [Quiyyy/cursor-byok](https://github.com/Quiyyy/cursor-byok) after the original repository was archived.
+> This fork includes Grok OAuth renewal and Grok 4.7 reasoning support. See [maintenance and development notes](./MAINTAINING.md) for the baseline, validation, and release process.
+> No release of this fork has been published yet; build from source until one is available.
 
 <div align="center">
 
 # cursor-byok
 cursor-byok is a local implementation of Cursor's backend.
-<br>
-<br>
-<a href="https://trendshift.io/repositories/39260?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-39260" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/39260" alt="leookun/cursor-byok | Trendshift" width="250" height="55" /></a>
 
-[User Guide](https://docs.leokun.cn) · [Download](https://github.com/leookun/cursor-byok/releases/latest) · [Report an Issue](https://github.com/leookun/cursor-byok/issues) · [中文版本说明](./README-CN.md)
+[Development](./MAINTAINING.md) · [Releases](https://github.com/Quiyyy/cursor-byok/releases) · [Report an Issue](https://github.com/Quiyyy/cursor-byok/issues) · [中文版本说明](./README-CN.md)
 
-[![Release](https://img.shields.io/github/v/release/leookun/cursor-byok?style=flat-square)](https://github.com/leookun/cursor-byok/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/leookun/cursor-byok/total?style=flat-square)](https://github.com/leookun/cursor-byok/releases)
-[![License](https://img.shields.io/github/license/leookun/cursor-byok?style=flat-square)](./LICENSE)
-[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/leookun/cursor-byok/releases/latest)
+[![CI](https://github.com/Quiyyy/cursor-byok/actions/workflows/ci.yml/badge.svg)](https://github.com/Quiyyy/cursor-byok/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/Quiyyy/cursor-byok?style=flat-square)](./LICENSE)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Quiyyy/cursor-byok/releases)
 
 
 
@@ -44,7 +42,7 @@ You can connect OpenAI- and Anthropic-compatible services, customize endpoints, 
 
 ## Quick Start
 
-1. Download the latest build for your platform from [GitHub Releases](https://github.com/leookun/cursor-byok/releases/latest).
+1. Build from source using the [development instructions](./MAINTAINING.md), or use a package from this fork's [Releases](https://github.com/Quiyyy/cursor-byok/releases) when available.
 2. Launch cursor-byok, open **Model Settings**, and enter the endpoint, API key, and model ID.
 3. Test the model configuration. Once it passes, return to the dashboard and start the service.
 4. Test the model configuration. Once it passes, return to the dashboard and start the service.
@@ -84,20 +82,19 @@ cursor-byok is built to return model choice to the user. Developers can make ful
 
 The project will continue to improve model compatibility, Agent tooling, local runtime stability, and the self-hosting experience while exploring support for more IDE, chat, and Agent workflows.
 
-See the [release roadmap](https://github.com/leookun/cursor-byok/discussions/32) for plans and progress.
+See the [maintenance notes](./MAINTAINING.md) and [issues](https://github.com/Quiyyy/cursor-byok/issues) for plans and progress.
 
 ## Community and Support
 
-- [User Guide](https://docs.leokun.cn)
-- [GitHub Issues](https://github.com/leookun/cursor-byok/issues)
-- [Telegram community](https://t.me/cursor_byok)
-- QQ groups: `1095916242`, `1094411438`, `1095918002`, `1094419321`
+- [Maintenance and development](./MAINTAINING.md)
+- [GitHub Issues](https://github.com/Quiyyy/cursor-byok/issues)
+- [Original upstream user guide](https://docs.leokun.cn)
 
 
 
 ## Development and Contributing
 
-Issues and pull requests are welcome. See the [Contributing Guide](./CONTRIBUTING_EN.md) for prerequisites, build commands, project structure, and contribution guidelines.
+Issues and pull requests are welcome. Read [AGENTS.md](./AGENTS.md) and the [maintenance notes](./MAINTAINING.md) before making changes.
 
 ## Contributors
 

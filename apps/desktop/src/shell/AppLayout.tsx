@@ -32,7 +32,7 @@ const keptAlivePages = ["/", "/calls", "/settings", "/harness/cursor", "/plugins
 const readAdStorageKey = "cursor-byok:read-ad-ids";
 const dismissedAdStorageKey = "cursor-byok:dismissed-ad-ids";
 const tutorialReadStorageKey = "cursor-byok:tutorial-read";
-const tutorialUrl = "https://docs.leokun.cn";
+const tutorialUrl = "https://github.com/Quiyyy/cursor-byok/blob/main/README-CN.md";
 
 function loadStoredAdIds(key: string): Set<string> {
   try {

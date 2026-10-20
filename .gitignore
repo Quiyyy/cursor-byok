@@ -19,6 +19,12 @@ cursor-server.tar
 /server/target/
 /apps/desktop/src-tauri/gen/
 /.tauri/
+/release-keys/
+/backups/
+/LOCAL-CHANGES.md
+/cursor-byok.db
+/cursor-byok.db-shm
+/cursor-byok.db-wal
 /server/*.db
 /server/*.db-shm
 /server/*.db-wal
