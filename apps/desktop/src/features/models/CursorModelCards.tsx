@@ -4,7 +4,9 @@ import Sortable from "sortablejs";
 import type { Model, PluginModelDescriptor } from "../../shared/api";
 import { Card } from "../../shared/ui/Card";
 import { Icon } from "../../shared/ui/Icon";
-import { chevronDownIcon, chevronRightIcon, claudeIcon, dragIcon, editIcon, flatColorOrganizationIcon, openAiIcon } from "../../shared/ui/icons";
+import { chevronDownIcon, chevronRightIcon, claudeIcon, dragIcon, editIcon, openAiIcon } from "../../shared/ui/icons";
+import { sourceIcon } from "../../shared/ui/workbenchIcons";
+import { TooltipTrigger } from "../../shared/ui/TooltipTrigger";
 import { Button } from "../../shared/ui/Button";
 import { ActionMenu } from "../../shared/ui/ActionMenu";
 import { CursorModelTestResult, type CursorModelTestState } from "./CursorModelTestResult";
@@ -23,7 +25,6 @@ type CursorModelCardsProps = {
   models: Model[];
   pluginModels: PluginModelDescriptor[];
   grouping: CursorModelGrouping;
-  filtered: boolean;
   disabled: boolean;
   testingModelHashes: Set<string>;
   testResults: Map<string, CursorModelTestState>;
@@ -57,8 +58,8 @@ export function cursorModelGroups(models: Model[], grouping: Exclude<CursorModel
 
 export function CursorModelCards(props: CursorModelCardsProps) {
   const builtins = props.models.length === 0 ? null : props.grouping === "flat"
-    ? <ModelGrid {...props} sortable={!props.filtered} />
-    : <div className={styles.modelGroups}>
+    ? <ModelGrid {...props} sortable />
+    : <>
       {cursorModelGroups(props.models, props.grouping).map((group) => <CollapsibleGroup
         key={group.key}
         label={group.label}
@@ -79,8 +80,8 @@ export function CursorModelCards(props: CursorModelCardsProps) {
           onDelete={() => props.onDelete(model)}
         />)}
       </CollapsibleGroup>)}
-    </div>;
-  return <div className={styles.modelGroups}>
+    </>;
+  return <div className={props.grouping === "flat" ? styles.modelGroups : styles.modelCollection}>
     {builtins}
     {pluginGroups(props.pluginModels).map((group) => <CollapsibleGroup
       key={`${group.pluginId}:${group.providerId}`}
@@ -88,7 +89,7 @@ export function CursorModelCards(props: CursorModelCardsProps) {
       iconSrc={group.icon}
       count={group.models.length}
       onSettings={() => props.onPluginSettings(group.models[0])}
-      settingsLabel={t("管理账号")}
+      settingsLabel={t("管理模型")}
     >
       {group.models.map((model) => <PluginModelRow
         key={model.id}
@@ -97,7 +98,6 @@ export function CursorModelCards(props: CursorModelCardsProps) {
         testing={props.testingModelHashes.has(model.id)}
         result={props.testResults.get(model.id)}
         onTest={() => props.onTestPluginModel(model)}
-        onSettings={() => props.onPluginSettings(model)}
       />)}
     </CollapsibleGroup>)}
   </div>;
@@ -128,7 +128,7 @@ function CollapsibleGroup({ label, icon, iconSrc, count, defaultOpen = true, onS
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  return <Card className={styles.groupCard}>
+  return <section className={styles.groupCard}>
     <div className={styles.groupHeader}>
       <button
         type="button"
@@ -136,27 +136,18 @@ function CollapsibleGroup({ label, icon, iconSrc, count, defaultOpen = true, onS
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
+        <Icon icon={open ? chevronDownIcon : chevronRightIcon} size="1em" />
         {icon && <Icon icon={icon} size="1.1em" />}
         {iconSrc && <Icon src={iconSrc} size="1.1em" />}
         <span className={styles.groupLabel}>{label}</span>
-        <span className={styles.groupCount}>{t("{count} 个模型", { count })}</span>
+        <span className={styles.groupCount} aria-label={t("{count} 个模型", { count })}>{count}</span>
       </button>
       {onSettings && <button type="button" className={styles.groupSettings} disabled={settingsDisabled} onClick={onSettings}>
-        <Icon icon={editIcon} size="1em" />
         {settingsLabel ?? t("分组设置")}
       </button>}
-      <button
-        type="button"
-        className={styles.groupChevron}
-        tabIndex={-1}
-        aria-hidden="true"
-        onClick={() => setOpen((current) => !current)}
-      >
-        <Icon icon={open ? chevronDownIcon : chevronRightIcon} size="1em" />
-      </button>
     </div>
     {open && <div className={styles.modelList}>{children}</div>}
-  </Card>;
+  </section>;
 }
 
 function ModelListRow({ model, disabled, testing, result, onTest, onEdit, onDuplicate, onDelete }: {
@@ -171,38 +162,36 @@ function ModelListRow({ model, disabled, testing, result, onTest, onEdit, onDupl
 }) {
   return <div className={styles.modelRow}>
     <div className={styles.modelRowName}>
-      <span className={styles.modelRowNameText}>{model.display_name}</span>
-      <span className={styles.modelRowModelId}>{model.model_id}</span>
+      <button className={styles.modelNameButton} title={model.display_name} disabled={disabled || testing} onClick={onEdit}>{model.display_name}</button>
+      <span className={styles.modelRowModelId} title={model.model_id}>{model.model_id}</span>
     </div>
     <CursorModelTestResult compact state={result} testing={testing} />
     <div className={styles.modelCardActions}>
-      <Button size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
-      <Button size="small" disabled={disabled || testing} onClick={onEdit}>{t("配置")}</Button>
-      <ActionMenu label={t("更多")} disabled={disabled || testing} items={[
-        { id: "duplicate", label: t("复制"), onSelect: onDuplicate },
+      <Button variant="ghost" size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
+      <TooltipTrigger label={t("编辑模型")}><Button variant="ghost" size="small" className={styles.editAction} aria-label={t("编辑模型")} disabled={disabled || testing} onClick={onEdit}><Icon icon={editIcon} size="1.1em" /></Button></TooltipTrigger>
+      <ActionMenu iconOnly label={t("更多")} disabled={disabled || testing} items={[
+        { id: "duplicate", label: t("复制为新模型"), onSelect: onDuplicate },
         { id: "delete", label: t("删除"), onSelect: onDelete },
       ]} />
     </div>
   </div>;
 }
 
-function PluginModelRow({ model, disabled, testing, result, onTest, onSettings }: {
+function PluginModelRow({ model, disabled, testing, result, onTest }: {
   model: PluginModelDescriptor;
   disabled: boolean;
   testing: boolean;
   result: CursorModelTestState | undefined;
   onTest: () => void;
-  onSettings: () => void;
 }) {
   return <div className={styles.modelRow}>
     <div className={styles.modelRowName}>
-      <span className={styles.modelRowNameText}>{model.displayName}</span>
-      <span className={styles.modelRowModelId}>{model.modelId}</span>
+      <span className={styles.modelRowNameText} title={model.displayName}>{model.displayName}</span>
+      <span className={styles.modelRowModelId} title={model.modelId}>{model.modelId}</span>
     </div>
     <CursorModelTestResult compact state={result} testing={testing} />
     <div className={styles.modelCardActions}>
-      <Button size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
-      <Button size="small" disabled={disabled} onClick={onSettings}>{t("管理账号")}</Button>
+      <Button variant="ghost" size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
     </div>
   </div>;
 }
@@ -293,9 +282,9 @@ function ModelGrid({
           </div>
           <div className={styles.modelCardActions}>
             <Button size="small" disabled={disabled && !testing} onClick={() => onTest(model)}>{testing ? t("取消测试") : t("测试")}</Button>
-            <Button size="small" disabled={disabled || testing} onClick={() => onEdit(model)}>{t("配置")}</Button>
-            <ActionMenu label={t("更多")} disabled={disabled || testing} items={[
-              { id: "duplicate", label: t("复制"), onSelect: () => onDuplicate(model) },
+            <Button size="small" disabled={disabled || testing} onClick={() => onEdit(model)}>{t("编辑")}</Button>
+            <ActionMenu iconOnly label={t("更多")} disabled={disabled || testing} items={[
+              { id: "duplicate", label: t("复制为新模型"), onSelect: () => onDuplicate(model) },
               { id: "delete", label: t("删除"), onSelect: () => onDelete(model) },
             ]} />
           </div>
@@ -308,7 +297,7 @@ function ModelGrid({
 function providerGroup(model: Model) {
   const key = providerDomain(model.base_url);
   const label = model.group_name?.trim() || key;
-  return { key, label, icon: flatColorOrganizationIcon };
+  return { key, label, icon: sourceIcon };
 }
 
 function providerDomain(baseUrl: string) {

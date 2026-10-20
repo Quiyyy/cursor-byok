@@ -5,7 +5,6 @@ import {
   type PluginAddMethod,
   type PluginDescriptor,
   type PluginOAuthBegin,
-  type PluginProviderDescriptor,
   type PluginResourceAction,
   type PluginResourceActionCard,
   type PluginResourceActionResult,
@@ -19,12 +18,13 @@ import { Card } from "../../shared/ui/Card";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { FormField, TextInput } from "../../shared/ui/FormControls";
 import { Modal } from "../../shared/ui/Modal";
-import { Switch } from "../../shared/ui/Switch";
+import { ActionMenu } from "../../shared/ui/ActionMenu";
+import { Select } from "../../shared/ui/Select";
 import styles from "./PluginResourcePanels.module.scss";
 
 const PAGE_SIZE = 10;
 
-export function PluginAddPanel({ plugin, onConfigured }: { plugin: PluginDescriptor; onConfigured: () => void }) {
+export function PluginAddPanel({ plugin, onConfigured }: { plugin: PluginDescriptor; onConfigured: (syncError?: string) => void }) {
   return <div className={styles.panel}>
     {plugin.resources.map((resource) => <ResourceAddSection
       key={resource.type}
@@ -39,7 +39,7 @@ export function PluginAddPanel({ plugin, onConfigured }: { plugin: PluginDescrip
 function ResourceAddSection({ plugin, resource, onConfigured }: {
   plugin: PluginDescriptor;
   resource: PluginResourceDescriptor;
-  onConfigured: () => void;
+  onConfigured: (syncError?: string) => void;
 }) {
   return <>
     {resource.add.map((method) => <OAuthMethodCard
@@ -56,7 +56,7 @@ function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
   pluginId: string;
   resourceType: string;
   method: PluginAddMethod;
-  onConfigured: () => void;
+  onConfigured: (syncError?: string) => void;
 }) {
   const { locale } = useI18n();
   const [status, setStatus] = useState<"idle" | "starting" | "polling" | "success" | "error">("idle");
@@ -71,41 +71,41 @@ function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
     window.setTimeout(() => setCopied(false), 2000);
   };
 
-  useEffect(() => () => { stopped.current = true; }, []);
+  useEffect(() => {
+    stopped.current = false;
+    return () => { stopped.current = true; };
+  }, []);
 
   useEffect(() => {
     if (!begun || status !== "polling") return;
     let timer = 0;
+    const controller = new AbortController();
     const poll = async (intervalMs: number) => {
-      if (stopped.current) return;
+      if (stopped.current || controller.signal.aborted) return;
       try {
-        const result = await api.pluginOAuthPoll(begun.sessionId);
-        if (stopped.current) return;
+        const result = await api.pluginOAuthPoll(begun.sessionId, controller.signal);
+        if (stopped.current || controller.signal.aborted) return;
         if (result.status === "pending") {
           timer = window.setTimeout(() => void poll(result.pollIntervalMs), Math.max(1000, result.pollIntervalMs));
           return;
         }
         if (result.status === "completed") {
           await appStore.refreshPlugins();
-          if (result.modelSyncError) {
-            setStatus("error");
-            setError(t("账号已保存，但同步模型失败：{error}", { error: result.modelSyncError }));
-            return;
-          }
+          if (stopped.current || controller.signal.aborted) return;
           setStatus("success");
-          onConfigured();
+          onConfigured(result.modelSyncError ?? undefined);
           return;
         }
         setStatus("error");
         setError(result.message || t("授权被拒绝或已失败。"));
       } catch (cause) {
-        if (stopped.current) return;
+        if (stopped.current || controller.signal.aborted) return;
         setError(errorText(cause));
         timer = window.setTimeout(() => void poll(intervalMs), Math.max(1000, intervalMs));
       }
     };
     timer = window.setTimeout(() => void poll(begun.pollIntervalMs), Math.max(1000, begun.pollIntervalMs));
-    return () => window.clearTimeout(timer);
+    return () => { window.clearTimeout(timer); controller.abort(); };
   }, [begun, onConfigured, status]);
 
   const start = async () => {
@@ -113,6 +113,7 @@ function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
     setError(null);
     try {
       const next = await api.pluginOAuthBegin(pluginId, resourceType, method.id);
+      if (stopped.current) return;
       setBegun(next);
       setStatus("polling");
       if (next.userCode) await api.copyCursorText(next.userCode).catch(() => undefined);
@@ -145,27 +146,31 @@ function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
   </Card>;
 }
 
-export function PluginSettingsPanel({ plugin }: { plugin: PluginDescriptor }) {
+export function PluginAccountsPanel({ plugin, onBusyChange }: { plugin: PluginDescriptor; onBusyChange: (busy: boolean) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [modelProviderId, setModelProviderId] = useState<string | null>(null);
   const [resourceAction, setResourceAction] = useState<{
     resource: PluginResourceDescriptor;
     item: PluginResourceView;
   } | null>(null);
   const [resourceActionResult, setResourceActionResult] = useState<PluginResourceActionResult | null>(null);
   const [resourceActionError, setResourceActionError] = useState<string | null>(null);
-  const modelProvider = modelProviderId ? plugin.providers.find((provider) => provider.id === modelProviderId) ?? null : null;
+  useEffect(() => {
+    onBusyChange(busy !== null);
+    return () => onBusyChange(false);
+  }, [busy, onBusyChange]);
 
   const run = async (key: string, task: () => Promise<void>) => {
     setBusy(key);
     setError(null);
     try {
       await task();
-      await appStore.refreshPlugins();
+      return true;
     } catch (cause) {
       setError(errorText(cause));
+      return false;
     } finally {
+      await appStore.refreshPlugins();
       setBusy(null);
     }
   };
@@ -203,16 +208,6 @@ export function PluginSettingsPanel({ plugin }: { plugin: PluginDescriptor }) {
   };
 
   return <div className={styles.panel}>
-    {plugin.providers.map((provider) => <ProviderRow
-      key={provider.id}
-      provider={provider}
-      busy={busy !== null}
-      syncing={busy === `sync:${provider.id}`}
-      onManageModels={() => setModelProviderId(provider.id)}
-      onSync={() => void run(`sync:${provider.id}`, async () => {
-        await api.syncPluginModels(plugin.id, provider.id);
-      })}
-    />)}
     {plugin.resources.map((resource) => <ResourceList
       key={resource.type}
       resource={resource}
@@ -221,22 +216,11 @@ export function PluginSettingsPanel({ plugin }: { plugin: PluginDescriptor }) {
       onRefresh={(item) => void run(`refresh:${item.id}`, async () => {
         await api.refreshPluginResource(plugin.id, resource.type, item.id);
       })}
-      onDelete={(item) => void run(`delete:${item.id}`, async () => {
+      onDelete={(item) => run(`delete:${item.id}`, async () => {
         await api.deletePluginResource(plugin.id, resource.type, item.id);
       })}
     />)}
     {error && <span className={styles.error} role="alert">{error}</span>}
-    {modelProvider && <ModelManagementModal
-      provider={modelProvider}
-      busy={busy !== null}
-      onClose={() => setModelProviderId(null)}
-      onSubmit={(enabledByModel) => void run("models", async () => {
-        for (const model of modelProvider.models) {
-          const enabled = enabledByModel[model.id] ?? model.enabled;
-          if (model.enabled !== enabled) await api.setPluginModelEnabled(plugin.id, modelProvider.id, model.modelId, enabled);
-        }
-      })}
-    />}
     {resourceAction && <ResourceActionModal
       action={resourceAction.resource.actions.find((item) => item.target === "resource") ?? null}
       cardAction={resourceAction.resource.actions.find((item) => item.target === "card") ?? null}
@@ -249,110 +233,36 @@ export function PluginSettingsPanel({ plugin }: { plugin: PluginDescriptor }) {
   </div>;
 }
 
-function ProviderRow({ provider, busy, syncing, onManageModels, onSync }: {
-  provider: PluginProviderDescriptor;
-  busy: boolean;
-  syncing: boolean;
-  onManageModels: () => void;
-  onSync: () => void;
-}) {
-  const { locale } = useI18n();
-  return <Card className={styles.providerRow}>
-    <div>
-      <strong>{pluginText(provider.displayName, locale)}</strong>
-      <span>
-        {provider.providerType}
-        {" · "}
-        {provider.models.length > 0 ? t("{count} 个模型", { count: provider.models.length }) : t("尚未同步模型")}
-        {" · "}
-        {provider.configured ? t("已配置") : t("未就绪")}
-      </span>
-    </div>
-    {provider.hasModels && <div className={styles.actions}>
-      <Button size="small" disabled={busy || provider.models.length === 0} onClick={onManageModels}>{t("模型管理")}</Button>
-      <Button size="small" disabled={busy} onClick={onSync}>
-        {syncing ? t("正在同步…") : t("同步模型")}
-      </Button>
-    </div>}
-  </Card>;
-}
-
-function ModelManagementModal({ provider, busy, onClose, onSubmit }: {
-  provider: PluginProviderDescriptor;
-  busy: boolean;
-  onClose: () => void;
-  onSubmit: (enabledByModel: Record<string, boolean>) => void;
-}) {
-  const { locale } = useI18n();
-  const [enabledByModel, setEnabledByModel] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    setEnabledByModel(Object.fromEntries(provider.models.map((model) => [model.id, model.enabled])));
-  }, [provider.models]);
-
-  const setAll = (enabled: boolean) => {
-    setEnabledByModel(Object.fromEntries(provider.models.map((model) => [model.id, enabled])));
-  };
-
-  return <Modal
-    fullHeight
-    open
-    title={t("{name} 模型管理", { name: pluginText(provider.displayName, locale) })}
-    busy={busy}
-    onClose={onClose}
-    onSubmit={() => onSubmit(enabledByModel)}
-    submitLabel={t("确定")}
-  >
-    <div className={styles.modelToolbar}>
-      <Button size="small" disabled={busy || provider.models.length === 0} onClick={() => setAll(true)}>{t("全选")}</Button>
-      <Button size="small" disabled={busy || provider.models.length === 0} onClick={() => setAll(false)}>{t("全不选")}</Button>
-    </div>
-    <div className={styles.modelTableWrap}>
-      <table className={styles.modelTable}>
-        <thead><tr><th scope="col">{t("模型名称")}</th><th scope="col">{t("启用")}</th></tr></thead>
-        <tbody>
-          {provider.models.map((model) => <tr key={model.id}>
-            <td><div className={styles.modelName}>
-              <strong>{model.displayName}</strong>
-              {model.description && <span>{model.description}</span>}
-            </div></td>
-            <td><Switch
-              checked={enabledByModel[model.id] ?? model.enabled}
-              disabled={busy}
-              label={t("启用 {model}", { model: model.displayName })}
-              onChange={(enabled) => setEnabledByModel((current) => ({ ...current, [model.id]: enabled }))}
-            /></td>
-          </tr>)}
-        </tbody>
-      </table>
-      {provider.models.length === 0 && <span className={styles.empty}>{t("尚未同步模型")}</span>}
-    </div>
-  </Modal>;
-}
-
 function ResourceList({ resource, busy, onAction, onRefresh, onDelete }: {
   resource: PluginResourceDescriptor;
   busy: boolean;
   onAction: (item: PluginResourceView, action: PluginResourceAction) => void;
   onRefresh: (item: PluginResourceView) => void;
-  onDelete: (item: PluginResourceView) => void;
+  onDelete: (item: PluginResourceView) => Promise<boolean>;
 }) {
   const { locale } = useI18n();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [filter, setFilter] = useState("all");
   const filtered = useMemo(
-    () => resource.resources.filter((item) => item.displayName.toLowerCase().includes(query.trim().toLowerCase())),
-    [resource.resources, query],
+    () => resource.resources.filter((item) => item.displayName.toLowerCase().includes(query.trim().toLowerCase()) && (filter === "all" || item.state.status === filter)),
+    [resource.resources, query, filter],
   );
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice((Math.min(page, pageCount) - 1) * PAGE_SIZE, Math.min(page, pageCount) * PAGE_SIZE);
 
-  useEffect(() => setPage(1), [query]);
+  useEffect(() => setPage(1), [query, filter]);
 
   return <FormField label={pluginText(resource.displayName, locale)}>
     <div className={styles.resourceSection}>
-      {resource.resources.length > PAGE_SIZE && <div className={styles.toolbar}>
-        <TextInput aria-label={t("搜索资源")} placeholder={t("搜索资源")} value={query} onChange={(event) => setQuery(event.target.value)} />
+      {resource.resources.length > 0 && <div className={styles.toolbar}>
+        <TextInput aria-label={t("搜索账号")} placeholder={t("搜索账号")} value={query} onChange={(event) => setQuery(event.target.value)} />
+        <Select ariaLabel={t("账号状态")} value={filter} onChange={setFilter} options={[
+          { value: "all", label: t("全部状态") },
+          { value: "ready", label: t("可用") },
+          { value: "cooling", label: t("冷却中") },
+          { value: "invalid", label: t("已失效") },
+        ]} />
       </div>}
       <div className={styles.resourceList}>
         {visible.map((item) => <ResourceRow
@@ -365,7 +275,7 @@ function ResourceList({ resource, busy, onAction, onRefresh, onDelete }: {
           onRefresh={() => onRefresh(item)}
           onDelete={() => onDelete(item)}
         />)}
-        {visible.length === 0 && <span className={styles.empty}>{t("还没有资源，请先添加。")}</span>}
+        {visible.length === 0 && <span className={styles.empty}>{resource.resources.length ? t("没有匹配的账号") : t("还没有账号，请先添加。")}</span>}
       </div>
       {pageCount > 1 && <div className={styles.pagination}>
         <Button size="small" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>{t("上一页")}</Button>
@@ -383,12 +293,17 @@ function ResourceRow({ item, actions, canRefresh, disabled, onAction, onRefresh,
   disabled: boolean;
   onAction: (action: PluginResourceAction) => void;
   onRefresh: () => void;
-  onDelete: () => void;
+  onDelete: () => Promise<boolean>;
 }) {
   const { locale } = useI18n();
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const moreItems = [
+    ...actions.map((action) => ({ id: action.id, label: pluginText(action.displayName, locale), onSelect: () => onAction(action) })),
+    { id: "remove-resource", label: t("移除账号"), onSelect: () => setConfirmRemove(true) },
+  ];
   return <Card className={styles.resourceRow}>
     <div>
-      <strong>{item.displayName}</strong>
+      <div className={styles.resourceIdentity}><strong title={item.displayName}>{item.displayName}</strong><StateBadge state={item.state} /></div>
       {item.description && <span>{pluginText(item.description, locale)}</span>}
       {item.metrics.map((metric) => <span key={metric.id}>
         {metric.unit === "percent"
@@ -397,10 +312,14 @@ function ResourceRow({ item, actions, canRefresh, disabled, onAction, onRefresh,
       </span>)}
     </div>
     <div className={styles.actions}>
-      <StateBadge state={item.state} />
-      {actions.map((action) => <Button key={action.id} size="small" disabled={disabled} onClick={() => onAction(action)}>{pluginText(action.displayName, locale)}</Button>)}
-      {canRefresh && <Button size="small" disabled={disabled} onClick={onRefresh}>{t("刷新")}</Button>}
-      <Button size="small" disabled={disabled} onClick={onDelete}>{t("删除")}</Button>
+      {confirmRemove ? <>
+        <span className={styles.error}>{t("确认移除账号？")}</span>
+        <Button size="small" disabled={disabled} onClick={() => setConfirmRemove(false)}>{t("取消")}</Button>
+        <Button size="small" disabled={disabled} onClick={() => void onDelete().then((removed) => { if (removed) setConfirmRemove(false); })}>{t("确认移除")}</Button>
+      </> : <>
+        {canRefresh && <Button size="small" disabled={disabled} onClick={onRefresh}>{t("刷新账号")}</Button>}
+        {moreItems.length > 0 && <ActionMenu label={t("更多")} disabled={disabled} items={moreItems} />}
+      </>}
     </div>
   </Card>;
 }
@@ -420,7 +339,7 @@ function ResourceActionModal({ action, cardAction, result, busy, error, onClose,
   const cardActions = cardAction ? [cardAction] : [];
 
   return <>
-    <Modal compact open title={title} busy={busy} onClose={onClose} submitLabel={t("关闭")} onSubmit={onClose}>
+    <Modal compact open title={title} busy={busy} onClose={onClose} closeLabel={t("关闭")}>
       <div className={styles.actionBody}>
         {result?.description && <span className={styles.actionDescription}>{pluginText(result.description, locale)}</span>}
         {busy && <span className={styles.empty}>{t("正在加载…")}</span>}

@@ -14,13 +14,28 @@ const DEFAULT_PROVIDER_REQUEST_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const DEFAULT_PROVIDER_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 pub fn managed_data_dir() -> Result<PathBuf> {
-    let home_dir = dirs::home_dir()
-        .ok_or_else(|| Error::Config("cannot resolve user home directory".into()))?;
-    let data_dir = home_dir.join(DATA_DIR_NAME);
+    let data_dir = match env::var_os("CURSOR_BYOK_DATA_DIR") {
+        Some(directory) => {
+            let directory = PathBuf::from(directory);
+            if !directory.is_absolute() {
+                return Err(Error::Config(
+                    "CURSOR_BYOK_DATA_DIR must be an absolute directory path".into(),
+                ));
+            }
+            directory
+        }
+        None => default_data_dir()?,
+    };
     fs::create_dir_all(&data_dir)?;
     #[cfg(unix)]
     fs::set_permissions(&data_dir, fs::Permissions::from_mode(0o700))?;
     Ok(data_dir)
+}
+
+fn default_data_dir() -> Result<PathBuf> {
+    let home_dir = dirs::home_dir()
+        .ok_or_else(|| Error::Config("cannot resolve user home directory".into()))?;
+    Ok(home_dir.join(DATA_DIR_NAME))
 }
 
 pub fn v0049_config_path() -> Result<PathBuf> {

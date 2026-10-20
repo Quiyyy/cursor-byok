@@ -1,19 +1,17 @@
 @use "../../styles/typography" as type;
 
-.pluginGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-  gap: 16px;
-}
-
 .pluginCard {
+  --account-warning: var(--vscode-errorForeground);
   min-width: 0;
-  min-height: 150px;
+  min-height: 76px;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 14px;
-  padding: 18px;
+  gap: 12px;
+  padding: 12px 14px;
+  box-shadow: none;
+  &[data-attention="cooling"] { --account-warning: var(--vscode-editorWarning-foreground); }
 }
 
 .pluginCardTop {
@@ -21,6 +19,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 1 1 210px;
 }
 
 .pluginIcon {
@@ -28,8 +27,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 32px;
+  height: 32px;
 
   border-radius: 10px;
 
@@ -43,8 +42,7 @@
   gap: 3px;
 }
 
-.pluginName,
-.pluginId {
+.pluginName {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -56,26 +54,30 @@
   font-weight: 600;
 }
 
-.pluginId {
-  color: var(--vscode-descriptionForeground);
-  font-size: type.$font-size-2xs;
+.nameRow { display: flex; align-items: center; gap: 8px; }
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  > input { flex: 1; min-width: 0; }
+  > button { width: 140px; flex: 0 0 140px; }
 }
 
 .stateBadge {
   flex: 0 0 auto;
   align-self: flex-start;
-  padding: 3px 8px;
+  padding: 2px 0;
   color: var(--vscode-descriptionForeground);
-  border: 1px solid var(--vscode-sideBar-border);
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: type.$font-size-2xs;
   white-space: nowrap;
+  &::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 }
 
 .stateReady {
   color: var(--vscode-testing-iconPassed, #73c991);
-  background: color-mix(in srgb, var(--vscode-testing-iconPassed, #73c991) 10%, transparent);
-  border-color: color-mix(in srgb, var(--vscode-testing-iconPassed, #73c991) 28%, transparent);
 }
 
 .pluginMeta {
@@ -91,19 +93,16 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 4px;
 
   > button {
     flex: 0 0 auto;
   }
 }
 
-.connectionGuide { color: var(--vscode-descriptionForeground); font-size: type.$font-size-xs; }
-.accountNotice { color: var(--vscode-errorForeground); font-size: type.$font-size-xs; }
+.accountNotice { color: var(--account-warning); font-size: type.$font-size-xs; }
 .stateAttention {
-  color: var(--vscode-errorForeground);
-  background: color-mix(in srgb, var(--vscode-errorForeground) 7%, var(--vscode-editorWidget-background));
-  border-color: color-mix(in srgb, var(--vscode-errorForeground) 25%, var(--vscode-sideBar-border));
+  color: var(--account-warning);
 }
 
 
@@ -112,6 +111,11 @@
   display: flex;
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+@container (max-width: 480px) {
+  .pluginCardTop { flex-basis: 100%; }
+  .cardActions { margin-left: 44px; }
 }
 
 .gate,

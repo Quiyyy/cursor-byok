@@ -51,6 +51,9 @@ export function Modal({ id, open, title, children, banner, busy, wide, compact, 
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
     const onKey = (event: KeyboardEvent) => {
+      // Only the top dialog owns keyboard dismissal and focus trapping.
+      const dialogs = document.querySelectorAll('[aria-modal="true"]');
+      if (dialogs[dialogs.length - 1] !== dialog.current) return;
       if (event.key === "Escape" && !busyRef.current) {
         event.preventDefault();
         closeRef.current();
@@ -95,7 +98,7 @@ export function Modal({ id, open, title, children, banner, busy, wide, compact, 
       {banner && <div className={styles.banner}>{banner}</div>}
       <ScrollableContent alwaysShowVertical className={styles.body} contentClassName={styles.bodyContent}>{children}</ScrollableContent>
       <footer>
-        <button type="button" className={controls.primary} disabled={busy} onClick={onClose}>{closeLabel}</button>
+        <button type="button" className={onSubmit || secondaryAction ? controls.secondary : controls.primary} disabled={busy} onClick={onClose}>{closeLabel}</button>
         {secondaryAction}
         {onSubmit && <button ref={submitButton} type="button" className={controls.primary} disabled={busy || submitDisabled} onClick={onSubmit}>{busy ? t("处理中…") : submitLabel}</button>}
       </footer>

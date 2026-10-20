@@ -42,12 +42,14 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 2px 4px;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: type.$font-size-2xs;
   white-space: nowrap;
   cursor: default;
+
+  &.idle { background: transparent; border-color: transparent; }
 }
 
 .testSummary { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; flex: 0 0 auto; }

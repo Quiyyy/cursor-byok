@@ -3,5 +3,5 @@
 .root {
   --daily-token-tooltip-font-size: #{type.$font-size-2xs};
   width: 100%;
-  height: 200px;
+  height: clamp(160px, 24vh, 190px);
 }

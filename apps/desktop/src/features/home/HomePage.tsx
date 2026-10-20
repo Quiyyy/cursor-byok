@@ -140,12 +140,12 @@ export function HomePage() {
   const sections: VirtualPageSection[] = [
     {
       key: "metrics",
-      estimatedHeight: 130,
+      estimatedHeight: 80,
       content: <HomeMetrics data={metrics} />,
     },
     {
       key: "daily-token-usage",
-      estimatedHeight: 240,
+      estimatedHeight: 190,
       content: <DailyTokenUsageChart
         data={dailyTokenUsage}
         granularity={filteredOverview.token_usage_granularity}
@@ -153,13 +153,13 @@ export function HomePage() {
     },
     {
       key: "activity",
-      estimatedHeight: 40,
+      estimatedHeight: 160,
       content: <OverviewActivity endMs={selectedRange?.endMs ?? Date.now()} modelHashes={appliedModels} />,
     },
   ];
 
   return <>
-    <PageActions position="filters"><OverviewTimeRangeFilter
+    <PageActions><OverviewTimeRangeFilter
       value={preset}
       quick={quick}
       customOpen={customOpen}

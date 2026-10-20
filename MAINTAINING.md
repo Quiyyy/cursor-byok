@@ -47,6 +47,16 @@ cargo test --package cursor-server --lib plugin:: -- --include-ignored
 
 本地启动使用 `make dev-web` 或 `make dev-desktop`。桌面生产构建使用 Tauri CLI（`npm --prefix apps/desktop run tauri:build`）或 `make build-desktop`，确保前端资源被嵌入。
 
+### 本地桌面 UI 调试
+
+`CURSOR_BYOK_DATA_DIR` 可指定绝对路径，将数据库、插件、日志和缓存放入独立目录；未设置时仍使用用户目录下的 `.cursor-byok-v3`。调试时使用新建空目录，不复制正式账号凭据。
+
+Windows 上与安装版同时运行时，用临时 Tauri 配置覆盖 `identifier`（例如 `dev.cursorbyok.desktop.ui-debug`），并设置 `bundle.createUpdaterArtifacts` 为 `false`，然后运行 `npm --prefix apps/desktop run tauri:build -- --debug --bundles nsis --config <配置文件绝对路径>`。这样生成包含前端和本地服务的桌面包，不需要正式更新签名私钥。
+
+启动调试可执行文件时，仅在子进程环境中设置 `CURSOR_BYOK_DATA_DIR`，并将 `APPDATA` 指向另一个临时目录，以隔离 Cursor 设置；不要开启接管、安装证书或导入正式凭据。临时应用标识和签名覆盖不得写入正式 `tauri.conf.json`。
+
+应用图标以 `apps/desktop/src-tauri/icons/icon.svg` 为源文件，通过 `tauri icon` 生成 PNG、ICO、ICNS；窗口使用 SVG，托盘和安装包使用相应平台资源。
+
 ## 独立发布
 
 安装包通过本 fork 的 [GitHub Releases](https://github.com/Quiyyy/cursor-byok/releases) 发布。仓库接管不自动替换本机已安装程序，也不迁移或上传用户账号配置。

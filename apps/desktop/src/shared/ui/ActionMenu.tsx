@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { chevronDownIcon } from "./icons";
+import { moreActionsIcon } from "./workbenchIcons";
 import styles from "./ActionMenu.module.scss";
 
 export type ActionMenuItem =
@@ -21,10 +22,11 @@ export type ActionMenuItem =
     };
 
 /** 触发器 + 动作列表的下拉菜单,用于容纳卡片上的次要操作。 */
-export function ActionMenu({ label, items, disabled }: {
+export function ActionMenu({ label, items, disabled, iconOnly = false }: {
   label: string;
   items: ActionMenuItem[];
   disabled?: boolean;
+  iconOnly?: boolean;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -43,13 +45,17 @@ export function ActionMenu({ label, items, disabled }: {
 
   useEffect(() => {
     if (!open) return;
+    const frame = requestAnimationFrame(() => menu.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus());
     const outside = (event: PointerEvent) => {
       if (!trigger.current?.contains(event.target as Node) && !menu.current?.contains(event.target as Node)) {
         setOpen(false);
       }
     };
     document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("pointerdown", outside);
+    };
   }, [open]);
 
   const close = () => {
@@ -61,17 +67,31 @@ export function ActionMenu({ label, items, disabled }: {
     <Button
       ref={trigger}
       size="small"
+      variant={iconOnly ? "ghost" : "secondary"}
+      className={iconOnly ? styles.iconTrigger : undefined}
       disabled={disabled}
+      aria-label={label}
+      title={iconOnly ? label : undefined}
       aria-haspopup="menu"
       aria-controls={open ? menuId : undefined}
       aria-expanded={open}
       onClick={() => setOpen((current) => !current)}
       onKeyDown={(event) => {
-        if (event.key === "Escape") close();
+        if (event.key === "Escape" && open) {
+          event.preventDefault();
+          event.stopPropagation();
+          close();
+        }
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          setOpen(true);
+        }
       }}
     >
-      {label}
-      <Icon icon={chevronDownIcon} size="1em" className={open ? styles.openIcon : undefined} />
+      {iconOnly ? <Icon icon={moreActionsIcon} size="1.2em" /> : <>
+        {label}
+        <Icon icon={chevronDownIcon} size="1em" className={open ? styles.openIcon : undefined} />
+      </>}
     </Button>
     {open && createPortal(
       <div
@@ -79,11 +99,24 @@ export function ActionMenu({ label, items, disabled }: {
         ref={menu}
         className={styles.menu}
         role="menu"
+        aria-label={label}
         style={{ left: position.left, top: position.top }}
+        onPointerDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
+            event.stopPropagation();
             close();
+          } else if (event.key === "Tab") {
+            setOpen(false);
+          } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+            event.preventDefault();
+            const options = [...(menu.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
+            if (!options.length) return;
+            const current = options.indexOf(document.activeElement as HTMLButtonElement);
+            const next = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1
+              : (current + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+            options[next]?.focus();
           }
         }}
       >
@@ -98,7 +131,7 @@ export function ActionMenu({ label, items, disabled }: {
             role="menuitem"
             disabled={item.disabled}
             onClick={() => {
-              setOpen(false);
+              close();
               item.onSelect();
             }}
           >

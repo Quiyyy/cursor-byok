@@ -1,15 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, configuredPluginModels, type Model, type ModelInput } from "../../shared/api";
-import { CursorCaGate, CursorCaProvider, CursorModelGate, CursorModelProvider } from "./CursorGates";
 import { CursorModelCards, cursorModelGroups, type CursorModelGroup, type CursorModelGrouping } from "./CursorModelCards";
 import { CursorModelEditor, emptyCursorModelDraft, type CursorModelDraft } from "./CursorModelEditor";
 import { CursorModelTestResult, type CursorModelTestState } from "./CursorModelTestResult";
-import { CursorConnectionStatus } from "./CursorConnectionStatus";
-import { ModelWorkbenchToolbar } from "./ModelWorkbenchToolbar";
-import { matchesModelSearch, matchesModelStatus, type ModelStatusFilter } from "./modelWorkbench";
-import workbench from "./ModelWorkbench.module.scss";
 import { Button } from "../../shared/ui/Button";
+import { ActionMenu } from "../../shared/ui/ActionMenu";
 import styles from "./CursorSettings.module.scss";
 import { PageContent } from "../../shell/layout/PageContent";
 import { LegacyModelImport } from "./LegacyModelImport";
@@ -24,58 +20,44 @@ import { PageActions } from "../../shell/PageActions";
 import { appStore, useAppStore } from "../../shared/store/appStore";
 
 export function CursorSettingsPage() {
-  const { models, cursorHarness, cursorBusy, plugins } = useAppStore();
+  const { models, cursorBusy, plugins } = useAppStore();
   const navigate = useNavigate();
   const message = useMessage();
   const [draft, setDraft] = useState<CursorModelDraft | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Model | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState(false);
-  const [caCommand, setCaCommand] = useState<string | null>(null);
-  const [waitingForCaRefresh, setWaitingForCaRefresh] = useState(false);
   const [deleting, setDeleting] = useState<Model | null>(null);
-  const [confirmDisableTakeover, setConfirmDisableTakeover] = useState(false);
   const [testingModelHashes, setTestingModelHashes] = useState<Set<string>>(() => new Set());
   const [modelTestResults, setModelTestResults] = useState<Map<string, CursorModelTestState>>(() => new Map());
   const [savingAndTesting, setSavingAndTesting] = useState(false);
   const [batchTesting, setBatchTesting] = useState(false);
   const [grouping, setGrouping] = useState<CursorModelGrouping>("provider");
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ModelStatusFilter>("all");
   const [settingsGroup, setSettingsGroup] = useState<CursorModelGroup | null>(null);
   const [groupNameDraft, setGroupNameDraft] = useState("");
   const [groupBaseUrlDraft, setGroupBaseUrlDraft] = useState("");
   const [groupApiKeyDraft, setGroupApiKeyDraft] = useState("");
   const [groupSettingsBusy, setGroupSettingsBusy] = useState(false);
   const activeModelTests = useRef(new Map<string, { testId: string; controller: AbortController; cancelling: boolean }>());
-  const caReady = cursorHarness?.ca === "ready";
+  const submitting = useRef(false);
   const pluginModels = configuredPluginModels(plugins);
-  const visibleModels = models.filter((model) => matchesModelSearch(model, query) && matchesModelStatus(modelTestResults.get(model.model_hash), statusFilter));
-  const visiblePluginModels = pluginModels.filter((model) => matchesModelSearch(model, query) && matchesModelStatus(modelTestResults.get(model.id), statusFilter));
-  const filtered = Boolean(query.trim()) || statusFilter !== "all";
   const testTargets = [
-    ...visibleModels.map((model) => ({ model_hash: model.model_hash, display_name: model.display_name })),
-    ...visiblePluginModels.map((model) => ({ model_hash: model.id, display_name: model.displayName })),
+    ...models.map((model) => ({ model_hash: model.model_hash, display_name: model.display_name })),
+    ...pluginModels.map((model) => ({ model_hash: model.id, display_name: model.displayName })),
   ];
   const providerGroups = cursorModelGroups(models, "provider");
   const typeGroups = cursorModelGroups(models, "type");
-
-  useEffect(() => {
-    if (caCommand) void api.copyCursorText(caCommand);
-  }, [caCommand]);
-
-  const initializeCa = async () => {
-    const status = await appStore.initializeCursorCa();
-    if (status?.ca === "untrusted" && status.ca_install_command) setCaCommand(status.ca_install_command);
-  };
   const openNew = () => {
     const next = emptyCursorModelDraft();
     next.model.sort_order = models.length + 1;
     setEditing(null);
+    setEditorError(null);
     setModelOptions([]);
     setDraft(next);
   };
   const openEdit = (model: Model) => {
+    setEditorError(null);
     setEditing(model);
     setModelOptions([model.model_id]);
     setDraft({
@@ -122,13 +104,20 @@ export function CursorSettingsPage() {
     return (await appStore.createModels([input]))?.[0] ?? null;
   };
   const save = async () => {
+    if (submitting.current) return;
+    submitting.current = true;
+    setEditorError(null);
     try {
       if (await persist()) {
         setDraft(null);
         setEditing(null);
+      } else {
+        setEditorError(appStore.getSnapshot().error);
       }
     } catch (cause) {
-      message(errorText(cause));
+      setEditorError(errorText(cause));
+    } finally {
+      submitting.current = false;
     }
   };
   const cancelModelTest = async (modelHash: string) => {
@@ -178,19 +167,25 @@ export function CursorSettingsPage() {
     }
   };
   const saveAndTest = async () => {
+    if (submitting.current) return;
+    submitting.current = true;
+    setEditorError(null);
     setSavingAndTesting(true);
-    let saved: Model | null = null;
     try {
-      saved = await persist();
+      const saved = await persist();
+      if (!saved) {
+        setEditorError(appStore.getSnapshot().error);
+        return;
+      }
+      setEditing(saved);
+      setSavingAndTesting(false);
+      await testModel(saved);
     } catch (cause) {
-      message(errorText(cause));
+      setEditorError(errorText(cause));
     } finally {
       setSavingAndTesting(false);
+      submitting.current = false;
     }
-    if (!saved) return;
-    setEditing(saved);
-    await testModel(saved);
-    await appStore.refresh();
   };
   const testAllModels = async () => {
     if (!testTargets.length || batchTesting) return;
@@ -210,7 +205,7 @@ export function CursorSettingsPage() {
       setBatchTesting(false);
     }
   };
-  const duplicateModel = async (model: Model) => {
+  const duplicateModel = (model: Model) => {
     const names = new Set(models.map((item) => item.display_name));
     const baseName = t("{name} 副本", { name: model.display_name });
     let displayName = baseName;
@@ -219,18 +214,19 @@ export function CursorSettingsPage() {
       displayName = `${baseName} ${suffix}`;
       suffix += 1;
     }
-    const created = await appStore.createModels([{
-      ...modelInput(model),
-      sort_order: models.length + 1,
-      display_name: displayName,
-    }]);
-    if (created) message(t("模型已复制"));
+    openEdit(model);
+    setEditing(null);
+    setDraft((current) => current && ({
+      ...current,
+      model: { ...current.model, sort_order: models.length + 1, display_name: displayName },
+    }));
   };
   const openGroupSettings = (group: CursorModelGroup) => {
-    setGroupNameDraft(group.models.find((model) => model.group_name?.trim())?.group_name?.trim() ?? "");
-    setGroupBaseUrlDraft(sharedValue(group.models.map((model) => model.base_url)) ?? "");
-    setGroupApiKeyDraft(sharedValue(group.models.map((model) => model.api_key)) ?? "");
-    setSettingsGroup(group);
+    const completeGroup = providerGroups.find((candidate) => candidate.key === group.key) ?? group;
+    setGroupNameDraft(completeGroup.models.find((model) => model.group_name?.trim())?.group_name?.trim() ?? "");
+    setGroupBaseUrlDraft(sharedValue(completeGroup.models.map((model) => model.base_url)) ?? "");
+    setGroupApiKeyDraft(sharedValue(completeGroup.models.map((model) => model.api_key)) ?? "");
+    setSettingsGroup(completeGroup);
   };
   const saveGroupSettings = async () => {
     if (!settingsGroup) return;
@@ -256,11 +252,11 @@ export function CursorSettingsPage() {
           return next;
         });
       }
-      await appStore.refresh();
       setSettingsGroup(null);
     } catch (cause) {
       message(errorText(cause));
     } finally {
+      await appStore.refresh();
       setGroupSettingsBusy(false);
     }
   };
@@ -270,43 +266,26 @@ export function CursorSettingsPage() {
     }
   }, [message]);
 
-  const list = testTargets.length === 0 ? <div className={workbench.empty}>
-    <span>{t("没有匹配的模型")}</span>
-    <Button onClick={() => { setQuery(""); setStatusFilter("all"); }}>{t("清除筛选")}</Button>
+  const list = testTargets.length === 0 ? <div className={styles.empty}>
+    <strong>{t("还没有添加模型")}</strong>
+    <span>{t("添加 API 模型，或连接账号导入模型。")}</span>
+    <Button onClick={() => navigate("/providers")}>{t("连接账号")}</Button>
   </div> : <CursorModelCards
-    models={visibleModels}
-    pluginModels={visiblePluginModels}
+    models={models}
+    pluginModels={pluginModels}
     grouping={grouping}
-    filtered={filtered}
     disabled={cursorBusy}
     testingModelHashes={testingModelHashes}
     testResults={modelTestResults}
     onTest={(model) => void testModel(model)}
     onEdit={openEdit}
-    onDuplicate={(model) => void duplicateModel(model)}
+    onDuplicate={duplicateModel}
     onDelete={setDeleting}
     onTestPluginModel={(model) => void testModel({ model_hash: model.id, display_name: model.displayName })}
-    onPluginSettings={(model) => navigate(`/providers?plugin=${encodeURIComponent(model.pluginId)}`)}
+    onPluginSettings={(model) => navigate(`/providers?plugin=${encodeURIComponent(model.pluginId)}&tab=models&provider=${encodeURIComponent(model.providerId)}`)}
     onReorder={reorderModels}
     onGroupSettings={openGroupSettings}
   />;
-
-  const refreshCa = async () => {
-    await appStore.refresh();
-    if (appStore.getSnapshot().cursorHarness?.ca !== "ready") setWaitingForCaRefresh(false);
-  };
-  const openCaTerminal = () => {
-    if (caCommand) void api.openCursorCaInstallTerminal(caCommand).catch((cause) => message(errorText(cause)));
-    setCaCommand(null);
-    setWaitingForCaRefresh(true);
-  };
-  const content = <CursorCaProvider><CursorCaGate busy={cursorBusy} waitingForRefresh={waitingForCaRefresh} onInitialize={() => void initializeCa()} onRefresh={() => void refreshCa()}>
-    <div className={styles.page}>
-      <LegacyModelImport>{({ busy: importingLegacyModels, previewing, open }) =>
-        <CursorModelProvider><CursorModelGate busy={cursorBusy || importingLegacyModels} previewingImport={previewing} onAdd={openNew} onImport={open}>{list}</CursorModelGate></CursorModelProvider>
-      }</LegacyModelImport>
-    </div>
-  </CursorCaGate></CursorCaProvider>;
 
   const editorTestState = editing ? modelTestResults.get(editing.model_hash) : undefined;
   const editorTesting = Boolean(editing && testingModelHashes.has(editing.model_hash));
@@ -318,36 +297,26 @@ export function CursorSettingsPage() {
 
   return <>
     <PageActions position="left">
-      <Button disabled={cursorBusy || (!batchTesting && (!testTargets.length || testingModelHashes.size > 0))} onClick={() => void (batchTesting ? cancelAllModelTests() : testAllModels())}>{batchTesting ? t("取消全部测试") : filtered ? t("测试当前列表") : t("测试全部")}</Button>
+      <Button variant="ghost" disabled={cursorBusy || (!batchTesting && (!testTargets.length || testingModelHashes.size > 0))} onClick={() => void (batchTesting ? cancelAllModelTests() : testAllModels())}>{batchTesting ? t("取消全部测试") : t("测试全部")}</Button>
     </PageActions>
-    <PageActions><Button variant="primary" disabled={!caReady || cursorBusy} onClick={openNew}><Icon icon={addIcon} size="1.1em" />{t("添加模型")}</Button></PageActions>
-    <PageActions position="filters"><ModelWorkbenchToolbar query={query} filter={statusFilter} grouping={grouping} onQuery={setQuery} onFilter={setStatusFilter} onGrouping={setGrouping} /></PageActions>
+    <PageActions>
+      <LegacyModelImport>{({ busy, open }) => <ActionMenu iconOnly label={t("更多")} disabled={busy || cursorBusy} items={[
+        { id: "group-provider", label: t("按来源分组"), disabled: grouping === "provider", onSelect: () => setGrouping("provider") },
+        { id: "group-type", label: t("按协议分组"), disabled: grouping === "type", onSelect: () => setGrouping("type") },
+        { id: "group-flat", label: t("平铺与排序"), disabled: grouping === "flat", onSelect: () => setGrouping("flat") },
+        { id: "accounts", label: t("连接账号"), onSelect: () => navigate("/providers") },
+        { id: "import", label: t("导入旧版配置"), onSelect: open },
+      ]} />}</LegacyModelImport>
+      <Button variant="primary" disabled={cursorBusy} onClick={openNew}><Icon icon={addIcon} size="1.1em" />{t("添加模型")}</Button>
+    </PageActions>
     <PageContent title={t("模型管理")} sections={[
-      { key: "connection", estimatedHeight: 78, content: <CursorConnectionStatus status={cursorHarness} busy={cursorBusy} modelCount={models.length + pluginModels.length} visibleCount={testTargets.length} onAccounts={() => navigate("/providers")} onToggle={(enabled) => { if (enabled) void appStore.setCursorEnabled(true); else setConfirmDisableTakeover(true); }} /> },
-      { key: "test-context", estimatedHeight: 20, content: <span className={workbench.sessionNote}>{t("测试结果仅代表本次会话中的最近测试，不代表持续可用。")}</span> },
-      { key: "cursor-settings", estimatedHeight: estimatedModelHeight, content },
+      { key: "cursor-settings", estimatedHeight: estimatedModelHeight, content: list },
     ]} />
-    <ConfirmDialog
-      open={confirmDisableTakeover}
-      title={t("关闭接管Cursor？")}
-      cancelLabel={t("取消")}
-      confirmLabel={t("关闭接管")}
-      onCancel={() => setConfirmDisableTakeover(false)}
-      onConfirm={() => {
-        setConfirmDisableTakeover(false);
-        void appStore.setCursorEnabled(false);
-      }}
-    >
-      <p>{t("关闭后将移除 Cursor 本地代理配置。如果你需要登陆官方账号，通常不需要关闭操作，推荐直接登陆你的账号即可(byok模型与官方账号的模型已支持无缝衔接)，是否继续关闭并清理代理？")}</p>
-    </ConfirmDialog>
-    <Modal fullHeight open={draft !== null} title={editing ? t("编辑模型") : t("添加模型")} banner={draft && (editorTesting || editorTestState) ? <CursorModelTestResult state={editorTestState} testing={editorTesting} /> : undefined} busy={cursorBusy || savingAndTesting} submitDisabled={editorTesting} onClose={() => { if (editing && editorTesting) void cancelModelTest(editing.model_hash); setDraft(null); setEditing(null); }} onSubmit={() => void save()} submitLabel={t("保存")} secondaryAction={<button type="button" className={controls.secondary} disabled={cursorBusy || savingAndTesting} onClick={() => void (editorTesting && editing ? cancelModelTest(editing.model_hash) : saveAndTest())}>{savingAndTesting ? t("处理中…") : editorTesting ? t("取消测试") : t("保存并测试")}</button>}>
+    <Modal fullHeight open={draft !== null} title={editing ? t("编辑模型") : t("添加 API 模型")} banner={editorError ? <span className={styles.error} role="alert">{editorError}</span> : draft && (editorTesting || editorTestState) ? <CursorModelTestResult state={editorTestState} testing={editorTesting} /> : undefined} busy={cursorBusy || savingAndTesting} submitDisabled={editorTesting} onClose={() => { if (editing && editorTesting) void cancelModelTest(editing.model_hash); setDraft(null); setEditing(null); }} onSubmit={() => void save()} submitLabel={t("保存")} secondaryAction={<button type="button" className={controls.secondary} disabled={cursorBusy || savingAndTesting} onClick={() => void (editorTesting && editing ? cancelModelTest(editing.model_hash) : saveAndTest())}>{savingAndTesting ? t("处理中…") : editorTesting ? t("取消测试") : t("保存并测试")}</button>}>
       {draft && <>
         <CursorModelEditor draft={draft} modelOptions={modelOptions} discovering={discovering} onChange={setDraft} onDiscover={discover} />
       </>}
     </Modal>
-    <ConfirmDialog open={caCommand !== null} title={t("安装本地 CA")} cancelLabel={t("关闭")} confirmLabel={t("打开终端")} onCancel={() => setCaCommand(null)} onConfirm={openCaTerminal}>
-      <div className={styles.editor}><strong>{t("需要授权安装证书")}</strong><span>{t("安装命令已自动复制。点击“打开终端”，将命令粘贴到终端中执行，并按提示输入密码。")}</span><pre className={styles.command}>{caCommand}</pre></div>
-    </ConfirmDialog>
     <Modal open={settingsGroup !== null} title={t("分组设置")} busy={groupSettingsBusy || cursorBusy} onClose={() => setSettingsGroup(null)} onSubmit={() => void saveGroupSettings()} submitLabel={t("保存")}>
       {settingsGroup && <div className={styles.editor}>
         <FormField label={t("分组名称")} hint={t("应用于该分组下的全部模型，并作为 Cursor 模型选择器中的徽章标签；清空则恢复显示服务器域名。")}>
@@ -378,18 +347,19 @@ function sharedValue(values: string[]): string | null {
 }
 
 function draftInput(draft: CursorModelDraft): ModelInput {
+  const displayName = draft.model.display_name.trim() || draft.model.model_id.trim();
   const model = {
     ...draft.model,
-    display_name: draft.model.display_name.trim(),
+    display_name: displayName,
     base_url: draft.model.base_url.trim(),
     api_key: draft.model.api_key.trim(),
-    tooltip_data: draft.model.tooltip_data.trim(),
+    tooltip_data: draft.model.tooltip_data.trim() || displayName,
     model_id: draft.model.model_id.trim(),
     openai_extra_params: parseObject(draft.openAIExtraParamsText, t("OpenAI 额外参数")),
     custom_headers: parseHeaders(draft.customHeadersText),
     anthropic_extra_params: parseObject(draft.anthropicExtraParamsText, t("Anthropic 额外参数")),
   };
-  if (!model.display_name || !model.base_url || !model.api_key || !model.tooltip_data || !model.model_id) throw new Error(t("服务器地址或完整请求 URL、API Key、模型名称、显示名称和备注不能为空"));
+  if (!model.base_url || !model.api_key || !model.model_id) throw new Error(t("请填写服务器地址、API Key 和模型名称"));
   for (const [label, value] of [[t("上下文窗口 Token"), model.context_window_tokens], [t("最大输出 Token"), model.type === "openai" ? model.max_completion_tokens : model.anthropic_max_tokens], [t("思考预算 Token"), model.thinking_budget_tokens]] as const) {
     if (value !== null && (!Number.isSafeInteger(value) || value <= 0)) throw new Error(t("{label} 必须是大于 0 的整数", { label }));
   }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, pluginText, type PluginDescriptor, type PluginImportFile, type PluginRuntimePhase, type PluginRuntimeStatus } from "../../shared/api";
 import { useI18n } from "../../i18n/store";
@@ -10,25 +10,46 @@ import { Card } from "../../shared/ui/Card";
 import { Modal } from "../../shared/ui/Modal";
 import { useMessage } from "../../shared/ui/message";
 import { PageActions } from "../../shell/PageActions";
-import { PluginAddPanel, PluginSettingsPanel } from "./PluginResourcePanels";
+import { PluginAddPanel } from "./PluginResourcePanels";
+import { PluginSettingsModal, type PluginSettingsTab } from "./PluginSettingsModal";
+import { TextInput } from "../../shared/ui/FormControls";
+import { Select } from "../../shared/ui/Select";
 import styles from "./PluginManagementPage.module.scss";
 
 export function PluginManagementPage() {
   const { pluginRuntime, plugins } = useAppStore();
+  const { locale } = useI18n();
+  const message = useMessage();
   const [progressOpen, setProgressOpen] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [selected, setSelected] = useState<{ pluginId: string; mode: "add" | "settings" } | null>(null);
+  const [selected, setSelected] = useState<{ pluginId: string; mode: "add" | PluginSettingsTab; providerId?: string } | null>(null);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const requestedPlugin = params.get("plugin");
+  const requestedTab = params.get("tab") === "models" ? "models" : "accounts";
+  const requestedProvider = params.get("provider") ?? undefined;
+  const handledRequest = useRef("");
   const cancelRequested = useRef(false);
   const selectedPlugin = selected ? plugins.find((plugin) => plugin.id === selected.pluginId) ?? null : null;
 
   useEffect(() => {
-    if (requestedPlugin && plugins.some((plugin) => plugin.id === requestedPlugin)) {
-      setSelected({ pluginId: requestedPlugin, mode: "settings" });
+    const key = requestedPlugin ? `${requestedPlugin}:${requestedTab}:${requestedProvider ?? ""}` : "";
+    if (!key) handledRequest.current = "";
+    if (key !== handledRequest.current && requestedPlugin && plugins.some((plugin) => plugin.id === requestedPlugin)) {
+      handledRequest.current = key;
+      setSelected({ pluginId: requestedPlugin, mode: requestedTab, providerId: requestedProvider });
     }
-  }, [requestedPlugin, plugins]);
+  }, [requestedPlugin, requestedTab, requestedProvider, plugins]);
+  const onConfigured = useCallback((syncError?: string) => {
+    if (syncError) message(t("账号已保存，但同步模型失败：{error}", { error: syncError }), { duration: 5000 });
+    setSelected((current) => {
+      if (!current) return null;
+      const plugin = appStore.getSnapshot().plugins.find((candidate) => candidate.id === current.pluginId);
+      return { ...current, mode: plugin?.providers.some((provider) => provider.hasModels) ? "models" : "accounts" };
+    });
+  }, [message]);
   const closeSelected = () => {
     setSelected(null);
     if (requestedPlugin) setParams({}, { replace: true });
@@ -67,21 +88,32 @@ export function PluginManagementPage() {
     }
   };
 
-  const content = pluginRuntime?.state === "ready"
-    ? <PluginCards plugins={plugins} onOpen={(pluginId, mode) => setSelected({ pluginId, mode })} />
-    : <RuntimeGate status={pluginRuntime} starting={starting} onInitialize={() => void initialize()} />;
-  const estimatedHeight = plugins.length > 0
-    ? Math.max(320, Math.ceil(plugins.length / 3) * 180)
-    : 320;
+  const visiblePlugins = plugins.filter((plugin) => {
+    const accounts = plugin.resources.flatMap((resource) => resource.resources);
+    const connected = accounts.length > 0 || plugin.providers.some((provider) => provider.configured);
+    const attention = accounts.some((account) => account.state.status !== "ready");
+    const searchable = [plugin.name, ...plugin.providers.map((provider) => pluginText(provider.displayName, locale)), ...accounts.map((account) => account.displayName)].join(" ");
+    return searchable.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+      && (filter === "all" || (filter === "connected" ? connected : attention));
+  });
 
   return <>
-    <PageActions><Button onClick={() => navigate("/models")}>{t("API Key 模型")}</Button></PageActions>
+    <PageActions><Button onClick={() => navigate("/models")}>{t("查看模型")}</Button></PageActions>
+    {pluginRuntime?.state === "ready" && <PageActions position="filters"><div className={styles.toolbar}>
+      <TextInput aria-label={t("搜索服务或账号")} placeholder={t("搜索服务或账号")} value={query} onChange={(event) => setQuery(event.target.value)} />
+      <Select ariaLabel={t("连接状态")} value={filter} onChange={setFilter} options={[
+        { value: "all", label: t("全部服务") },
+        { value: "connected", label: t("已连接") },
+        { value: "attention", label: t("需要处理") },
+      ]} />
+    </div></PageActions>}
     <PageContent
       title={t("账号连接")}
-      sections={[
-        { key: "connection-guide", estimatedHeight: 24, content: <span className={styles.connectionGuide}>{t("连接账号后，在账号管理中同步并添加模型。API Key 通道在模型管理中配置。")}</span> },
-        { key: "installed-plugins", estimatedHeight, content },
-      ]}
+      sections={pluginRuntime?.state !== "ready"
+        ? [{ key: "runtime", estimatedHeight: 250, content: <RuntimeGate status={pluginRuntime} starting={starting} onInitialize={() => void initialize()} /> }]
+        : visiblePlugins.length
+          ? visiblePlugins.map((plugin) => ({ key: plugin.id, estimatedHeight: 96, content: <PluginCard plugin={plugin} onOpen={(pluginId, mode) => setSelected({ pluginId, mode })} /> }))
+          : [{ key: "empty", estimatedHeight: 180, content: <div className={styles.empty}><strong>{plugins.length ? t("没有匹配的服务或账号") : t("还没有安装插件")}</strong>{plugins.length > 0 && <Button onClick={() => { setQuery(""); setFilter("all"); }}>{t("清除筛选")}</Button>}</div> }]}
     />
     <RuntimeProgressModal
       open={progressOpen}
@@ -89,18 +121,22 @@ export function PluginManagementPage() {
       starting={starting}
       onClose={closeProgress}
     />
+    {selectedPlugin && selected?.mode !== "add" && <PluginSettingsModal
+      key={`${selectedPlugin.id}:${selected?.mode}:${selected?.providerId ?? ""}`}
+      plugin={selectedPlugin}
+      initialTab={selected?.mode ?? "accounts"}
+      initialProviderId={selected?.providerId}
+      onAdd={() => setSelected({ pluginId: selectedPlugin.id, mode: "add" })}
+      onClose={closeSelected}
+    />}
     <Modal
       fullHeight
-      open={selectedPlugin !== null}
-      title={selected?.mode === "settings"
-        ? t("{name} 账号管理", { name: selectedPlugin?.name ?? "" })
-        : t("添加 {name} 账号", { name: selectedPlugin?.name ?? "" })}
+      open={selectedPlugin !== null && selected?.mode === "add"}
+      title={t("添加 {name} 账号", { name: selectedPlugin?.name ?? "" })}
       onClose={closeSelected}
-      onSubmit={closeSelected}
-      submitLabel={t("确定")}
+      closeLabel={t("关闭")}
     >
-      {selected?.mode === "add" && selectedPlugin && <PluginAddPanel plugin={selectedPlugin} onConfigured={closeSelected} />}
-      {selected?.mode === "settings" && selectedPlugin && <PluginSettingsPanel plugin={selectedPlugin} />}
+      {selected?.mode === "add" && selectedPlugin && <PluginAddPanel plugin={selectedPlugin} onConfigured={onConfigured} />}
     </Modal>
   </>;
 }
@@ -116,40 +152,25 @@ function RuntimeGate({ status, starting, onInitialize }: { status: PluginRuntime
       ? t("插件运行时初始化失败")
       : unsupported
         ? t("当前系统不支持插件运行时")
-        : t("需要先初始化插件运行时");
+        : t("准备账号连接");
   const description = failed
     ? t("请重试初始化")
     : unsupported
       ? status.error ?? t("当前操作系统或 CPU 架构暂不受支持")
-      : t("初始化将下载并安装插件运行时。");
+      : t("首次使用需下载运行组件。");
 
   return <div className={styles.gate}>
     <strong>{title}</strong>
     <span>{description}</span>
     {!unsupported && <Button variant="primary" disabled={checking || initializing} onClick={onInitialize}>
-      {checking ? t("检查中…") : initializing ? t("初始化中…") : failed ? t("重新初始化插件") : t("初始化插件")}
+      {checking ? t("检查中…") : initializing ? t("初始化中…") : failed ? t("重新初始化插件") : t("准备账号连接")}
     </Button>}
-  </div>;
-}
-
-function PluginCards({ plugins, onOpen }: {
-  plugins: PluginDescriptor[];
-  onOpen: (pluginId: string, mode: "add" | "settings") => void;
-}) {
-  if (plugins.length === 0) {
-    return <div className={styles.empty}>
-      <strong>{t("还没有安装插件")}</strong>
-      <span>{t("安装插件后会显示在这里。")}</span>
-    </div>;
-  }
-  return <div className={styles.pluginGrid}>
-    {plugins.map((plugin) => <PluginCard key={plugin.id} plugin={plugin} onOpen={onOpen} />)}
   </div>;
 }
 
 function PluginCard({ plugin, onOpen }: {
   plugin: PluginDescriptor;
-  onOpen: (pluginId: string, mode: "add" | "settings") => void;
+  onOpen: (pluginId: string, mode: "add" | PluginSettingsTab) => void;
 }) {
   const { locale } = useI18n();
   const { ports } = useAppStore();
@@ -165,6 +186,8 @@ function PluginCard({ plugin, onOpen }: {
   const modelCount = plugin.providers.reduce((count, provider) => count + provider.models.length, 0);
   const enabledCount = plugin.providers.reduce((count, provider) => count + provider.models.filter((model) => model.enabled).length, 0);
   const needsAttention = invalidCount > 0 || coolingCount > 0;
+  const canAdd = plugin.resources.some((resource) => resource.add.length > 0);
+  const hasModels = plugin.providers.some((provider) => provider.hasModels);
   const subtitle = plugin.providers.map((provider) => pluginText(provider.displayName, locale)).join(" · ") || plugin.id;
   const importResource = plugin.resources.find((resource) => resource.import);
   const exportResource = plugin.resources.find((resource) => resource.resources.length > 0);
@@ -186,6 +209,7 @@ function PluginCard({ plugin, onOpen }: {
       } else {
         message(summary);
       }
+      onOpen(plugin.id, hasModels ? "models" : "accounts");
     } catch (cause) {
       message(cause instanceof Error ? cause.message : String(cause), { duration: 5000 });
     } finally {
@@ -195,6 +219,7 @@ function PluginCard({ plugin, onOpen }: {
   };
 
   const moreItems: ActionMenuItem[] = [
+    ...(canAdd && accountCount > 0 ? [{ id: "add-account", label: t("添加账号"), onSelect: () => onOpen(plugin.id, "add") }] : []),
     ...(plugin.author ? [{ id: "author", type: "text" as const, label: plugin.author }] : []),
     ...(importResource
       ? [
@@ -218,7 +243,7 @@ function PluginCard({ plugin, onOpen }: {
                   plugin.id,
                   exportResource.type,
                 ),
-              ),
+              ).catch((cause) => message(cause instanceof Error ? cause.message : String(cause))),
           },
         ]
       : []),
@@ -228,41 +253,36 @@ function PluginCard({ plugin, onOpen }: {
   ];
 
   return (
-    <Card className={styles.pluginCard}>
+    <Card className={styles.pluginCard} data-attention={invalidCount ? "invalid" : coolingCount ? "cooling" : undefined}>
       <div className={styles.pluginCardTop}>
         <img className={styles.pluginIcon} src={plugin.icon} alt="" />
         <div className={styles.pluginIdentity}>
-          <span className={styles.pluginName}>{plugin.name}</span>
-          <span className={styles.pluginId}>{subtitle}</span>
-        </div>
-        <span
+          <div className={styles.nameRow}><span className={styles.pluginName} title={subtitle}>{plugin.name}</span>
+          <span
           className={`${styles.stateBadge} ${needsAttention ? styles.stateAttention : readyCount > 0 || configured ? styles.stateReady : ""}`}
         >
           {invalidCount > 0 ? t("需重新授权") : coolingCount > 0 ? t("账号冷却中") : readyCount > 0 ? t("已连接") : configured ? t("已配置") : t("未连接")}
-        </span>
-      </div>
-      <div className={styles.pluginMeta}>
-        <span>
+          </span></div>
+          <span className={styles.pluginMeta}>
           {t("{accounts} 个账号 · 已添加 {enabled} / {models} 个模型", {
             accounts: accountCount,
             enabled: enabledCount,
             models: modelCount,
           })}
-        </span>
+          </span>
+          {needsAttention && <span className={styles.accountNotice}>{t("可用 {ready} · 冷却 {cooling} · 失效 {invalid}", { ready: readyCount, cooling: coolingCount, invalid: invalidCount })}</span>}
+        </div>
       </div>
-      {needsAttention && <span className={styles.accountNotice}>{t("可用 {ready} · 冷却 {cooling} · 失效 {invalid}", { ready: readyCount, cooling: coolingCount, invalid: invalidCount })}</span>}
       <div className={styles.cardActions}>
-        {(accountCount > 0 || configured) && (
-          <Button size="small" variant="primary" onClick={() => onOpen(plugin.id, "settings")}>{accountCount > 0 ? t("管理账号") : t("模型管理")}</Button>
-        )}
         <Button
           size="small"
-          variant={accountCount > 0 ? "secondary" : "primary"}
-          onClick={() => onOpen(plugin.id, "add")}
-        >{t("添加账号")}</Button>
+          variant={accountCount > 0 || !canAdd ? "secondary" : "primary"}
+          onClick={() => onOpen(plugin.id, accountCount > 0 || !canAdd ? "accounts" : "add")}
+        >{accountCount > 0 || !canAdd ? t("管理账号") : t("连接账号")}</Button>
+        {hasModels && <Button variant="ghost" size="small" onClick={() => onOpen(plugin.id, "models")}>{t("模型目录")}</Button>}
         {moreItems.length > 0 && (
           <span className={styles.moreAction}>
-            <ActionMenu label={t("更多")} items={moreItems} />
+            <ActionMenu iconOnly label={t("更多")} items={moreItems} />
           </span>
         )}
         {importResource && (
