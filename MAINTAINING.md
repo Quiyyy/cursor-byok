@@ -49,12 +49,12 @@ cargo test --package cursor-server --lib plugin:: -- --include-ignored
 
 ## 独立发布
 
-当前尚未发布本 fork 的安装包。仓库接管不自动替换本机已安装程序，也不迁移或上传用户账号配置。
+安装包通过本 fork 的 [GitHub Releases](https://github.com/Quiyyy/cursor-byok/releases) 发布。仓库接管不自动替换本机已安装程序，也不迁移或上传用户账号配置。
 
 - 安装版与 Windows 便携版的更新源均指向 `Quiyyy/cursor-byok` 的 GitHub Releases。
 - fork 使用独立更新签名公钥；对应私钥通过仓库 Actions secret `TAURI_SIGNING_PRIVATE_KEY` 提供，私钥保存在仓库外，禁止提交。
 - 上游旧安装包仍使用上游更新源和公钥。首次切换到本 fork 应手动安装；后续版本才通过本 fork 的签名更新链路升级。
-- 首次发布选择高于 `1.0.1` 的版本，同步修改 `apps/desktop/package.json`、`apps/desktop/package-lock.json`、`apps/desktop/src-tauri/Cargo.toml`、`apps/desktop/src-tauri/tauri.conf.json` 和 `Cargo.lock` 中的桌面包版本。
+- 每次发布选择尚未使用的更高版本，同步修改 `apps/desktop/package.json`、`apps/desktop/package-lock.json`、`apps/desktop/src-tauri/Cargo.toml`、`apps/desktop/src-tauri/tauri.conf.json` 和 `Cargo.lock` 中的桌面包版本。
 - 合入 `main` 并完成 CI 后，由仓库所有者推送与应用版本一致的 `v<version>` 标签，触发 `.github/workflows/release.yml`。
 - 不要批量推送上游历史标签来触发发布。
 

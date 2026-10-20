@@ -1,6 +1,6 @@
 > **持续维护分支：**原仓库归档后，由 [Quiyyy/cursor-byok](https://github.com/Quiyyy/cursor-byok) 继续开发。
 > 包含 Grok / ChatGPT / Google OAuth 自动续期、Grok 4.7 思考强度适配和无广告界面。上游稳定性问题的修复范围见[排查记录](./UPSTREAM-BUG-AUDIT.md)，开发与发布见[维护说明](./MAINTAINING.md)。
-> 本 fork 尚未发布安装包；首次发布前请按维护说明从源码构建。
+> 安装包见本 fork 的 [Releases](https://github.com/Quiyyy/cursor-byok/releases)，也可按维护说明从源码构建。从上游安装版切换时，需先手动安装本 fork，后续通过独立更新通道升级。
 
 <div align="center">
 

@@ -1,6 +1,6 @@
 > **Maintained fork:** development continues at [Quiyyy/cursor-byok](https://github.com/Quiyyy/cursor-byok) after the original repository was archived.
 > This fork includes Grok / ChatGPT / Google OAuth renewal, Grok 4.7 reasoning support, and an ad-free interface. See the [upstream bug audit](./UPSTREAM-BUG-AUDIT.md) for stability fixes and [maintenance notes](./MAINTAINING.md) for development and releases.
-> No release of this fork has been published yet; build from source until one is available.
+> Download this fork's installers from [Releases](https://github.com/Quiyyy/cursor-byok/releases), or build from source using the maintenance notes. When switching from an upstream installation, install this fork manually once to use its independent update channel.
 
 <div align="center">
 
