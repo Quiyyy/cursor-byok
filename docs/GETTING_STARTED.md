@@ -11,9 +11,11 @@
 | 平台 | 常用安装资产 |
 | --- | --- |
 | Windows x64 | NSIS `setup.exe`；便携包见该版本的 Windows ZIP 资产 |
-| macOS Apple Silicon | aarch64 / arm64 对应 DMG |
-| macOS Intel | x64 / x86_64 对应 DMG |
+| macOS Apple Silicon | `aarch64.app.tar.gz` 应用压缩包 |
+| macOS Intel | `x64.app.tar.gz` 应用压缩包 |
 | Linux x64 | AppImage、deb 或 rpm，以实际 Release 资产为准 |
+
+macOS 解压对应架构的应用压缩包，将其中的 `.app` 移入“应用程序”目录后启动。
 
 安装后从应用启动。应用内更新使用本仓库的 Release 资产；不同分发渠道的安装应先手动切换一次。需要从源码运行时参阅[维护说明](../MAINTAINING.md)。
 
