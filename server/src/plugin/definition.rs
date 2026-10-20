@@ -31,6 +31,7 @@ impl PluginDefinitionLoader {
 
     pub(super) fn in_directory(sdk_dir: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&sdk_dir)?;
+        let sdk_dir = sdk_dir.canonicalize()?;
         std::fs::create_dir_all(sdk_dir.join("protocol"))?;
         let import_map = sdk_dir.join("import-map.json");
         let collector = sdk_dir.join("collect.ts");

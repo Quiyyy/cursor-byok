@@ -169,16 +169,19 @@ pub(super) async fn load_plugin(
     executable: &Path,
     app_version: &str,
 ) -> Result<PluginEntry> {
+    // The entry URL and Deno's read grant must use the same physical path.
+    // For example, macOS /var is a symlink to /private/var.
+    let directory = directory.canonicalize()?;
     let manifest: PluginManifest =
         serde_json::from_slice(&fs::read(directory.join(MANIFEST_FILE_NAME))?)?;
-    manifest.validate(directory)?;
+    manifest.validate(&directory)?;
     require_app_version(&manifest, app_version)?;
-    let icon = icon_data_url(directory, &manifest.icon)?;
+    let icon = icon_data_url(&directory, &manifest.icon)?;
     let entry = directory.join(&manifest.entry).canonicalize()?;
-    let definition = loader.load(executable, directory, &entry).await?;
+    let definition = loader.load(executable, &directory, &entry).await?;
     validate_definition(&manifest.id, &definition)?;
     Ok(PluginEntry {
-        directory: directory.to_path_buf(),
+        directory,
         entry,
         manifest,
         definition,

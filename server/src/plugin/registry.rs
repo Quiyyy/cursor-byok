@@ -1581,6 +1581,14 @@ mod auth_retry_tests {
             std::env::var_os("DENO_TEST_EXECUTABLE").expect("set DENO_TEST_EXECUTABLE"),
         );
         let root = tempfile::tempdir().unwrap();
+        #[cfg(unix)]
+        {
+            // Exercise Deno's grants through a filesystem alias on every Unix
+            // runner, not only macOS where /var already aliases /private/var.
+            let installed = root.path().join("physical-plugins");
+            std::fs::create_dir_all(&installed).unwrap();
+            std::os::unix::fs::symlink(&installed, root.path().join("installed")).unwrap();
+        }
         let directory = root.path().join("installed/test");
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(directory.join("plugin.json"), r#"{"apiVersion":1,"id":"dev.refresh","name":"Refresh test","version":"0.1.0","minAppVersion":"0.1.0","entry":"main.ts","icon":"icon.svg","permissions":{"network":[]}}"#).unwrap();
