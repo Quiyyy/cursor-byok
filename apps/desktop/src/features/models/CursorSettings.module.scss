@@ -195,6 +195,20 @@
   flex: 0 0 auto;
   > button { flex: 0 0 auto; }
 }
+.defaultModelControl {
+  flex: 0 0 auto;
+  min-width: 5.5em;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  font-size: type.$font-size-xs;
+}
+.defaultModelLabel {
+  color: var(--vscode-textLink-foreground);
+  font-weight: 500;
+}
 .sortHandle {
   position: absolute;
   top: 8px;

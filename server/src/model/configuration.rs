@@ -267,7 +267,7 @@ pub fn normalize_model_input(input: &ModelConfigInput) -> Result<ModelConfigInpu
         } else {
             empty_object()
         },
-        context_window_tokens: positive(input.context_window_tokens, "context window")?,
+        context_window_tokens: validate_context_window(input.context_window_tokens)?,
         max_completion_tokens: positive(input.max_completion_tokens, "max completion tokens")?,
         anthropic_max_tokens: positive(input.anthropic_max_tokens, "Anthropic max tokens")?,
         anthropic_thinking_effort,
@@ -387,6 +387,73 @@ fn normalize_effort(value: Option<&str>, allow_empty: bool) -> Result<Option<Str
         Err(Error::Config(format!(
             "unsupported reasoning effort: {value}"
         )))
+    }
+}
+
+pub fn validate_context_window(value: Option<u64>) -> Result<Option<u64>> {
+    let value = positive(value, "context window")?;
+    if value.is_some_and(|n| n > i32::MAX as u64) {
+        return Err(Error::Config(
+            "context window must fit Cursor's positive int32 token count".into(),
+        ));
+    }
+    Ok(value)
+}
+
+/// BYOK's working budget when neither the user nor the provider advertises a window.
+pub const DEFAULT_CONTEXT_WINDOW_TOKENS: u64 = 200_000;
+
+/// Product working budget, separate from the provider's advertised capacity.
+pub fn default_context_window(model_id: &str, advertised: Option<u64>) -> u64 {
+    let id = model_id.to_ascii_lowercase();
+    if id.starts_with("gpt-") {
+        1_000_000
+    } else if id.starts_with("grok-") {
+        500_000
+    } else {
+        advertised.unwrap_or(DEFAULT_CONTEXT_WINDOW_TOKENS)
+    }
+}
+
+pub fn effective_context_window(
+    model_id: &str,
+    configured: Option<u64>,
+    advertised: Option<u64>,
+) -> u64 {
+    configured.unwrap_or_else(|| default_context_window(model_id, advertised))
+}
+
+#[cfg(test)]
+mod context_defaults_tests {
+    use super::*;
+
+    #[test]
+    fn project_context_defaults_apply_to_new_models_without_changing_other_families() {
+        for id in ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna", "GPT-new-model"] {
+            assert_eq!(default_context_window(id, Some(272_000)), 1_000_000);
+            assert_eq!(default_context_window(id, None), 1_000_000);
+        }
+        for id in ["grok-4.6", "grok-4.7", "Grok-new-model"] {
+            assert_eq!(default_context_window(id, Some(256_000)), 500_000);
+            assert_eq!(default_context_window(id, None), 500_000);
+        }
+        assert_eq!(
+            default_context_window("claude-sonnet", Some(256_000)),
+            256_000
+        );
+        assert_eq!(default_context_window("custom-model", None), 200_000);
+        assert_eq!(default_context_window("my-gpt-proxy", None), 200_000);
+    }
+
+    #[test]
+    fn explicit_context_overrides_project_defaults_and_reset_restores_them() {
+        for (id, default) in [("gpt-6.1-sol", 1_000_000), ("grok-4.7", 500_000)] {
+            assert_eq!(
+                effective_context_window(id, Some(200_000), Some(272_000)),
+                200_000
+            );
+            assert_eq!(effective_context_window(id, None, Some(272_000)), default);
+        }
     }
 }
 

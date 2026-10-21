@@ -20,7 +20,7 @@ import { PageActions } from "../../shell/PageActions";
 import { appStore, useAppStore } from "../../shared/store/appStore";
 
 export function CursorSettingsPage() {
-  const { models, cursorBusy, plugins } = useAppStore();
+  const { models, busy, cursorBusy, plugins, modelSettings, savingModelSettings, cursorModelSettings, savingCursorDefaultModel } = useAppStore();
   const navigate = useNavigate();
   const message = useMessage();
   const [draft, setDraft] = useState<CursorModelDraft | null>(null);
@@ -279,6 +279,20 @@ export function CursorSettingsPage() {
     testResults={modelTestResults}
     onTest={(model) => void testModel(model)}
     onEdit={openEdit}
+    modelSettings={modelSettings}
+    savingModelSettings={savingModelSettings}
+    defaultModelId={cursorModelSettings?.model_id ?? null}
+    defaultModelDisabled={busy || !cursorModelSettings || savingCursorDefaultModel !== null}
+    savingDefaultModelId={savingCursorDefaultModel}
+    onSetDefault={async (id) => {
+      if (await appStore.setCursorDefaultModel(id)) message(t("默认模型已保存，重载 Cursor 窗口后生效"));
+      else message(appStore.getSnapshot().error || t("保存失败"));
+    }}
+    onContextChange={async (id, value) => {
+      const saved = await appStore.setModelContext(id, value);
+      if (!saved) message(appStore.getSnapshot().error || t("保存失败"));
+      return saved;
+    }}
     onDuplicate={duplicateModel}
     onDelete={setDeleting}
     onTestPluginModel={(model) => void testModel({ model_hash: model.id, display_name: model.displayName })}

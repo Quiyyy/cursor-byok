@@ -31,6 +31,7 @@ export function exposeNativeClient(source) {
     ObjectMethod(p) {
       if (p.node.key.type === 'NumericLiteral' && source.slice(p.node.start, p.node.end).includes('LocalAgentClient:')) {
         if (!source.slice(p.node.start, p.node.end).includes('buildBottlerocketPickerModels:')) throw Error('Unsupported Cursor native model catalog factory');
+        if (!source.slice(p.node.start, p.node.end).includes('fetchLocalProviderModels:')) throw Error('Unsupported Cursor native metadata refresh');
         modules.push(p.node.key.value);
       }
     },
@@ -46,5 +47,5 @@ export function exposeNativeClient(source) {
   if (modelTypes.length !== 1) throw new Error('Expected one native ModelDetails constructor');
   const marker = 'const __webpack_export_target__=exports;';
   if (source.split(marker).length !== 2) throw new Error('Expected one extension export boundary');
-  return source.replace(marker, `__webpack_exports__.__byokLocalAgentClient=()=>__webpack_require__(${modules[0]}).LocalAgentClient;__webpack_exports__.__byokModelCatalog=models=>__webpack_require__(${modules[0]}).buildBottlerocketPickerModels(models);__webpack_exports__.__byokCreateModelDetails=id=>new (${modelTypes[0]})({modelId:id});${marker}`);
+  return source.replace(marker, `__webpack_exports__.__byokLocalAgentClient=()=>__webpack_require__(${modules[0]}).LocalAgentClient;__webpack_exports__.__byokRefreshModels=endpoint=>__webpack_require__(${modules[0]}).fetchLocalProviderModels(endpoint);__webpack_exports__.__byokModelCatalog=models=>__webpack_require__(${modules[0]}).buildBottlerocketPickerModels(models);__webpack_exports__.__byokCreateModelDetails=id=>new (${modelTypes[0]})({modelId:id});${marker}`);
 }

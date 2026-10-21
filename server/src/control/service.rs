@@ -46,6 +46,13 @@ pub struct DiscoveredModels {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct ModelSettingsView {
+    #[serde(flatten)]
+    pub settings: crate::store::ModelSettings,
+    pub default_context_window_tokens: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct LegacyModelImportResult {
     pub imported: usize,
     pub skipped: usize,
@@ -687,6 +694,84 @@ impl ControlService {
 
     pub async fn commit_settings(&self) -> Result<CommitSettings> {
         self.store.commit_settings().await
+    }
+
+    pub async fn cursor_model_settings(&self) -> Result<crate::store::CursorModelSettings> {
+        self.store.cursor_model_settings().await
+    }
+
+    pub async fn model_settings(&self, id: &str) -> Result<ModelSettingsView> {
+        let (model_id, advertised) = if id.starts_with(crate::plugin::ADAPTER_ID_PREFIX) {
+            let model = self.plugins.model_descriptor(id).await?;
+            (model.model_id, model.context_window_tokens)
+        } else {
+            let model = self
+                .store
+                .model(id)
+                .await?
+                .ok_or_else(|| Error::RunNotFound(format!("model {id}")))?;
+            (model.model_id, None)
+        };
+        Ok(ModelSettingsView {
+            settings: self.store.model_settings(id).await?,
+            default_context_window_tokens: crate::model::default_context_window(
+                &model_id, advertised,
+            ),
+        })
+    }
+
+    pub async fn all_model_settings(&self) -> Result<BTreeMap<String, ModelSettingsView>> {
+        let mut saved = self.store.all_model_settings().await?;
+        let mut settings = BTreeMap::new();
+        for model in self.store.models().await? {
+            settings.insert(
+                model.model_hash.clone(),
+                ModelSettingsView {
+                    settings: saved.remove(&model.model_hash).unwrap_or_default(),
+                    default_context_window_tokens: crate::model::default_context_window(
+                        &model.model_id,
+                        None,
+                    ),
+                },
+            );
+        }
+        for model in self.plugins.configured_models().await {
+            settings.insert(
+                model.id.clone(),
+                ModelSettingsView {
+                    settings: saved.remove(&model.id).unwrap_or_default(),
+                    default_context_window_tokens: crate::model::default_context_window(
+                        &model.model_id,
+                        model.context_window_tokens,
+                    ),
+                },
+            );
+        }
+        Ok(settings)
+    }
+
+    pub async fn set_model_settings(
+        &self,
+        id: &str,
+        settings: crate::store::ModelSettings,
+    ) -> Result<ModelSettingsView> {
+        let mut view = self.model_settings(id).await?;
+        view.settings = self.store.set_model_settings(id, settings).await?;
+        Ok(view)
+    }
+
+    pub async fn set_cursor_default_model(
+        &self,
+        model_id: &str,
+    ) -> Result<crate::store::CursorModelSettings> {
+        let model_id = model_id.trim();
+        crate::cursor::services::default_model::validate(
+            &self.store,
+            Some(&self.plugins),
+            model_id,
+        )
+        .await?;
+        self.store.set_cursor_default_model(model_id).await
     }
 
     pub async fn set_commit_settings(&self, settings: CommitSettings) -> Result<CommitSettings> {

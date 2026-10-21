@@ -13,10 +13,11 @@ apps/desktop/src/
 │   ├── ModelSelect.tsx             # Single/multiple selection behavior and grouped floating menu
 │   └── ModelSelect.module.scss     # Trigger, provider headers, checkbox rows, and footer
 ├── shared/utils/
-│   └── modelProvider.ts            # Built-in model provider display name
+│   ├── modelProvider.ts            # Built-in model provider display name
+│   └── configuredModelOptions.ts   # Shared options for configured API/account models
 └── features/
     ├── home/                        # Builds overview multi-select options
-    └── settings/                    # Builds Commit single-select options and persists selection
+    └── settings/                    # Cursor default and Commit single-select settings
 
 server/src/
 ├── cursor/services/commit_message.rs # Validates built-in/plugin IDs and creates Commit invocation

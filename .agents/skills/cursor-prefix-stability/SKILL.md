@@ -19,12 +19,12 @@ server/
 ## Required invariants
 
 - Unchanged native request history must retain an exact structural prefix across ordinary tool rounds and user turns. Explicit native compaction or a model change can reset that prefix; do not manufacture a reset in the gateway.
-- Native system instructions, tool definitions, and menu parameters come from the installed Cursor factories. Never maintain model-family prompt copies or substitute another model ID to force a desired family.
+- Native system instructions and tool definitions come from installed Cursor factories. The native menu may be enriched with explicit provider-advertised reasoning choices and BYOK context budgets; never maintain a per-family capability table, prompt copy, or substitute another model ID to force a family. Refresh the native provider metadata cache each Run, including when the context limit increases.
 - Pass the Host's state, resources, blob store, action manager, checkpoint handler, interaction listener, and MCP tools by reference. Only route model requests; do not intercept tool execution or automatically approve interactions.
 - Keep stable native conversation and generation identifiers in the model gateway. Per-call log IDs must not become the conversation cache key.
 - Treat each gateway request independently. Protocol conversion must preserve signed reasoning, text/custom tool inputs, tool-call identities, tool results, and ordering without editing earlier messages.
 - The same-protocol path forwards native payloads; configured defaults must preserve explicitly supplied values. Configured templates must use a stable conversation identifier.
-- Context limits are integer token counts. Never send display units such as `200k` into native parameters parsed with `parseInt`.
+- Context limits are integer token counts owned by BYOK model settings for both API and account models. At each Run, replace stale per-chat context parameters with the configured count, or remove them when reset to the native default. Preserve other native parameters and all Host state. Never send display units such as `200k` into native parameters parsed with `parseInt`.
 - Cached model catalogs invalidate on metadata or installed-runtime changes. Reuse the native picker and protobuf factories rather than maintaining a second capability table.
 
 ## Workflow and verification

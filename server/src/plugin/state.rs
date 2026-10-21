@@ -137,6 +137,12 @@ pub struct StoredModel {
     #[serde(default)]
     pub max_output_tokens: Option<u64>,
     #[serde(default)]
+    pub context_window_tokens: Option<u64>,
+    #[serde(default)]
+    pub reasoning_efforts: Vec<String>,
+    #[serde(default)]
+    pub default_reasoning_effort: Option<String>,
+    #[serde(default)]
     pub images: bool,
     #[serde(default = "default_model_enabled")]
     pub enabled: bool,
@@ -185,6 +191,27 @@ impl StoredModel {
                 .get("maxOutputTokens")
                 .and_then(serde_json::Value::as_u64),
             images: capability("images"),
+            context_window_tokens: crate::model::validate_context_window(
+                object
+                    .get("contextWindowTokens")
+                    .and_then(serde_json::Value::as_u64),
+            )?,
+            reasoning_efforts: capabilities
+                .and_then(|c| c.get("reasoningEfforts"))
+                .and_then(serde_json::Value::as_array)
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default(),
+            default_reasoning_effort: capabilities
+                .and_then(|c| c.get("defaultReasoningEffort"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
             enabled: true,
             private_data: object
                 .get("privateData")
@@ -200,7 +227,8 @@ impl StoredModel {
             "displayName": self.display_name,
             "description": self.description,
             "maxOutputTokens": self.max_output_tokens,
-            "capabilities": { "images": self.images },
+            "contextWindowTokens": self.context_window_tokens,
+            "capabilities": { "images": self.images, "reasoningEfforts":self.reasoning_efforts, "defaultReasoningEffort":self.default_reasoning_effort },
             "privateData": self.private_data,
         })
     }
@@ -611,8 +639,8 @@ mod tests {
         let model = StoredModel::from_definition(&serde_json::json!({
             "id": "gpt-test",
             "displayName": "GPT Test",
-            "capabilities": {"images": true},
-            "privateData": {"reasoningEfforts": ["low"]},
+            "capabilities": {"images": true,"reasoningEfforts":["low","high"],"defaultReasoningEffort":"high"},
+            "contextWindowTokens": 400000,
         }))
         .unwrap();
         store
@@ -622,6 +650,14 @@ mod tests {
         let models = store.models("dev.example", "codex").await.unwrap();
         assert_eq!(models.len(), 1);
         assert!(models[0].images);
-        assert_eq!(models[0].private_data["reasoningEfforts"][0], "low");
+        assert_eq!(
+            models[0].snapshot()["capabilities"]["reasoningEfforts"],
+            serde_json::json!(["low", "high"])
+        );
+        assert_eq!(
+            models[0].snapshot()["capabilities"]["defaultReasoningEffort"],
+            "high"
+        );
+        assert_eq!(models[0].snapshot()["contextWindowTokens"], 400000);
     }
 }

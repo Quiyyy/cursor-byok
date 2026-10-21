@@ -3,6 +3,7 @@
 pub mod account;
 pub mod commit_message;
 pub mod compatibility;
+pub mod default_model;
 pub(crate) mod entitlement;
 pub mod model_catalog;
 pub mod observability;

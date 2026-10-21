@@ -164,6 +164,16 @@ export interface CommitSettingsView extends CommitSettings {
   default_prompt: string;
 }
 
+export interface CursorModelSettings {
+  model_id: string;
+  updated_at_ms: number;
+}
+
+export interface ModelSettings {
+  context_window_tokens: number | null;
+  default_context_window_tokens: number;
+}
+
 export interface TokenPricingSettings {
   input_per_million: number;
   output_per_million: number;
@@ -288,6 +298,9 @@ export interface PluginModelDescriptor {
   icon: string;
   providerType: string;
   maxOutputTokens: number | null;
+  contextWindowTokens: number | null;
+  reasoningEfforts: string[];
+  defaultReasoningEffort: string | null;
   images: boolean;
   enabled: boolean;
 }
@@ -546,6 +559,11 @@ export const api = {
   desktopSettings: () => request<DesktopSettings>("/settings/desktop"),
   setDesktopSettings: (settings: DesktopSettings) => request<DesktopSettings>("/settings/desktop", { method: "PUT", body: JSON.stringify(settings) }),
   commitSettings: (locale: Locale) => request<CommitSettingsView>("/settings/commit", { headers: { "accept-language": locale } }),
+  cursorModelSettings: () => request<CursorModelSettings>("/settings/cursor-model"),
+  allModelSettings: () => request<Record<string, ModelSettings>>("/model-settings"),
+  modelSettings: (id: string) => request<ModelSettings>(`/models/${encodeURIComponent(id)}/settings`),
+  setModelSettings: (id: string, settings: Pick<ModelSettings, "context_window_tokens">) => request<ModelSettings>(`/models/${encodeURIComponent(id)}/settings`, { method: "PUT", body: JSON.stringify(settings) }),
+  setCursorDefaultModel: (model_id: string) => request<CursorModelSettings>("/settings/cursor-model", { method: "PUT", body: JSON.stringify({ model_id }) }),
   setCommitSettings: (settings: CommitSettings) => request<CommitSettingsView>("/settings/commit", { method: "PUT", body: JSON.stringify(settings) }),
   pricingSettings: () => request<TokenPricingSettings>("/settings/pricing"),
   setPricingSettings: (settings: TokenPricingSettings) => request<TokenPricingSettings>("/settings/pricing", { method: "PUT", body: JSON.stringify(settings) }),

@@ -349,6 +349,47 @@ mod tests {
             assert_eq!(value["data"][0]["api_types"], json!(["openai_chat"]));
             assert!(!String::from_utf8_lossy(&bytes).contains("provider-secret"));
         }
+        for (context, expected) in [
+            (Some(200000), 200000),
+            (Some(1000000), 1000000),
+            (None, 500000),
+        ] {
+            store
+                .set_model_settings(
+                    &ids[0],
+                    crate::store::ModelSettings {
+                        context_window_tokens: context,
+                    },
+                )
+                .await
+                .unwrap();
+            let response = router
+                .clone()
+                .oneshot(request(&ids[0], "native-test-key"))
+                .await
+                .unwrap();
+            let metadata: serde_json::Value =
+                serde_json::from_slice(&to_bytes(response.into_body(), 65536).await.unwrap())
+                    .unwrap();
+            assert_eq!(
+                metadata["data"][0]["capabilities"]["context_length"],
+                json!(expected)
+            );
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::get(format!("/__byok-native__/models/byok:{}", ids[0]))
+                        .header("authorization", "Bearer native-test-key")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let resolved: serde_json::Value =
+                serde_json::from_slice(&to_bytes(response.into_body(), 65536).await.unwrap())
+                    .unwrap();
+            assert_eq!(resolved["contextWindowTokens"], json!(expected));
+        }
         let response = router
             .oneshot(
                 Request::post(format!(

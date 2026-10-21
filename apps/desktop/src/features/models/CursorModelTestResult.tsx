@@ -14,7 +14,7 @@ export type CursorModelTestState = (
 export function CursorModelTestResult({ state, testing = false, compact = false }: {
   state?: CursorModelTestState;
   testing?: boolean;
-  /** List rows keep unknown, running, cancelled and completed states explicit. */
+  /** List rows show a status only while testing or after a test. */
   compact?: boolean;
 }) {
   const { locale } = useI18n();
@@ -24,11 +24,7 @@ export function CursorModelTestResult({ state, testing = false, compact = false 
       ? <span className={`${styles.compact} ${styles.testing}`}>{t("测试中…")}</span>
       : <div className={`${styles.root} ${styles.testing}`}><span className={styles.summary}>{t("测试中…")}</span></div>;
   }
-  if (!state) {
-    return compact
-      ? <span className={`${styles.compact} ${styles.idle}`}>{t("未测试")}</span>
-      : <div className={`${styles.root} ${styles.idle}`}><span className={styles.summary}>{t("未测试")}</span></div>;
-  }
+  if (!state) return null;
   if (state.status === "cancelled") {
     return compact
       ? <span className={`${styles.compact} ${styles.idle}`}>{t("测试已取消")}</span>

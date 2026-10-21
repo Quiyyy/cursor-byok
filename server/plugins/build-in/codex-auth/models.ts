@@ -64,6 +64,8 @@ export function parseOfficialModels(body: unknown): ModelDefinition[] {
     if (!id || seen.has(id)) continue;
     seen.add(id);
     const efforts = parseReasoningEfforts(model);
+    const defaultEffort = text(model.default_reasoning_level ?? model.default_reasoning_effort);
+    const contextWindowTokens = positiveInteger(model.context_window ?? model.context_window_tokens);
     const description = text(model.description);
     const maxOutputTokens = positiveInteger(
       model.max_output_tokens ?? model.maxOutputTokens ?? model.max_completion_tokens ??
@@ -75,8 +77,12 @@ export function parseOfficialModels(body: unknown): ModelDefinition[] {
         id,
       ...(description ? { description } : {}),
       ...(maxOutputTokens !== null ? { maxOutputTokens } : {}),
-      capabilities: { images: true },
-      privateData: { reasoningEfforts: efforts },
+      ...(contextWindowTokens !== null ? { contextWindowTokens } : {}),
+      capabilities: {
+        images: true,
+        reasoningEfforts: efforts,
+        ...(defaultEffort && efforts.includes(defaultEffort) ? { defaultReasoningEffort: defaultEffort } : {}),
+      },
     });
   }
   const defaultModel = modelId(
@@ -97,9 +103,7 @@ export function parseOfficialModels(body: unknown): ModelDefinition[] {
 }
 
 export function reasoningEfforts(model: ModelSnapshot): string[] {
-  const data = object(model.privateData);
-  const efforts = data?.reasoningEfforts;
-  return Array.isArray(efforts) ? efforts.filter((item) => typeof item === "string") : [];
+  return model.capabilities?.reasoningEfforts ?? [];
 }
 
 export const codexModels: ModelSupport = {
