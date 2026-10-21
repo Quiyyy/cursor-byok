@@ -5,12 +5,12 @@ use cursor_server::{
 };
 
 fn protocol() -> serde_json::Value {
-    serde_json::from_str(include_str!("../prompt/cursor/protocol.json")).unwrap()
+    serde_json::from_str(include_str!("fixtures/cursor/protocol.json")).unwrap()
 }
 
 #[test]
 fn all_models_use_the_same_protocol() {
-    let compiler = PromptCompiler::new(PromptAssets::embedded().unwrap());
+    let compiler = PromptCompiler::new(PromptAssets::fixture().unwrap());
     let mut first = ModelSpec::new("first-model");
     first.supports_image_generation = true;
     let mut second = ModelSpec::new("second-model");
@@ -35,7 +35,7 @@ fn updated_protocol_applies_to_next_turn_without_changing_active_snapshot() {
     let path = directory.path().join("protocol.json");
     let mut data = protocol();
     std::fs::write(&path, serde_json::to_vec(&data).unwrap()).unwrap();
-    let compiler = PromptCompiler::from_protocol_file(path.clone()).unwrap();
+    let compiler = PromptCompiler::from_fixture_file(path.clone()).unwrap();
     let active = compiler.snapshot().unwrap();
     let model = ModelSpec::new("any-model");
     let before = active.prompt_spec(Mode::Agent, &model, &[], false).unwrap();
@@ -88,7 +88,7 @@ fn incomplete_or_ambiguous_protocol_is_rejected() {
         }
         std::fs::write(&path, serde_json::to_vec(&data).unwrap()).unwrap();
         assert!(
-            PromptCompiler::from_protocol_file(path.clone()).is_err(),
+            PromptCompiler::from_fixture_file(path.clone()).is_err(),
             "accepted {invalid}"
         );
     }

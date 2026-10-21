@@ -1,4 +1,4 @@
-//! Every exported built-in must reach an executable Cursor route with its native arguments.
+//! Static transport projection contracts. Native execution is covered by native_runtime and the worker tests.
 use cursor_server::{
     cursor::{
         protocol::proto::agent::v1 as pb,
@@ -41,16 +41,19 @@ fn arguments(name: &str) -> Value {
 }
 
 #[tokio::test]
-async fn every_native_tool_has_a_working_dispatch_contract() {
+async fn static_transport_tools_have_a_dispatch_contract() {
     let protocol: Value =
-        serde_json::from_str(include_str!("../prompt/cursor/protocol.json")).unwrap();
+        serde_json::from_str(include_str!("fixtures/cursor/protocol.json")).unwrap();
     let tools: Vec<ToolDefinition> = serde_json::from_value(protocol["tools"].clone()).unwrap();
     let context = ExecContext {
         default_subagent_model: "fixture-model".into(),
         allow_subagents: true,
         ..Default::default()
     };
-    for definition in tools {
+    for definition in tools
+        .into_iter()
+        .filter(|tool| !matches!(tool.name.as_str(), "Write" | "StrReplace" | "EditNotebook"))
+    {
         let args = arguments(&definition.name);
         for required in definition.parameters["required"]
             .as_array()

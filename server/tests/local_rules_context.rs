@@ -31,12 +31,7 @@ async fn local_markdown_rules_land_in_the_request_context_message() {
         ModelEvent::TextEnd,
         ModelEvent::Done(FinishReason::Stop),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
 
     let rules_dir = tempfile::tempdir().unwrap();
     let rules_root = rules_dir.path().join("rules");

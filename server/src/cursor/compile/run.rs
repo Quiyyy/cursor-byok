@@ -45,6 +45,7 @@ pub struct CursorRunContext {
     pub checkpoint_prompt: PromptSpec,
     pub compacting: bool,
     pub background_completion: bool,
+    pub compiler: PromptCompiler,
 }
 
 pub(crate) struct PrepareDependencies<'a> {
@@ -143,7 +144,11 @@ pub(crate) async fn prepare(
         mode_from_proto(mode_number)?
     };
     let mut model = model::requested_model(request)?;
+    let mut profile_model = crate::plugin::parse_model_id(&model.model_id)
+        .map(|(_, _, model)| model.to_string())
+        .unwrap_or_else(|| model.model_id.clone());
     if let Some(configured_model) = store.model(&model.model_id).await? {
+        profile_model = configured_model.model_id.clone();
         configured_model.configure(&mut model);
     }
     let dynamic = context::dynamic_mcp(request, &request_context)?;
@@ -153,6 +158,14 @@ pub(crate) async fn prepare(
         .is_some_and(|(_, selection)| {
             matches!(selection, crate::model::SubagentModelOverride::Disabled)
         });
+    let compiler = compiler
+        .for_run(
+            checkpoint_mode,
+            &profile_model,
+            &request_context,
+            request.subagent_type_name.is_some() || subagents_disabled,
+        )
+        .await?;
     let mut checkpoint_prompt = compiler.prompt_spec(
         checkpoint_mode,
         &model,
@@ -353,6 +366,7 @@ pub(crate) async fn prepare(
                 .map(|(name, (wire, _))| (name, wire))
                 .collect(),
             checkpoint_prompt,
+            compiler,
             compacting,
             background_completion,
         },

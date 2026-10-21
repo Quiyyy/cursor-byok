@@ -97,12 +97,7 @@ fn captured_kv_ack_hex_decodes_as_agent_client_message() {
 #[tokio::test]
 async fn bidi_append_gzip_body_is_decompressed_before_protobuf_decode() {
     let (_directory, store) = fixtures::temp_store().await;
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let clients = NetworkClients::new(store.clone());
     let registry = TransportRegistry::new(
         store,

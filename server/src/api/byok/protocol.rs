@@ -441,6 +441,7 @@ fn parse_tools(value: Option<&Value>, protocol: Protocol, prompt: &mut PromptSpe
             tool
         };
         prompt.tools.push(ToolDefinition {
+            input_format: None,
             name: required_string(function, "name")?.into(),
             description: function
                 .get("description")

@@ -19,7 +19,7 @@ async fn existing_checkpoint_uses_latest_protocol_without_rewriting_messages() {
     let (directory, store) = fixtures::temp_store().await;
     let path = directory.path().join("protocol.json");
     let mut assets: serde_json::Value =
-        serde_json::from_str(include_str!("../prompt/cursor/protocol.json")).unwrap();
+        serde_json::from_str(include_str!("fixtures/cursor/protocol.json")).unwrap();
     std::fs::write(&path, serde_json::to_vec(&assets).unwrap()).unwrap();
     let provider = fake_provider::FakeProvider::default();
     for index in 0..2 {
@@ -36,7 +36,7 @@ async fn existing_checkpoint_uses_latest_protocol_without_rewriting_messages() {
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
-        PromptCompiler::from_protocol_file(path.clone()).unwrap(),
+        PromptCompiler::from_fixture_file(path.clone()).unwrap(),
     );
     let mut blobs = HashMap::new();
     let first = drive(&registry, "first", None, &mut blobs).await;

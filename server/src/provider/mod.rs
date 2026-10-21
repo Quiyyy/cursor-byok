@@ -8,6 +8,7 @@ mod openai_responses;
 mod recorder;
 mod request_template;
 mod router;
+pub(crate) mod text_tools;
 
 use std::pin::Pin;
 

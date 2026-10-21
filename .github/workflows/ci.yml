@@ -80,6 +80,11 @@ jobs:
         working-directory: apps/desktop
         run: npm run check
 
+      - name: Check native runtime bundle and portable bridge tests
+        run: |
+          node server/cursor-runtime/build.mjs --check
+          node --test server/cursor-runtime/runtime.test.mjs support/cursor-assets-extractor/locate.test.mjs
+
   desktop-rust:
     name: Desktop Rust (${{ matrix.os }})
     strategy:

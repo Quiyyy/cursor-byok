@@ -8,6 +8,7 @@
 
 - Rust stable、Cargo、rustfmt 和 Clippy。
 - Node.js 22 或更新的兼容版本，以及 npm。
+- 运行 BYOK Agent 需要本机 Cursor 安装。非默认路径设置 `CURSOR_APP_DIR`；原生 worker 构建与本机验证见[维护说明](./support/cursor-assets-extractor/README.md)。
 - Tauri 2 对应平台的构建依赖；Windows 使用 MSVC 工具链，Linux 依赖可参照 [CI](./.github/workflows/ci.yml) 的安装步骤。
 - Deno 2.9.6 用于插件开发和测试。普通用户可通过应用准备插件运行组件。
 

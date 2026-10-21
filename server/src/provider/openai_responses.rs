@@ -29,6 +29,7 @@ struct ResponseToolState {
     emitted_arguments: usize,
     started: bool,
     ended: bool,
+    raw_input: bool,
 }
 
 enum ResponseToolArguments<'a> {
@@ -76,10 +77,10 @@ impl Provider for OpenAiResponsesProvider {
                 "include": ["reasoning.encrypted_content"]
             });
             if !request.prompt.tools.is_empty() {
-                body["tools"] = json!(request.prompt.tools.iter().map(|tool| json!({
-                    "type":"function", "name":tool.name, "description":tool.description,
-                    "parameters":tool.parameters, "strict":false
-                })).collect::<Vec<_>>());
+                body["tools"] = json!(request.prompt.tools.iter().map(|tool| match &tool.input_format {
+                    Some(format)=>json!({"type":"custom","name":tool.name,"description":tool.description,"format":format}),
+                    None=>json!({"type":"function","name":tool.name,"description":tool.description,"parameters":tool.parameters,"strict":false}),
+                }).collect::<Vec<_>>());
             }
             apply_model(&mut body, &request.model, config.max_output_tokens)?;
             merge_extra_params(&mut body, &request.model.extra_params)?;
@@ -158,7 +159,7 @@ impl Provider for OpenAiResponsesProvider {
                         if thinking_open => { thinking_open = false; yield ModelEvent::ThinkingEnd; }
                     "response.output_item.added" => {
                         let item = value.get("item").unwrap_or(&Value::Null);
-                        if item.get("type").and_then(Value::as_str) == Some("function_call") {
+                        if matches!(item.get("type").and_then(Value::as_str),Some("function_call"|"custom_tool_call")) {
                             let index = required_u64(&value, "output_index")? as usize;
                             saw_tool = true;
                             for event in update_response_tool(index, item, ResponseToolArguments::None, false, &mut tools)? { yield event; }
@@ -179,12 +180,12 @@ impl Provider for OpenAiResponsesProvider {
                                 }
                                 if text_open { text_open = false; yield ModelEvent::TextEnd; }
                             }
-                            Some("function_call") => {
+                            Some("function_call"|"custom_tool_call") => {
                                 saw_completed_item = true;
                                 let index = required_u64(&value, "output_index")? as usize;
                                 saw_tool = true;
                                 let arguments = item
-                                    .get("arguments")
+                                    .get(if item["type"]=="custom_tool_call" {"input"} else {"arguments"})
                                     .and_then(Value::as_str)
                                     .map_or(ResponseToolArguments::None, ResponseToolArguments::Snapshot);
                                 for event in update_response_tool(index, item, arguments, true, &mut tools)? { yield event; }
@@ -192,16 +193,19 @@ impl Provider for OpenAiResponsesProvider {
                             _ => {}
                         }
                     }
-                    "response.function_call_arguments.delta" => {
+                    "response.function_call_arguments.delta" | "response.custom_tool_call_input.delta" => {
                         let index = required_u64(&value, "output_index")? as usize;
+                        if kind=="response.custom_tool_call_input.delta" {tools.entry(index).or_default().raw_input=true;}
                         if let Some(delta) = value.get("delta").and_then(Value::as_str) {
                             saw_tool = true;
                             for event in update_response_tool(index, &Value::Null, ResponseToolArguments::Delta(delta), false, &mut tools)? { yield event; }
                         }
                     }
-                    "response.function_call_arguments.done" => {
+                    "response.function_call_arguments.done" | "response.custom_tool_call_input.done" => {
                         let index = required_u64(&value, "output_index")? as usize;
-                        match value.get("arguments").and_then(Value::as_str) {
+                        let raw=kind=="response.custom_tool_call_input.done";
+                        if raw {tools.entry(index).or_default().raw_input=true;}
+                        match value.get(if raw {"input"} else {"arguments"}).and_then(Value::as_str) {
                             Some("") => {
                                 for event in update_response_tool(
                                     index,
@@ -333,6 +337,9 @@ fn update_response_tool(
     tools: &mut std::collections::BTreeMap<usize, ResponseToolState>,
 ) -> Result<Vec<ModelEvent>> {
     let tool = tools.entry(index).or_default();
+    if item["type"] == "custom_tool_call" {
+        tool.raw_input = true;
+    }
     if let Some(call_id) = item.get("call_id").and_then(Value::as_str) {
         tool.call_id.get_or_insert_with(|| call_id.into());
     }
@@ -362,6 +369,9 @@ fn update_response_tool(
                 call_id: call_id.clone(),
                 name: name.clone(),
             });
+            if tool.raw_input {
+                events.push(ModelEvent::ToolCallRawInput { index });
+            }
         }
     }
     if tool.started && tool.emitted_arguments < tool.arguments.len() {
@@ -407,6 +417,7 @@ fn apply_model(
 }
 
 fn responses_input(messages: &[ProjectedMessage]) -> Result<Vec<Value>> {
+    let mut raw_calls = std::collections::HashSet::new();
     let mut input = Vec::new();
     for message in messages {
         match &message.content {
@@ -420,7 +431,7 @@ fn responses_input(messages: &[ProjectedMessage]) -> Result<Vec<Value>> {
                     Value::Array(responses_content(&result.provider_parts, "input_text")?)
                 };
                 input.push(json!({
-                    "type": "function_call_output",
+                    "type": if raw_calls.contains(result.call_id.as_str()) {"custom_tool_call_output"} else {"function_call_output"},
                     "call_id": result.call_id,
                     "output": output,
                 }));
@@ -451,12 +462,19 @@ fn responses_input(messages: &[ProjectedMessage]) -> Result<Vec<Value>> {
                 }
                 push_responses_text(&mut input, &message.role, text);
                 for call in calls {
-                    input.push(json!({
+                    if call.arguments.is_string() {
+                        raw_calls.insert(call.call_id.as_str());
+                    } else {
+                        raw_calls.remove(call.call_id.as_str());
+                    }
+                    input.push(if let Some(raw)=call.arguments.as_str() { json!({
+                        "type":"custom_tool_call","call_id":call.call_id,"name":call.name,"input":raw,
+                    }) } else {json!({
                         "type": "function_call",
                         "call_id": call.call_id,
                         "name": call.name,
                         "arguments": serde_json::to_string(&call.arguments)?,
-                    }));
+                    })});
                 }
             }
         }
@@ -565,7 +583,52 @@ pub(crate) fn responses_usage(value: &Value) -> Usage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::ProviderReplayState;
+    use crate::model::{ProviderReplayState, ToolCallContent, ToolResultContent};
+
+    #[test]
+    fn custom_tool_replay_preserves_raw_input_without_changing_an_earlier_result_type() {
+        fn round(arguments: Value) -> [ProjectedMessage; 2] {
+            [
+                ProjectedMessage {
+                    message_id: "assistant".into(),
+                    role: Role::Assistant,
+                    content: ProjectedContent::Assistant {
+                        text: String::new(),
+                        thinking: String::new(),
+                        replay_state: None,
+                        calls: vec![ToolCallContent {
+                            index: 0,
+                            call_id: "reused".into(),
+                            name: "ApplyPatch".into(),
+                            arguments,
+                        }],
+                    },
+                },
+                ProjectedMessage {
+                    message_id: "result".into(),
+                    role: Role::Tool,
+                    content: ProjectedContent::ToolResult(ToolResultContent {
+                        call_id: "reused".into(),
+                        name: "ApplyPatch".into(),
+                        content: "ok".into(),
+                        is_error: false,
+                        image: None,
+                        provider_parts: Vec::new(),
+                    }),
+                },
+            ]
+        }
+        let first = round(json!({"input":"old JSON call"}));
+        let patch = "*** Begin Patch\n*** End Patch\n";
+        let mut history = first.to_vec();
+        history.extend(round(json!(patch)));
+        let prefix = responses_input(&first).unwrap();
+        let full = responses_input(&history).unwrap();
+        assert_eq!(prefix, full[..prefix.len()]);
+        assert_eq!(full[2]["type"], "custom_tool_call");
+        assert_eq!(full[2]["input"], patch);
+        assert_eq!(full[3]["type"], "custom_tool_call_output");
+    }
 
     #[test]
     fn reasoning_replay_projects_response_items_to_valid_input_items() {

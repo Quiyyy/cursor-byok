@@ -11,8 +11,6 @@ use tokio::sync::Mutex;
 
 use crate::{cursor::protocol::proto::agent::v1 as pb, model::ToolCall, Error, Result};
 
-use super::edit::EditWrite;
-
 #[derive(Clone, Default)]
 pub struct CursorToolRuntime {
     next_id: Arc<AtomicU32>,
@@ -34,8 +32,16 @@ pub(crate) struct PendingExec {
 pub(crate) enum ExecStage {
     Direct,
     DynamicMcp(pb::McpToolDefinition),
-    EditRead,
-    EditWrite(EditWrite),
+    Native(crate::cursor::native::NativeCallback),
+}
+
+impl PendingExec {
+    fn is_task(&self) -> bool {
+        match &self.stage {
+            ExecStage::Native(callback) => callback.is_task,
+            _ => self.call.name.eq_ignore_ascii_case("Task"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -116,6 +122,7 @@ impl ExecContext {
 pub(crate) struct PendingInteraction {
     pub call: ToolCall,
     pub started_at_ms: u64,
+    pub native: Option<crate::cursor::native::NativeCallback>,
 }
 
 impl CursorToolRuntime {
@@ -149,31 +156,6 @@ impl CursorToolRuntime {
         .await
     }
 
-    pub(crate) async fn reserve_edit_read(
-        &self,
-        call: &ToolCall,
-        context: &ExecContext,
-    ) -> Result<u32> {
-        self.reserve_exec_stage(call, context, ExecStage::EditRead, None)
-            .await
-    }
-
-    pub(crate) async fn reserve_edit_write(
-        &self,
-        call: &ToolCall,
-        context: &ExecContext,
-        write: EditWrite,
-        started_at_ms: u64,
-    ) -> Result<u32> {
-        self.reserve_exec_stage(
-            call,
-            context,
-            ExecStage::EditWrite(write),
-            Some(started_at_ms),
-        )
-        .await
-    }
-
     async fn reserve_exec_stage(
         &self,
         call: &ToolCall,
@@ -203,6 +185,7 @@ impl CursorToolRuntime {
             PendingInteraction {
                 call: call.clone(),
                 started_at_ms: now_ms(),
+                native: None,
             },
         );
         Ok(id)
@@ -223,6 +206,51 @@ impl CursorToolRuntime {
         };
         entry.stdout.push_str(data);
         true
+    }
+
+    pub(crate) async fn reserve_native(
+        &self,
+        call: &ToolCall,
+        context: &ExecContext,
+        callback: crate::cursor::native::NativeCallback,
+    ) -> Result<u32> {
+        self.reserve_exec_stage(call, context, ExecStage::Native(callback), None)
+            .await
+    }
+    pub(crate) async fn native_exec(
+        &self,
+        id: u32,
+    ) -> Option<crate::cursor::native::NativeCallback> {
+        self.execs
+            .lock()
+            .await
+            .get(&id)
+            .and_then(|p| match &p.stage {
+                ExecStage::Native(callback) => Some(callback.clone()),
+                _ => None,
+            })
+    }
+    pub(crate) async fn bind_native_interaction(
+        &self,
+        id: u32,
+        callback: crate::cursor::native::NativeCallback,
+    ) -> Result<()> {
+        let mut interactions = self.interactions.lock().await;
+        let pending = interactions
+            .get_mut(&id)
+            .ok_or_else(|| Error::Protocol("native interaction reservation is missing".into()))?;
+        pending.native = Some(callback);
+        Ok(())
+    }
+    pub(crate) async fn native_interaction(
+        &self,
+        id: u32,
+    ) -> Option<crate::cursor::native::NativeCallback> {
+        self.interactions
+            .lock()
+            .await
+            .get(&id)
+            .and_then(|p| p.native.clone())
     }
 
     pub async fn append_stderr(&self, id: u32, data: &str) -> bool {
@@ -278,6 +306,16 @@ impl CursorToolRuntime {
 
     pub async fn drain_running(&self) -> Vec<u32> {
         let mut entries = self.execs.lock().await;
+        for entry in entries.values() {
+            if let ExecStage::Native(callback) = &entry.stage {
+                callback.cancel();
+            }
+        }
+        for pending in self.interactions.lock().await.values() {
+            if let Some(callback) = &pending.native {
+                callback.cancel();
+            }
+        }
         let mut ids = entries.drain().map(|(id, _)| id).collect::<Vec<_>>();
         ids.sort_unstable();
         self.interactions.lock().await.clear();
@@ -288,12 +326,22 @@ impl CursorToolRuntime {
 
     pub async fn interrupt_for_run_replacement(&self) -> Vec<u32> {
         let mut execs = self.execs.lock().await;
+        for entry in execs.values() {
+            if let ExecStage::Native(callback) = &entry.stage {
+                callback.cancel();
+            }
+        }
         let mut abort_ids = execs.keys().copied().collect::<Vec<_>>();
         let mut interrupted_ids = abort_ids.clone();
         execs.clear();
         drop(execs);
 
         let mut interactions = self.interactions.lock().await;
+        for pending in interactions.values() {
+            if let Some(callback) = &pending.native {
+                callback.cancel();
+            }
+        }
         interrupted_ids.extend(interactions.keys().copied());
         interactions.clear();
         drop(interactions);
@@ -310,8 +358,11 @@ impl CursorToolRuntime {
             let mut abort_ids = Vec::new();
             let mut interrupted_ids = Vec::new();
             entries.retain(|id, entry| {
-                let keep_running = entry.call.name.eq_ignore_ascii_case("Task");
+                let keep_running = entry.is_task();
                 if !keep_running {
+                    if let ExecStage::Native(callback) = &entry.stage {
+                        callback.cancel();
+                    }
                     abort_ids.push(*id);
                     interrupted_ids.push(*id);
                 }
@@ -321,8 +372,21 @@ impl CursorToolRuntime {
         };
         let interaction_ids = {
             let mut interactions = self.interactions.lock().await;
-            let ids = interactions.keys().copied().collect::<Vec<_>>();
-            interactions.clear();
+            let mut ids = Vec::new();
+            interactions.retain(|id, pending| {
+                if pending
+                    .native
+                    .as_ref()
+                    .is_some_and(|callback| callback.is_task)
+                {
+                    return true;
+                }
+                if let Some(callback) = &pending.native {
+                    callback.cancel();
+                }
+                ids.push(*id);
+                false
+            });
             ids
         };
         let mut interrupted = self.interrupted.lock().await;
@@ -345,8 +409,7 @@ impl CursorToolRuntime {
             .await
             .iter()
             .filter_map(|(id, entry)| {
-                (entry.call.call_id == call_id && entry.call.name.eq_ignore_ascii_case("Task"))
-                    .then_some(*id)
+                (entry.call.call_id == call_id && entry.is_task()).then_some(*id)
             })
             .min()
     }
@@ -356,7 +419,7 @@ impl CursorToolRuntime {
             .lock()
             .await
             .iter()
-            .filter(|(_, entry)| entry.call.name.eq_ignore_ascii_case("Task"))
+            .filter(|(_, entry)| entry.is_task())
             .map(|(id, entry)| (*id, entry.call.clone()))
             .collect()
     }

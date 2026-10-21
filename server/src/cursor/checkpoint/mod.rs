@@ -3,6 +3,7 @@
 mod builder;
 mod derived;
 pub mod messages;
+mod native;
 mod recovery;
 mod roots;
 mod steps;

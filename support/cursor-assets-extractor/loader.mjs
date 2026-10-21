@@ -3,11 +3,16 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
-export function load(factories, root) {
+export function load(factories, root, {execute = false} = {}) {
   const native = createRequire(import.meta.url);
+  const installed = createRequire(root + '/main.js');
   const imports = [];
   function restrictedRequire(id) {
     imports.push(id);
+    if (execute && [
+      '../../cursor-agent-exec/dist/node_modules/tree-sitter',
+      '../../cursor-agent-exec/dist/node_modules/tree-sitter-bash'
+    ].includes(id)) return installed(id);
     if (id === 'piscina') return class DisabledWorkerPool {
       constructor() {
         throw new Error('Worker spawning disabled during extraction');

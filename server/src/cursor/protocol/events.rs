@@ -36,7 +36,8 @@ pub fn response_event(
             })
         }
         ModelEvent::ToolCallArgumentsDelta { .. } => return Ok(None),
-        ModelEvent::ToolCallEnd { .. }
+        ModelEvent::ToolCallRawInput { .. }
+        | ModelEvent::ToolCallEnd { .. }
         | ModelEvent::Start { .. }
         | ModelEvent::TextStart
         | ModelEvent::TextEnd

@@ -35,6 +35,7 @@ pub struct ModelCycleFailure {
 struct OpenTool {
     call: ToolCall,
     ended: bool,
+    raw_input: bool,
 }
 
 pub async fn consume_model_cycle(
@@ -191,6 +192,7 @@ pub async fn consume_model_cycle(
                                 argument_error: None,
                             },
                             ended: false,
+                            raw_input: false,
                         });
                         send(
                             client,
@@ -205,6 +207,13 @@ pub async fn consume_model_cycle(
                     }
                 }
             }
+            ModelEvent::ToolCallRawInput { index } => match tools.get_mut(&index) {
+                Some(tool) if !tool.ended && tool.call.arguments_text.is_empty() => {
+                    tool.raw_input = true;
+                    Ok(())
+                }
+                _ => Err("provider emitted a late or unknown raw-input declaration"),
+            },
             ModelEvent::ToolCallArgumentsDelta { index, delta } => match tools.get_mut(&index) {
                 Some(tool) if !tool.ended => {
                     tool.call.arguments_text.push_str(&delta);
@@ -215,13 +224,15 @@ pub async fn consume_model_cycle(
             },
             ModelEvent::ToolCallEnd { index } => match tools.get_mut(&index) {
                 Some(tool) if !tool.ended => {
-                    let arguments = if tool.call.arguments_text.trim().is_empty() {
+                    let arguments = if tool.raw_input {
+                        Ok(serde_json::Value::String(tool.call.arguments_text.clone()))
+                    } else if tool.call.arguments_text.trim().is_empty() {
                         Ok(serde_json::json!({}))
                     } else {
                         serde_json::from_str(&tool.call.arguments_text)
                     };
                     match arguments {
-                        Ok(arguments) if arguments.is_object() => {
+                        Ok(arguments) if arguments.is_object() || tool.raw_input => {
                             tool.call.arguments = arguments;
                         }
                         Ok(_) => {

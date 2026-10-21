@@ -5,7 +5,7 @@ use crate::{
     cursor::{
         protocol::proto::agent::v1 as pb,
         tools::{
-            codec, edit,
+            codec,
             tool_call_result::{self as tool_result, ToolCompletion},
         },
     },
@@ -374,7 +374,7 @@ pub fn render_tool_call(call: &ToolCall, completed: bool) -> Result<pb::ToolCall
                 } else {
                     aliased(&["path", "file_path", "filePath"])
                 },
-                stream_content: Some(edit::normalize_newlines(&stream_content)),
+                stream_content: Some(stream_content.replace("\r\n", "\n").replace('\r', "\n")),
             })
         }
         Some(pb::tool_call::Tool::ReadLintsToolCall(tool)) => {

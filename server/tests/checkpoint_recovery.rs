@@ -241,12 +241,7 @@ async fn eligible_pending_checkpoint_resumes_tools_before_the_next_model_call() 
         ModelEvent::TextEnd,
         ModelEvent::Done(FinishReason::Stop),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -468,12 +463,7 @@ async fn eligible_pending_checkpoint_resumes_tools_before_the_next_model_call() 
 #[tokio::test]
 async fn recovery_rejects_a_kv_get_payload_whose_hash_does_not_match_the_blob_id() {
     let (_directory, store) = fixtures::temp_store().await;
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(fake_provider::FakeProvider::default()),

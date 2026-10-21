@@ -11,29 +11,70 @@ use super::{assets::runtime_expression, Mode, PromptAssets};
 #[derive(Clone)]
 pub struct PromptCompiler {
     assets: PromptAssets,
-    protocol_file: Option<PathBuf>,
+    fixture_file: Option<PathBuf>,
+    native: Option<crate::cursor::native::NativeRuntime>,
+    native_run: Option<crate::cursor::native::NativeRun>,
 }
 
 impl PromptCompiler {
     pub fn new(assets: PromptAssets) -> Self {
         Self {
             assets,
-            protocol_file: None,
+            fixture_file: None,
+            native: None,
+            native_run: None,
         }
     }
 
-    pub fn from_protocol_file(path: PathBuf) -> Result<Self> {
-        let assets = PromptAssets::with_protocol_file(&path)?;
+    /// Explicit fixture source for deterministic projection tests; never an application fallback.
+    pub fn from_fixture_file(path: PathBuf) -> Result<Self> {
+        let assets = PromptAssets::with_fixture_file(&path)?;
         Ok(Self {
             assets,
-            protocol_file: Some(path),
+            fixture_file: Some(path),
+            native: None,
+            native_run: None,
         })
+    }
+
+    pub fn native(runtime: crate::cursor::native::NativeRuntime) -> Result<Self> {
+        let mut compiler = Self::new(PromptAssets::native_templates()?);
+        compiler.native = Some(runtime);
+        Ok(compiler)
+    }
+    pub async fn for_run(
+        &self,
+        mode: Mode,
+        model_id: &str,
+        context: &crate::cursor::protocol::proto::agent::v1::RequestContext,
+        subagent: bool,
+    ) -> Result<Self> {
+        let Some(runtime) = &self.native else {
+            return self.snapshot();
+        };
+        let mode_number = match mode {
+            Mode::Ask => 2,
+            Mode::Plan => 3,
+            Mode::Debug => 4,
+            Mode::Multitask => 7,
+            _ => 1,
+        };
+        let run = runtime
+            .open(model_id, mode_number, context, subagent)
+            .await?;
+        let mut compiler = self.clone();
+        compiler.assets.apply_native(mode, &run.profile);
+        compiler.native_run = Some(run);
+        Ok(compiler)
+    }
+    pub fn native_run(&self) -> Option<crate::cursor::native::NativeRun> {
+        self.native_run.clone()
     }
 
     /// Reload at a turn boundary; the returned snapshot is immutable for that run.
     pub fn snapshot(&self) -> Result<Self> {
-        match &self.protocol_file {
-            Some(path) => Ok(Self::new(PromptAssets::with_protocol_file(path)?)),
+        match &self.fixture_file {
+            Some(path) => Ok(Self::new(PromptAssets::with_fixture_file(path)?)),
             None => Ok(self.clone()),
         }
     }

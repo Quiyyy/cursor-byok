@@ -147,6 +147,21 @@ impl ConversationOutput {
     }
 
     async fn run_inner(&mut self) -> Result<RunFinish> {
+        self.compiler = self.context.compiler.clone();
+        if let Some(native) = self.context.compiler.native_run() {
+            native
+                .restore(self.checkpoint.native_tool_state().await?)
+                .await?;
+            self.checkpoint.use_native_tools();
+            self.tools
+                .bind_native(
+                    native,
+                    self.handle.clone(),
+                    self.context.exec.clone(),
+                    self.tasks.clone(),
+                )
+                .await?;
+        }
         if self.context.compacting {
             self.handle.emit(&events::summary_started())?;
         }
@@ -262,6 +277,9 @@ impl ConversationOutput {
                         self.handle.emit(&events::summary_completed())?;
                     }
                     RunEvent::CycleInterrupted => {
+                        if let Some(native) = self.tools.native() {
+                            native.cancel_previews();
+                        }
                         response_text.clear();
                         response_thinking.clear();
                         calls.clear();
@@ -269,6 +287,9 @@ impl ConversationOutput {
                         presentation.discard_model_output();
                     }
                     RunEvent::ModelAttemptFailed { attempt, message } => {
+                        if let Some(native) = self.tools.native() {
+                            native.cancel_previews();
+                        }
                         tracing::warn!(
                             run_id = %self.run.run_id(),
                             attempt,
@@ -344,6 +365,13 @@ impl ConversationOutput {
                             arguments: serde_json::Value::Null,
                             argument_error: None,
                         };
+                        if let Some(native) =
+                            self.tools.native().filter(|native| native.supports(&name))
+                        {
+                            native.begin(&call).await?;
+                            calls.insert(index, call);
+                            continue;
+                        }
                         self.emit_model_event(
                             crate::provider::ModelEvent::ToolCallStart {
                                 index,
@@ -363,6 +391,14 @@ impl ConversationOutput {
                             Error::Protocol(format!("unknown streaming tool index: {index}"))
                         })?;
                         call.arguments_text.push_str(&delta);
+                        if let Some(native) = self
+                            .tools
+                            .native()
+                            .filter(|native| native.supports(&call.name))
+                        {
+                            native.append(call, &delta)?;
+                            continue;
+                        }
                         let stream = streams.get_mut(&index).ok_or_else(|| {
                             Error::Protocol(format!("missing Cursor tool stream: {index}"))
                         })?;
@@ -393,6 +429,14 @@ impl ConversationOutput {
                         let call = calls.get_mut(&index).ok_or_else(|| {
                             Error::Protocol(format!("unknown completed tool index: {index}"))
                         })?;
+                        if let Some(native) = self
+                            .tools
+                            .native()
+                            .filter(|native| native.supports(&call.name))
+                        {
+                            native.end_arguments(call)?;
+                            continue;
+                        }
                         // A tool call with no arguments streams no argument text.
                         // Treat empty text as an empty object, matching the model
                         // cycle, instead of failing the run on `from_str("")`.
@@ -429,6 +473,9 @@ impl ConversationOutput {
                         round_id,
                         calls: round_calls,
                     } => {
+                        if let Some(native) = self.tools.native() {
+                            native.set_round(&round_id);
+                        }
                         // `completed` exists so that replaying ExecuteToolRound for a round
                         // does not dispatch a call this round already committed. Tool call ids
                         // are only unique *within* a round -- the schema says as much with
@@ -811,6 +858,9 @@ impl ConversationOutput {
     }
 
     async fn abort_execs(&self) {
+        if let Some(native) = self.tools.native() {
+            native.cancel(false);
+        }
         self.tasks.cancel();
         for id in self.tool_runtime.drain_running().await {
             let _ = self.handle.emit(&codec::abort(id));
@@ -857,13 +907,7 @@ impl ConversationOutput {
             return Ok(None);
         }
         completions.insert(result.call_id.clone(), completion.clone());
-        let Some(dispatched) = self.tools.continue_after(&result.call_id).await? else {
-            return Ok(None);
-        };
-        for message in dispatched.messages {
-            self.handle.emit(&message)?;
-        }
-        Ok(dispatched.completion)
+        Ok(None)
     }
 
     async fn forward_user_message(

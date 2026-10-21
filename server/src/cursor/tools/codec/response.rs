@@ -3,7 +3,7 @@ use crate::{
     cursor::{
         protocol::{events, proto::agent::v1 as pb},
         tools::{
-            compat, edit,
+            compat,
             runtime::{CursorToolRuntime, ExecStage, PendingExec},
             tool_call_result::{self as result, ToolCompletion},
         },
@@ -11,8 +11,6 @@ use crate::{
     model::ToolCall,
     Error, Result,
 };
-
-use super::request::edit_write_request;
 
 pub enum ClientExecEvent {
     Delta(Box<pb::AgentServerMessage>),
@@ -25,6 +23,10 @@ pub async fn client_event(
     message: &pb::ExecClientMessage,
     pending: &CursorToolRuntime,
 ) -> Result<ClientExecEvent> {
+    if let Some(native) = pending.native_exec(message.id).await {
+        native.exec(message)?;
+        return Ok(ClientExecEvent::Pending);
+    }
     if pending.is_interrupted(message.id).await {
         if message.message.as_ref().is_some_and(is_terminal) {
             pending.discard_exec(message.id).await;
@@ -51,10 +53,8 @@ pub async fn client_event(
     let pb::exec_client_message::Message::ShellStream(stream) = wire_result else {
         let entry = take(message.id, pending).await?;
         return match entry.stage {
-            ExecStage::EditRead => advance_edit(entry, wire_result, pending).await,
-            ExecStage::Direct | ExecStage::DynamicMcp(_) | ExecStage::EditWrite(_) => {
-                completed(entry, wire_result.clone())
-            }
+            ExecStage::Direct | ExecStage::DynamicMcp(_) => completed(entry, wire_result.clone()),
+            ExecStage::Native(_) => unreachable!("native reply handled above"),
         };
     };
     use pb::shell_stream::Event;
@@ -135,6 +135,11 @@ pub async fn client_event(
 }
 
 pub async fn stream_closed(id: u32, pending: &CursorToolRuntime) -> Result<Option<ToolCompletion>> {
+    if let Some(native) = pending.native_exec(id).await {
+        pending.take_exec(id).await;
+        native.closed(id, None)?;
+        return Ok(None);
+    }
     if pending.is_interrupted(id).await {
         pending.discard_exec(id).await;
         return Ok(None);
@@ -213,44 +218,6 @@ fn is_terminal(message: &pb::exec_client_message::Message) -> bool {
         ),
         _ => true,
     }
-}
-
-async fn advance_edit(
-    entry: PendingExec,
-    result: &pb::exec_client_message::Message,
-    registry: &CursorToolRuntime,
-) -> Result<ClientExecEvent> {
-    let read = match result {
-        pb::exec_client_message::Message::ReadResult(result)
-        | pb::exec_client_message::Message::RedactedReadResult(result) => result,
-        _ => {
-            let message = format!("expected ReadResult for edit tool {}", entry.call.name);
-            return Ok(ClientExecEvent::Completed(Box::new(
-                compat::failure_with_message(&entry.call, message),
-            )));
-        }
-    };
-    let write = match edit::after_read(&entry.call, read) {
-        Ok(write) => write,
-        Err(error) => {
-            return Ok(ClientExecEvent::Completed(Box::new(result::edit_failure(
-                entry, error,
-            )?)))
-        }
-    };
-    let id = registry
-        .reserve_edit_write(
-            &entry.call,
-            &entry.context,
-            write.clone(),
-            entry.started_at_ms,
-        )
-        .await?;
-    Ok(ClientExecEvent::Message(Box::new(edit_write_request(
-        id,
-        &entry.call,
-        &write,
-    )?)))
 }
 
 async fn complete(

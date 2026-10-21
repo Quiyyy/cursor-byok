@@ -4,15 +4,11 @@ use std::{
     sync::Arc,
 };
 
-use tokio::sync::Mutex;
-
 mod arguments;
 pub mod codec;
 pub(crate) mod compat;
-pub(crate) mod edit;
 pub(crate) mod registry;
 pub mod runtime;
-mod schedule;
 pub(crate) mod stream;
 mod tool_call_dispatch;
 pub(crate) mod tool_call_result;
@@ -24,7 +20,6 @@ use crate::{
     Error, Result,
 };
 
-use self::schedule::{DeferredEdit, EditSchedule};
 use self::tool_call_result::{ToolCompletion, ToolResultSender};
 use super::protocol::proto::agent::v1 as pb;
 use runtime::{CursorToolRuntime, ExecContext};
@@ -36,7 +31,7 @@ pub struct ToolDispatcher {
     search: WebSearch,
     fetch: WebFetch,
     store: Option<Store>,
-    edit_schedule: Arc<Mutex<EditSchedule>>,
+    native: Arc<parking_lot::RwLock<Option<crate::cursor::native::NativeRun>>>,
 }
 
 pub struct DispatchedTool {
@@ -65,7 +60,7 @@ impl ToolDispatcher {
             search: WebSearch::built_in(),
             fetch: WebFetch::built_in(),
             store: None,
-            edit_schedule: Arc::new(Mutex::new(EditSchedule::default())),
+            native: Arc::default(),
         }
     }
 
@@ -81,7 +76,7 @@ impl ToolDispatcher {
             search: WebSearch::managed(store.clone()),
             fetch: WebFetch::managed(store.clone(), web_cache),
             store: Some(store),
-            edit_schedule: Arc::new(Mutex::new(EditSchedule::default())),
+            native: Arc::default(),
         }
     }
 
@@ -102,49 +97,35 @@ impl ToolDispatcher {
             if state.completed.contains(&call.call_id) {
                 continue;
             }
+            if let Some(native) = self.native() {
+                if native.supports(&call.name) {
+                    native.execute(call).await?;
+                    dispatched.push(DispatchedTool {
+                        messages: Vec::new(),
+                        completion: None,
+                    });
+                    continue;
+                }
+                if !dynamic_mcp.contains_key(&call.name)
+                    && !matches!(
+                        call.name.as_str(),
+                        "SembleSearch" | "SembleFindRelated" | "UpdateCurrentStep"
+                    )
+                {
+                    dispatched.push(validation_failure(
+                        call,
+                        format!(
+                            "tool {} is unavailable in the active Cursor profile",
+                            call.name
+                        ),
+                    ));
+                    continue;
+                }
+            }
             let message_index = first_tool_index + position;
             let publish_started = !state.started.contains(&call.call_id);
             if let Some(error) = &call.argument_error {
                 dispatched.push(validation_failure(call, error.clone()));
-                continue;
-            }
-            let edit_path = if dynamic_mcp.contains_key(&call.name) {
-                None
-            } else {
-                match edit::execution_path(call) {
-                    Ok(path) => path,
-                    Err(error) => {
-                        dispatched.push(recover_validation_failure(call, error)?);
-                        continue;
-                    }
-                }
-            };
-            if let Some(path) = edit_path {
-                let next = self.edit_schedule.lock().await.start_or_defer(
-                    path,
-                    DeferredEdit {
-                        call: call.clone(),
-                        message_index,
-                        publish_started,
-                        context: context.clone(),
-                    },
-                );
-                let Some(next) = next else {
-                    continue;
-                };
-                let started = self
-                    .start(
-                        &next.call,
-                        next.message_index,
-                        next.publish_started,
-                        dynamic_mcp,
-                        &next.context,
-                    )
-                    .await;
-                dispatched.push(match started {
-                    Ok(started) => started,
-                    Err(error) => recover_validation_failure(&next.call, error)?,
-                });
                 continue;
             }
             let started = self
@@ -158,29 +139,36 @@ impl ToolDispatcher {
         Ok(dispatched)
     }
 
-    pub(crate) async fn continue_after(&self, call_id: &str) -> Result<Option<DispatchedTool>> {
-        let next = self.edit_schedule.lock().await.complete(call_id)?;
-        let Some(next) = next else {
-            return Ok(None);
-        };
-        match self
-            .start(
-                &next.call,
-                next.message_index,
-                next.publish_started,
-                &BTreeMap::new(),
-                &next.context,
-            )
-            .await
-        {
-            Ok(started) => Ok(Some(started)),
-            Err(error) => recover_validation_failure(&next.call, error).map(Some),
+    pub async fn interrupt_for_message(&self) -> Vec<u32> {
+        if let Some(native) = self.native() {
+            native.cancel(true);
         }
+        self.runtime.interrupt_for_message().await
     }
 
-    pub async fn interrupt_for_message(&self) -> Vec<u32> {
-        self.edit_schedule.lock().await.clear();
-        self.runtime.interrupt_for_message().await
+    pub(crate) fn native(&self) -> Option<crate::cursor::native::NativeRun> {
+        self.native.read().clone()
+    }
+    pub(crate) async fn bind_native(
+        &self,
+        native: crate::cursor::native::NativeRun,
+        handle: crate::cursor::transport::TransportHandle,
+        context: ExecContext,
+        tasks: crate::cursor::conversation::Tasks,
+    ) -> Result<()> {
+        native
+            .bind(crate::cursor::native::Bridge {
+                handle,
+                runtime: self.runtime.clone(),
+                context,
+                results: self.results.clone(),
+                tasks,
+                search: self.search.clone(),
+                fetch: self.fetch.clone(),
+            })
+            .await?;
+        *self.native.write() = Some(native);
+        Ok(())
     }
 
     async fn start(
@@ -218,6 +206,11 @@ impl ToolDispatcher {
         &self,
         response: &pb::InteractionResponse,
     ) -> Result<ClientToolEvent> {
+        if let Some(native) = self.runtime.native_interaction(response.id).await {
+            self.runtime.take_interaction(response.id).await;
+            native.interaction(response)?;
+            return Ok(ClientToolEvent::Pending);
+        }
         if self.runtime.is_interrupted(response.id).await {
             return Ok(ClientToolEvent::Pending);
         }

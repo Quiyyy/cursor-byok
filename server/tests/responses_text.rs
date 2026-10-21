@@ -83,6 +83,20 @@ fn item_done(index: u64, texts: &[&str]) -> Value {
 }
 
 #[tokio::test]
+async fn custom_tool_input_is_preserved_as_text_instead_of_parsed_as_json() {
+    let patch = "*** Begin Patch\n*** Add File: a\n+你好\n*** End Patch\n";
+    let result=cycle(vec![
+        json!({"type":"response.output_item.added","output_index":0,"item":{"type":"custom_tool_call","call_id":"raw","name":"ApplyPatch","input":""}}),
+        json!({"type":"response.custom_tool_call_input.delta","output_index":0,"delta":patch}),
+        json!({"type":"response.custom_tool_call_input.done","output_index":0,"input":patch}),
+        json!({"type":"response.output_item.done","output_index":0,"item":{"type":"custom_tool_call","call_id":"raw","name":"ApplyPatch","input":patch}}),
+    ],true).await;
+    assert_eq!(result.calls.len(), 1);
+    assert_eq!(result.calls[0].arguments, json!(patch));
+    assert!(result.calls[0].argument_error.is_none());
+}
+
+#[tokio::test]
 async fn terminal_only_items_around_a_tool_keep_all_text() {
     for completed in [true, false] {
         let result = cycle(vec![

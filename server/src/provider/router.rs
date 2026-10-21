@@ -187,6 +187,7 @@ fn event_name(event: &super::ModelEvent) -> &'static str {
         super::ModelEvent::ToolCallStart { .. } => "ToolCallStart",
         super::ModelEvent::ToolCallArgumentsDelta { .. } => "ToolCallArgsDelta",
         super::ModelEvent::ToolCallEnd { .. } => "ToolCallEnd",
+        super::ModelEvent::ToolCallRawInput { .. } => "ToolCallRawInput",
         super::ModelEvent::ProviderReplayState(_) => "ReplayState",
         super::ModelEvent::Usage(_) => "Usage",
         super::ModelEvent::Done(_) => "Done",
@@ -251,8 +252,12 @@ impl Provider for PluginModelProvider {
         invocation: ModelInvocation,
         cancellation: CancellationToken,
     ) -> ProviderStream {
-        self.registry
-            .stream_model(invocation, cancellation, self.recorder.clone())
+        let (invocation, raw) = super::text_tools::json_request(invocation);
+        super::text_tools::json_response(
+            self.registry
+                .stream_model(invocation, cancellation, self.recorder.clone()),
+            raw,
+        )
     }
 }
 

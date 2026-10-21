@@ -397,6 +397,19 @@ impl ConversationRuntime {
                                                 let Some(generation) = current.as_ref() else {
                                                     continue;
                                                 };
+                                                if let Some(native) = generation
+                                                    .tool_runtime
+                                                    .native_exec(throw.id)
+                                                    .await
+                                                {
+                                                    generation
+                                                        .tool_runtime
+                                                        .take_exec(throw.id)
+                                                        .await;
+                                                    let _ =
+                                                        native.closed(throw.id, Some(&throw.error));
+                                                    continue;
+                                                }
                                                 if generation
                                                     .tool_runtime
                                                     .is_interrupted(throw.id)

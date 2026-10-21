@@ -125,6 +125,7 @@ mod tests {
         PromptSpec {
             instructions: "system instructions".into(),
             tools: vec![ToolDefinition {
+                input_format: None,
                 name: "Read".into(),
                 description: "Read a file".into(),
                 parameters: serde_json::json!({"type": "object", "properties": {"path": {"type": "string"}}}),

@@ -1,5 +1,4 @@
 //! Dispatches Tool calls to their execution adapters.
-mod edit;
 mod exec;
 mod interaction;
 mod local;
@@ -57,7 +56,6 @@ pub(super) async fn start(
         | "callmcptool" | "fetchmcpresource" | "getmcptools" => {
             exec::start(runtime, call, context).await
         }
-        "write" | "strreplace" | "editnotebook" => edit::start(runtime, call, context).await,
         "askquestion" | "websearch" | "webfetch" | "switchmode" | "createplan"
         | "generateimage" => interaction::start(runtime, call).await,
         "todowrite" | "updatecurrentstep" => local::start(call, message_index),

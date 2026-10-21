@@ -399,6 +399,7 @@ mod tests {
 
     fn pending_fetch() -> PendingInteraction {
         PendingInteraction {
+            native: None,
             call: ToolCall {
                 index: 0,
                 call_id: "fetch-call".into(),

@@ -263,9 +263,7 @@ async fn refused_tools_never_reach_cursor_exec_messages() {
         Duration::from_secs(5),
         Duration::from_secs(5),
     );
-    let assets =
-        PromptAssets::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("prompt/cursor"))
-            .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider),

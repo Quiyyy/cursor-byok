@@ -7,6 +7,7 @@ mod pending;
 mod registry;
 mod runtime;
 mod task;
+pub(crate) use task::Tasks;
 
 pub use command::*;
 pub use delivery::*;

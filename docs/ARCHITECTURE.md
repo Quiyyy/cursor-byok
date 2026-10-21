@@ -40,7 +40,8 @@ cursor-byok/
 │   │   ├── store/                    # SQLite 持久化与事务
 │   │   └── search/                   # 搜索接入与缓存
 │   ├── plugins/build-in/             # 随应用交付的账号接入插件
-│   ├── prompt/                       # 嵌入的运行时提示与提交信息模板
+│   ├── cursor-runtime/               # 安装于本机的 Cursor 原生工厂与工具桥接
+│   ├── prompt/                       # 每轮上下文、压缩与提交信息模板
 │   └── migrations/                   # SQLite 迁移
 ├── crates/semble-core/               # 本地代码索引与混合搜索
 ├── protocols/cursor/                 # Cursor 协议定义
@@ -101,9 +102,53 @@ local_app 本地代理
 
 接入协议负责将客户端请求转换为通用消息和命令；`run/` 驱动模型与工具轮次；`provider/` 和 `plugin/` 负责服务商差异。外部服务返回结果不会直接绕过运行时写入客户端会话。
 
-基础提示词与内置工具定义统一保存在 `server/prompt/cursor/protocol.json`，由本机 Cursor 工厂提取，不按模型家族维护。`extensions.json` 只包含 BYOK 自有扩展，`modes/` 决定模式可用工具，`*/runtime.md` 提供每轮动态内容。MCP 定义来自 Cursor 请求，调用与结果通过客户端原生 MCP 执行器转发，BYOK 不维护 MCP 工具目录或连接管理。
+内置提示词、工具 Schema、参数解析和工具算法来自本机已安装 Cursor 的原生工厂。统一协议负责承载它们；不同模型的提示词、工具名、参数格式由同一套官方工厂生成。BYOK 保留模型循环、提供商适配、checkpoint、自有扩展，以及 Ask 模式的只读工具范围。MCP 定义来自客户端请求，连接及执行仍归 Cursor。
 
-设置 `CURSOR_PROTOCOL_FILE` 时，每轮开始读取当前协议快照，旧会话下一轮直接使用更新后的提示词与工具定义。当前 Run 不热替换资产，会话历史不重写。默认使用发行包内嵌资产；更新来源、校验与本地原生验证见[资产提取器](../support/cursor-assets-extractor/README.md)。
+```text
+server/
+├── cursor-runtime/                   # Node worker；只加载本机 Cursor，不分发 Cursor bundle
+│   ├── runtime.mjs                   # 按 AST 结构定位原生工厂与 protobuf 类型
+│   ├── profile.mjs                   # 用实际模型 ID 和模式生成原生提示词、工具契约
+│   ├── session.mjs                   # 原生工具会话、状态容器与执行闸门
+│   ├── worker.mjs                    # JSON-lines IPC 与客户端回调关联
+│   ├── queue.mjs                     # 工具参数和执行结果的异步队列
+│   ├── build.mjs                     # 生成或校验可嵌入的 worker
+│   └── worker.bundle.mjs             # 生成产物：本项目 bridge 与构建依赖
+├── src/cursor/native/
+│   ├── mod.rs                        # 安装位置、版本变化与 worker 租约
+│   ├── process.rs                    # 进程健康、IPC、请求超时与异常退出
+│   ├── session.rs                    # 每个 Run 的配置、调用身份和取消
+│   └── bridge.rs                     # 原生 Exec/Interaction ↔ 当前 Cursor transport
+├── src/cursor/checkpoint/native.rs   # 从 checkpoint 恢复状态；按已完成工具卡片持久化
+├── src/provider/text_tools.rs        # 将原生文本工具承载到仅支持 JSON function 的接口
+├── prompt/cursor/                    # 每轮上下文模板、压缩提示与 BYOK 自有工具
+└── tests/fixtures/cursor/            # 固定协议快照与模式清单；仅用于确定性回归测试
+```
+
+```text
+用户请求 + Cursor checkpoint
+  → 还原 canonical history（不重写历史）
+  → 为本次 Run 获取 worker 租约 → 官方模型工厂 → PromptSpec
+  → BYOK RunEngine → provider / 账号插件 → 模型
+  ← 文本、工具名、JSON 参数或原生文本输入
+  → 官方工具参数解析 / ToolSession / 文件锁 / 编辑算法
+  → 官方 remoteImplementation → Exec / Interaction protobuf
+  → 当前 Cursor transport → 客户端权限流程、文件/终端/子任务执行器
+  ← 原生客户端结果 → 官方 renderer → canonical ToolResult
+  → checkpoint 提交屏障 → 工具完成事件 → 下一模型轮次
+```
+
+参数流可以产生预览；实际 Exec、交互请求在模型轮次通过执行闸门后才发送。客户端拒绝仍是拒绝，不由 bridge 自动批准。Todo、计划、已读路径和子任务标识从现有 checkpoint 恢复，状态以已完成原生卡片投影回 checkpoint。
+
+每轮开始检查本机 Cursor bundle 和产品元数据。Cursor 更新后，新 Run 获取新 worker，旧会话可以直接采用新提示词；已经运行的 Run 持有原 worker，直到完成或取消。worker 退出会使关联 Run 失败，下一 Run 重建进程，不静默退回旧的手写工具实现。
+
+已删除 `cursor/tools/edit.rs`、`schedule.rs` 和 `tool_call_dispatch/edit.rs` 及隐藏读写阶段。文件替换、Notebook 编辑、diff 和同文件排队由原生工具承担。静态协议构造器只服务回归夹具；应用启动固定使用 `PromptCompiler::native`，不读取 `CURSOR_PROTOCOL_FILE`。
+
+OpenAI Responses 保留原生 custom tool / grammar；只支持 JSON function 的 Chat、Anthropic 和插件接口使用 `{input: string}` 承载原始文本，返回时还原，canonical history 不改写。JSON 接口不具备 Responses 服务端语法约束能力，最终仍由原生工具解析器校验。
+
+当前验证基线是 Windows Cursor 3.25.6。模型匹配来自本地工厂，尚不包含云端实验开关；不能宣称与每个官方模型的云端行为完全一致。WebSearch/WebFetch 沿用 BYOK 服务，GenerateImage 因没有图像执行服务而不对模型发布。跨版本、macOS/Linux、Remote SSH 和在途子任务进程重启恢复仍需独立验收。
+
+构建与验证步骤见[原生运行时维护](../support/cursor-assets-extractor/README.md)。
 
 ## 状态与生命周期
 

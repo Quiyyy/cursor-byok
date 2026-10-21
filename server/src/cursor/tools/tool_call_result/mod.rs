@@ -19,7 +19,7 @@ use crate::{
 
 use super::runtime::now_ms;
 
-pub(crate) use exec::{edit_failure, from_exec};
+pub(crate) use exec::from_exec;
 pub(crate) use interaction::{complete_web_fetch, complete_web_search, from_interaction};
 pub(crate) use local::{local, subagents_disabled, todo_items};
 pub(crate) use mcp::failure as mcp_failure;
@@ -41,6 +41,29 @@ pub(crate) struct ReadImage {
 }
 
 impl ToolCompletion {
+    pub(crate) fn from_native(
+        call: &ToolCall,
+        mut card: pb::ToolCall,
+        content: String,
+        is_error: bool,
+        image: Option<ReadImage>,
+    ) -> Result<Self> {
+        if card.tool.is_none() {
+            return Err(Error::Protocol("native result has no tool card".into()));
+        }
+        card.tool_call_id = Some(call.call_id.clone());
+        Ok(Self {
+            exec_id: None,
+            result: ToolResult {
+                call_id: call.call_id.clone(),
+                content,
+                is_error,
+                image: None,
+            },
+            tool_call: card,
+            read_image: image,
+        })
+    }
     pub fn result(&self) -> &ToolResult {
         &self.result
     }

@@ -244,12 +244,7 @@ async fn a_replaced_run_cannot_overwrite_its_cancelled_status() {
 #[tokio::test]
 async fn registry_shutdown_cancels_runs_and_closes_run_sse_outputs() {
     let (_directory, store) = fixtures::temp_store().await;
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(fake_provider::FakeProvider::default()),
@@ -271,12 +266,7 @@ async fn registry_shutdown_cancels_runs_and_closes_run_sse_outputs() {
 #[tokio::test]
 async fn client_heartbeat_returns_a_server_protocol_heartbeat() {
     let (_directory, store) = fixtures::temp_store().await;
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(fake_provider::FakeProvider::default()),
@@ -340,12 +330,7 @@ async fn runtime_cancel_action_aborts_active_exec_before_canceled_end_stream() {
         ModelEvent::ToolCallEnd { index: 0 },
         ModelEvent::Done(FinishReason::ToolUse),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(store, Arc::new(provider), PromptCompiler::new(assets));
     let handle = registry.get_or_create("cancel-request").await.unwrap();
     let mut output = handle.subscribe();
@@ -428,12 +413,7 @@ async fn queued_user_message_after_turn_ended_starts_the_next_turn() {
     let provider = fake_provider::FakeProvider::default();
     provider.push(text_response("first turn"));
     provider.push(text_response("queued turn"));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -507,12 +487,7 @@ async fn runtime_user_message_action_interrupts_and_continues_with_new_message()
     let provider = fake_provider::FakeProvider::default();
     provider.push_pending();
     provider.push(text_response("continued after user interruption"));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -596,12 +571,7 @@ async fn runtime_user_message_reports_delivered_and_appended() {
     let provider = fake_provider::FakeProvider::default();
     provider.push_pending();
     provider.push(text_response("continued after user interruption"));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -710,12 +680,7 @@ async fn tool_call_with_empty_arguments_does_not_fail_the_run() {
     let provider = fake_provider::FakeProvider::default();
     provider.push(tool_response("call-1", "UpdateCurrentStep", ""));
     provider.push(text_response("done after empty-argument tool"));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -777,12 +742,7 @@ async fn injected_user_context_restarts_only_the_active_model_cycle() {
         ModelEvent::TextEnd,
         ModelEvent::Done(FinishReason::Stop),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -886,12 +846,7 @@ async fn injected_user_context_aborts_pending_tools_and_ignores_late_results() {
     let provider = fake_provider::FakeProvider::default();
     provider.push(tool_response("call-1", "Read", "{\"path\":\"/tmp/a\"}"));
     let release = provider.push_gated(text_response("continued after tool interruption"));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -1033,12 +988,7 @@ async fn detached_task_result_case(after_parent: bool, cancel: bool, mixed: bool
     provider.push(first_response);
     let release = provider.push_gated(text_response("continued while subagent runs"));
     provider.push(text_response("received detached result"));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -1395,9 +1345,7 @@ async fn detached_tasks_keep_original_round_identity_when_call_ids_are_reused() 
     let release = provider.push_gated(text_response("both tasks are still running"));
     provider.push(text_response("first task received"));
     provider.push(text_response("second task received"));
-    let assets =
-        PromptAssets::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("prompt/cursor"))
-            .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -1549,12 +1497,7 @@ async fn injected_user_context_interrupts_automatic_compaction() {
     provider.push(text_response(&seed_answer));
     provider.push_pending();
     provider.push(text_response("continued after compacting injection"));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -1688,12 +1631,7 @@ async fn stale_context_injection_is_rejected_without_failing_the_active_run() {
         ModelEvent::TextEnd,
         ModelEvent::Done(FinishReason::Stop),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -1798,12 +1736,7 @@ async fn unsupported_runtime_action_is_ignored_without_failing_the_active_run() 
     let (_directory, store) = fixtures::temp_store().await;
     let provider = fake_provider::FakeProvider::default();
     let release = provider.push_gated(text_response("active run completed"));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -1889,12 +1822,7 @@ async fn cancel_subagent_action_aborts_the_target_task_and_keeps_the_parent_runn
         ModelEvent::TextEnd,
         ModelEvent::Done(FinishReason::Stop),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),

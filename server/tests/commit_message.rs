@@ -28,12 +28,7 @@ async fn commit_router(
     store: cursor_server::store::Store,
     provider: fake_provider::FakeProvider,
 ) -> axum::Router {
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let clients = NetworkClients::new(store.clone());
     let registry = TransportRegistry::new(store, Arc::new(provider), PromptCompiler::new(assets));
     cursor::router(registry, clients).unwrap()

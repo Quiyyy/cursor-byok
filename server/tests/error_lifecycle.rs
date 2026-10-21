@@ -23,12 +23,7 @@ use prost::Message;
 #[tokio::test]
 async fn abort_command_cancels_the_run_and_closes_output() {
     let (_directory, store) = fixtures::temp_store().await;
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(fake_provider::FakeProvider::default()),
@@ -80,12 +75,7 @@ async fn provider_failure_retries_from_the_current_checkpoint_without_hiding_par
         ModelEvent::TextEnd,
         ModelEvent::Done(FinishReason::Stop),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -179,12 +169,7 @@ async fn provider_failure_keeps_the_initial_checkpoint_then_returns_structured_e
         },
         ModelEvent::Done(FinishReason::Length),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -317,12 +302,7 @@ async fn unknown_tool_response_id_is_ignored_and_the_run_continues() {
         ModelEvent::TextEnd,
         ModelEvent::Done(FinishReason::Stop),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider),
@@ -466,12 +446,7 @@ async fn newer_run_request_on_one_bidi_stream_replaces_the_active_run() {
         ModelEvent::TextEnd,
         ModelEvent::Done(FinishReason::Stop),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -632,12 +607,7 @@ async fn subagent_run_without_message_id_starts_and_completes() {
         ModelEvent::TextEnd,
         ModelEvent::Done(FinishReason::Stop),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -682,12 +652,7 @@ async fn subagent_retries_without_message_id_stay_idempotent() {
         ]
     };
     provider.push(completed());
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -828,12 +793,7 @@ async fn assert_run_starts_without_parent_dependency(
         ModelEvent::TextEnd,
         ModelEvent::Done(FinishReason::Stop),
     ]);
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),

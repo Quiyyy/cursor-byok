@@ -1,7 +1,7 @@
 //! Isolated real-Cursor verification host. Never enables the installed application's takeover.
 use cursor_server::{
     config::{ProviderConfig, ProviderKind},
-    cursor::{prompting::PromptCompiler, TransportRegistry},
+    cursor::{native::NativeRuntime, prompting::PromptCompiler, TransportRegistry},
     model::{ModelConfigInput, ModelInvocation},
     network::NetworkClients,
     provider::{OpenAiChatProvider, Provider, ProviderStream},
@@ -105,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let model = std::env::var("CHECK_MODEL")?;
     let input: ModelConfigInput = serde_json::from_value(json!({
         "display_name":"BYOK Protocol Check", "type":"openai", "base_url":"http://127.0.0.1:1",
-        "api_key":"local-test-placeholder", "tooltip_data":"Isolated protocol verification", "model_id":model,
+        "api_key":"local-test-placeholder", "tooltip_data":"Isolated protocol verification", "model_id":std::env::var("CHECK_NATIVE_MODEL")?,
         "context_window_tokens":128000
     }))?;
     for existing in store.models().await? {
@@ -129,8 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         model,
         index: AtomicUsize::new(0),
     };
-    let compiler =
-        PromptCompiler::from_protocol_file(std::env::var("CURSOR_PROTOCOL_FILE")?.into())?;
+    let compiler = PromptCompiler::native(NativeRuntime::managed()?)?;
     let registry = TransportRegistry::new(store.clone(), Arc::new(provider), compiler);
     let router = cursor_server::api::router(registry, NetworkClients::new(store))?;
     let backend = tokio::net::TcpListener::bind("127.0.0.1:0").await?;

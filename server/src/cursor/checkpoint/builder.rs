@@ -33,6 +33,7 @@ pub struct CheckpointBuilder {
     pub(super) roots: Option<RootFrontier>,
     pub(super) turn: Option<TurnFrontier>,
     pub(super) turns_initialized: bool,
+    pub(super) native_tools: bool,
 }
 
 impl CheckpointBuilder {
@@ -57,6 +58,7 @@ impl CheckpointBuilder {
             roots: None,
             turn: None,
             turns_initialized: false,
+            native_tools: false,
         }
     }
 
@@ -160,9 +162,13 @@ impl CheckpointBuilder {
         self.record_background_subagents(presentation);
         let root_ids = self.project_roots(messages).await?;
         let turn_ids = self.project_turns(mode, presentation).await?;
-        let (todo_ids, plan_id) = self.build_derived_state(messages).await?;
-        self.base.todos = todo_ids.iter().map(|id| id.as_bytes().to_vec()).collect();
-        self.base.plan = plan_id.as_ref().map(|id| id.as_bytes().to_vec());
+        if self.native_tools {
+            self.record_native_state(presentation).await?;
+        } else {
+            let (todo_ids, plan_id) = self.build_derived_state(messages).await?;
+            self.base.todos = todo_ids.iter().map(|id| id.as_bytes().to_vec()).collect();
+            self.base.plan = plan_id.as_ref().map(|id| id.as_bytes().to_vec());
+        }
         let communicate_update_states_by_parent_tool_call_id = self
             .parent_tool_call_id
             .as_ref()
@@ -213,7 +219,7 @@ impl CheckpointBuilder {
             let Some(pb::task_result::Result::Success(success)) = result.result.as_ref() else {
                 continue;
             };
-            if !success.is_background {
+            if !success.is_background && !self.native_tools {
                 continue;
             }
             let Some(agent_id) = success.agent_id.as_ref().filter(|id| !id.is_empty()) else {
@@ -248,7 +254,11 @@ impl CheckpointBuilder {
                     parent_tool_call_id: tool_call_id.clone(),
                     subagent_id: Some(agent_id.clone()),
                     environment: args.environment,
-                    status: pb::SubagentRunStatus::Backgrounded as i32,
+                    status: if success.is_background {
+                        pb::SubagentRunStatus::Backgrounded
+                    } else {
+                        pb::SubagentRunStatus::Success
+                    } as i32,
                     title: Some(args.description.clone()),
                     detail: success.result_suffix.clone(),
                     transcript_path: success.transcript_path.clone(),

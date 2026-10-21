@@ -1,10 +1,13 @@
-//! Loads embedded Cursor Prompt assets.
+//! Loads runtime templates and explicit protocol test fixtures.
 use std::{path::Path, sync::OnceLock};
 
 use crate::{model::ToolDefinition, Error, Result};
 
 use super::catalog::Catalog;
 use super::protocol::NativeProtocol;
+
+static FIXTURE_PROTOCOL: include_dir::Dir<'_> =
+    include_dir::include_dir!("$CARGO_MANIFEST_DIR/tests/fixtures/cursor");
 
 static EMBEDDED_PROMPTS: include_dir::Dir<'_> =
     include_dir::include_dir!("$CARGO_MANIFEST_DIR/prompt/cursor");
@@ -72,20 +75,67 @@ pub struct PromptAssets {
 }
 
 impl PromptAssets {
-    pub fn load(root: &Path) -> Result<Self> {
-        Self::read(|path| {
-            let path = root.join(path);
-            path.exists()
-                .then(|| std::fs::read_to_string(path).map_err(Error::from))
-                .transpose()
+    pub(super) fn native_templates() -> Result<Self> {
+        let read = |path: &str| {
+            EMBEDDED_PROMPTS
+                .get_file(path)
+                .and_then(|f| f.contents_utf8())
+                .map(str::to_string)
+                .ok_or_else(|| Error::Config(format!("missing native runtime template: {path}")))
+        };
+        let extensions: Vec<ToolDefinition> = serde_json::from_str(&read("extensions.json")?)?;
+        let mut modes = Vec::new();
+        for mode in [
+            Mode::Agent,
+            Mode::Ask,
+            Mode::Plan,
+            Mode::Debug,
+            Mode::Multitask,
+            Mode::Subagent,
+            Mode::Compaction,
+        ] {
+            let runtime = read(&format!("{}/runtime.md", mode.name()))?;
+            validate_runtime_template(mode, &runtime)?;
+            modes.push(ModeAssets {
+                prompt: if mode == Mode::Compaction {
+                    read("compaction/prompt.md")?
+                } else {
+                    String::new()
+                },
+                runtime,
+                tools: extensions
+                    .iter()
+                    .filter(|t| {
+                        mode != Mode::Compaction
+                            && (t.name != "UpdateCurrentStep" || mode == Mode::Subagent)
+                    })
+                    .cloned()
+                    .collect(),
+            });
+        }
+        Ok(Self {
+            modes: modes
+                .try_into()
+                .map_err(|_| Error::Config("invalid mode count".into()))?,
         })
     }
-
-    pub fn embedded() -> Result<Self> {
+    pub(super) fn apply_native(
+        &mut self,
+        mode: Mode,
+        profile: &crate::cursor::native::NativeProfile,
+    ) {
+        let assets = &mut self.modes[mode.index()];
+        assets.prompt = profile.instructions.clone();
+        let extensions = std::mem::take(&mut assets.tools);
+        assets.tools = profile.tools.clone();
+        assets.tools.extend(extensions);
+    }
+    /// Fixed protocol sample for tests that do not have an installed Cursor.
+    pub fn fixture() -> Result<Self> {
         Self::embedded_with_protocol(None)
     }
 
-    pub fn with_protocol_file(path: &Path) -> Result<Self> {
+    pub fn with_fixture_file(path: &Path) -> Result<Self> {
         let protocol = std::fs::read_to_string(path)?;
         Self::embedded_with_protocol(Some(&protocol))
     }
@@ -97,8 +147,9 @@ impl PromptAssets {
                     return Ok(Some(protocol.into()));
                 }
             }
-            EMBEDDED_PROMPTS
+            FIXTURE_PROTOCOL
                 .get_file(path)
+                .or_else(|| EMBEDDED_PROMPTS.get_file(path))
                 .map(|file| {
                     file.contents_utf8()
                         .map(str::to_string)

@@ -4,10 +4,7 @@ use serde_json::{Map, Value};
 use crate::{
     cursor::{
         protocol::proto::agent::v1 as pb,
-        tools::{
-            edit::{self, EditWrite},
-            runtime::{ExecContext, McpRoute},
-        },
+        tools::runtime::{ExecContext, McpRoute},
     },
     model::ToolCall,
     Error, Result,
@@ -188,39 +185,6 @@ pub fn request(id: u32, call: &ToolCall, context: &ExecContext) -> Result<pb::Ag
         call,
         message,
         accept_hook_additional_contexts,
-    ))
-}
-
-pub(crate) fn edit_read_request(id: u32, call: &ToolCall) -> Result<pb::AgentServerMessage> {
-    Ok(server_message(
-        id,
-        call,
-        pb::exec_server_message::Message::ReadArgs(pb::ReadArgs {
-            path: edit::path(call)?,
-            tool_call_id: call.call_id.clone(),
-            ..Default::default()
-        }),
-        Some(true),
-    ))
-}
-
-pub(super) fn edit_write_request(
-    id: u32,
-    call: &ToolCall,
-    write: &EditWrite,
-) -> Result<pb::AgentServerMessage> {
-    Ok(server_message(
-        id,
-        call,
-        pb::exec_server_message::Message::WriteArgs(pb::WriteArgs {
-            path: edit::path(call)?,
-            file_text: write.after.clone(),
-            tool_call_id: call.call_id.clone(),
-            return_file_content_after_write: false,
-            file_bytes: Vec::new(),
-            encoding_hint: None,
-        }),
-        Some(true),
     ))
 }
 

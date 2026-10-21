@@ -26,12 +26,7 @@ async fn background_subagent_completion_starts_a_simulated_parent_turn() {
     let (_directory, store) = fixtures::temp_store().await;
     let provider = fake_provider::FakeProvider::default();
     provider.push(stop_response("model-call", "followed up"));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -143,12 +138,7 @@ async fn background_completion_joins_the_active_run_instead_of_replacing_it() {
     let provider = fake_provider::FakeProvider::default();
     let first_ready = provider.push_gated(stop_response("model-call-1", "first response"));
     provider.push(stop_response("model-call-2", "processed both completions"));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -207,12 +197,7 @@ async fn retrying_one_background_completion_reuses_its_runtime_message() {
     let (_directory, store) = fixtures::temp_store().await;
     let provider = fake_provider::FakeProvider::default();
     provider.push(stop_response("model-call", "followed up"));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -268,12 +253,7 @@ async fn background_shell_completion_wakes_the_parent_with_the_captured_notifica
         "shell-wakeup",
         "The background server was stopped.",
     ));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),

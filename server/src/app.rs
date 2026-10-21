@@ -8,10 +8,7 @@ use crate::{
     api,
     config::{Config, ConsoleSource},
     control,
-    cursor::{
-        prompting::{PromptAssets, PromptCompiler},
-        transport::TransportRegistry,
-    },
+    cursor::{prompting::PromptCompiler, transport::TransportRegistry},
     local_app::CursorHarness,
     plugin::{PluginRegistry, PluginRuntime},
     provider::ProviderRouter,
@@ -36,10 +33,7 @@ impl App {
                 .listen_addr
                 .set_port(store.port_settings().await?.service_port);
         }
-        let compiler = match std::env::var_os("CURSOR_PROTOCOL_FILE") {
-            Some(path) => PromptCompiler::from_protocol_file(path.into())?,
-            None => PromptCompiler::new(PromptAssets::embedded()?),
-        };
+        let compiler = PromptCompiler::native(crate::cursor::native::NativeRuntime::managed()?)?;
         let plugin_runtime = PluginRuntime::managed()?;
         let plugins = PluginRegistry::managed(
             store.clone(),

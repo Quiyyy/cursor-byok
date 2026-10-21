@@ -133,9 +133,9 @@ fn split_tool_pairs_reconstruct_the_original_provider_assistant_message() {
 
 #[test]
 fn every_mode_uses_the_shared_extracted_contract() {
-    let assets = PromptAssets::embedded().unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let native: serde_json::Value =
-        serde_json::from_str(include_str!("../prompt/cursor/protocol.json")).unwrap();
+        serde_json::from_str(include_str!("fixtures/cursor/protocol.json")).unwrap();
     let tools: Vec<ToolDefinition> = serde_json::from_value(native["tools"].clone()).unwrap();
     for mode in [
         Mode::Agent,
@@ -174,14 +174,7 @@ fn every_mode_uses_the_shared_extracted_contract() {
 
 #[test]
 fn every_captured_mode_owns_and_renders_its_runtime_template() {
-    let compiler = PromptCompiler::new(
-        PromptAssets::load(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("prompt/cursor")
-                .as_path(),
-        )
-        .unwrap(),
-    );
+    let compiler = PromptCompiler::new(PromptAssets::fixture().unwrap());
     let values = BTreeMap::from([
         ("OPEN_FILES", String::new()),
         ("SELECTED_CONTEXT", String::new()),
@@ -208,12 +201,7 @@ fn every_captured_mode_owns_and_renders_its_runtime_template() {
 
 #[test]
 fn dynamic_mcp_tools_are_appended_after_the_stable_mode_tool_prefix() {
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let compiler = PromptCompiler::new(assets);
     let base = compiler
         .prompt_spec(Mode::Agent, &ModelSpec::new("model"), &[], false)
@@ -223,6 +211,7 @@ fn dynamic_mcp_tools_are_appended_after_the_stable_mode_tool_prefix() {
             Mode::Agent,
             &ModelSpec::new("model"),
             &[ToolDefinition {
+                input_format: None,
                 name: "mcp_repo_lookup".into(),
                 description: "lookup".into(),
                 parameters: serde_json::json!({"type": "object"}),
@@ -236,18 +225,14 @@ fn dynamic_mcp_tools_are_appended_after_the_stable_mode_tool_prefix() {
 
 #[test]
 fn dynamic_mcp_tool_cannot_replace_a_mode_tool() {
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let compiler = PromptCompiler::new(assets);
     let error = compiler
         .prompt_spec(
             Mode::Agent,
             &ModelSpec::new("model"),
             &[ToolDefinition {
+                input_format: None,
                 name: "Read".into(),
                 description: "replacement".into(),
                 parameters: serde_json::json!({"type": "object"}),
@@ -262,12 +247,7 @@ fn dynamic_mcp_tool_cannot_replace_a_mode_tool() {
 
 #[test]
 fn image_generation_capability_controls_only_the_generate_image_definition() {
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let compiler = PromptCompiler::new(assets);
     let without = compiler
         .prompt_spec(Mode::Agent, &ModelSpec::new("model"), &[], false)
@@ -288,12 +268,7 @@ fn image_generation_capability_controls_only_the_generate_image_definition() {
 
 #[test]
 fn agent_system_prompt_is_static_and_independent_of_model_name() {
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let compiler = PromptCompiler::new(assets);
     let mut model = ModelSpec::new("test-model-hash");
     model.display_name = Some("Test Model".into());
@@ -310,12 +285,7 @@ fn agent_system_prompt_is_static_and_independent_of_model_name() {
 
 #[test]
 fn subagent_uses_the_agent_prompt_and_only_the_captured_tool_delta() {
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let compiler = PromptCompiler::new(assets);
     let agent_prompt = compiler
         .prompt_spec(Mode::Agent, &ModelSpec::new("model"), &[], false)

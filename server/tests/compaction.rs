@@ -70,12 +70,7 @@ async fn summarize_replaces_model_history_and_preserves_cursor_history() {
         ModelEvent::Done(FinishReason::Stop),
     ]);
     provider.push(text_response("new answer", 900, 5));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),
@@ -230,12 +225,7 @@ async fn automatic_compaction_preflights_provider_input_and_records_rebuilt_toke
     provider.push(text_response(&"x".repeat(400_000), 150_000, 1_000));
     provider.push(text_response("automatic durable summary", 120_000, 20));
     provider.push(text_response("continued after compaction", 20_000, 20));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -371,12 +361,7 @@ async fn incremental_preflight_uses_conversation_anchor_across_model_switch() {
     let provider = fake_provider::FakeProvider::default();
     provider.push(text_response("old answer", 103_904, 12));
     provider.push(text_response("new answer", 104_000, 12));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -444,12 +429,7 @@ async fn irreducibly_oversized_current_input_fails_before_provider_dispatch() {
         .await
         .unwrap();
     let provider = fake_provider::FakeProvider::default();
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -520,12 +500,7 @@ async fn provider_overflow_refusal_compacts_and_retries_once() {
     ));
     provider.push(text_response("durable summary", 3_000, 20));
     provider.push(text_response("answer after compaction", 500, 20));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store,
         Arc::new(provider.clone()),
@@ -597,12 +572,7 @@ async fn assistant_terminated_history_is_sent_with_a_user_tail() {
     let provider = fake_provider::FakeProvider::default();
     provider.push(text_response("first answer", 400, 12));
     provider.push(text_response("resumed answer", 450, 12));
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     let registry = TransportRegistry::new(
         store.clone(),
         Arc::new(provider.clone()),

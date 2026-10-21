@@ -15,12 +15,7 @@ use cursor_server::cursor::{
 
 async fn registry() -> (tempfile::TempDir, TransportRegistry) {
     let (directory, store) = fixtures::temp_store().await;
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
+    let assets = PromptAssets::fixture().unwrap();
     (
         directory,
         TransportRegistry::new(

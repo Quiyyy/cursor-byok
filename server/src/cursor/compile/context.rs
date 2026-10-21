@@ -465,6 +465,7 @@ pub fn dynamic_mcp(
         let parameters = normalize_mcp_parameters(&wire.name, parameters)?;
         let name = normalize_tool_name(&wire.name);
         let definition = ToolDefinition {
+            input_format: None,
             name: name.clone(),
             description: wire.description.clone(),
             parameters,
@@ -512,6 +513,7 @@ pub fn dynamic_mcp(
                 input_schema_json: Some(schema),
             };
             let definition = ToolDefinition {
+                input_format: None,
                 name: name.clone(),
                 description: wire.description.clone(),
                 parameters,

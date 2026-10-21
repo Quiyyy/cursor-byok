@@ -25,3 +25,9 @@ Rust 实现在运行时不依赖 Python。模型权重有独立的来源与使�
 ## 依赖
 
 Rust、JavaScript 和 Go 依赖分别以相应清单和锁文件为准。更新、再分发或替换依赖时保留该依赖要求的许可与版权文本。
+
+## Cursor 原生运行时与 worker
+
+`server/cursor-runtime/worker.bundle.mjs` 仅包含本项目 bridge 与 Babel 等 JavaScript 依赖；构建保留依赖的 legal comments，并生成完整的 `server/cursor-runtime/THIRD_PARTY_LICENSES.txt`；启动时将许可说明与 worker 一起写入运行目录。它不包含 Cursor 原生 bundle 或其命令解析二进制。运行时从用户已安装的 Cursor 读取这些文件；Cursor 代码与服务受其自身条款约束，不属于本仓库 MIT 授权范围。
+
+`server/tests/fixtures/cursor/protocol.json` 记录固定协议测试样本的 Cursor 版本、commit 与源 bundle SHA-256，不代表维护团队原创的提示词或工具说明。
