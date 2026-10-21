@@ -14,6 +14,10 @@ async function route(turn, loadNative, getPrivacyMode, configPath = path.join(__
   });
   if (!response.ok) throw new Error(`Cursor BYOK model unavailable (${response.status})`);
   const model = await response.json();
+  const context = model.contextWindowTokens;
+  if (context != null && (!Number.isSafeInteger(context) || context <= 0)) {
+    throw new Error('BYOK 上下文窗口必须是完整 token 数值');
+  }
   const library = loadNative();
   const details = turn.modelDetails?.clone() ?? library.__byokCreateModelDetails(model.modelId);
   details.modelId = model.modelId;
@@ -24,11 +28,9 @@ async function route(turn, loadNative, getPrivacyMode, configPath = path.join(__
   if (options.requestedModel) {
     options.requestedModel = options.requestedModel.clone();
     options.requestedModel.modelId = model.modelId;
-    // The native client parses this field with parseInt; never pass display units.
-    const context = options.requestedModel.parameters?.find(p => p.id === 'context');
-    if (context && !/^[1-9]\d*$/.test(context.value)) {
-      throw new Error('请重新选择模型的上下文大小：原生 Cursor 要求完整 token 数值');
-    }
+    // BYOK owns this setting. Do not let stale per-chat values override a save/reset.
+    options.requestedModel.parameters = (options.requestedModel.parameters ?? []).filter(p => p.id !== 'context');
+    if (context != null) options.requestedModel.parameters.push({id: 'context', value: String(context)});
   }
   const Client = library.__byokLocalAgentClient();
   return {

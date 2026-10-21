@@ -94,6 +94,8 @@ Cursor 模型菜单
 
 默认模型由 `store/cursor_model.rs` 持久化在现有设置表中。桌面通过管理 API 保存稳定的模型 ID，`cursor/services/default_model.rs` 将其作为 `GetDefaultModel` 的结果交给 Cursor，并用递增更新时间触发原生默认设置刷新。已配置时，`GetDefaultModelNudgeData` 关闭自动切回 Auto 的服务端提示。此路径不修改 Workbench bundle 或会话内容；Cursor 仍负责显式的会话模型选择。
 
+上下文窗口由 BYOK 的模型设置统一管理。`store/model_settings.rs` 复用 API 模型的现有字段，并在现有设置表中独立保存账号模型覆盖值；同一个管理 API 服务两种模型。模型目录和原生网关读取同一配置，`native-agent/route.cjs` 在每个 Run 开始时将整数 Token 数传给原生参数，并移除旧会话遗留的 context 参数。进行中的 Run 不被重置，下一轮沿用原会话状态并应用新容量。
+
 ## 已移除的实现
 
 已删除 `server/src/run/`，以及 `cursor/` 下的 `compile/`、`prompting/`、`tools/`、`checkpoint/`、`conversation/`、`transport/`、`native/`。旧 Node 工具 worker、Agent 提示模板、固定工具快照、协议提取器和整套 Agent protobuf 也已删除。

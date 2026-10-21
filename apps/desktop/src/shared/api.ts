@@ -169,6 +169,10 @@ export interface CursorModelSettings {
   updated_at_ms: number;
 }
 
+export interface ModelSettings {
+  context_window_tokens: number | null;
+}
+
 export interface TokenPricingSettings {
   input_per_million: number;
   output_per_million: number;
@@ -552,6 +556,8 @@ export const api = {
   setDesktopSettings: (settings: DesktopSettings) => request<DesktopSettings>("/settings/desktop", { method: "PUT", body: JSON.stringify(settings) }),
   commitSettings: (locale: Locale) => request<CommitSettingsView>("/settings/commit", { headers: { "accept-language": locale } }),
   cursorModelSettings: () => request<CursorModelSettings>("/settings/cursor-model"),
+  modelSettings: (id: string) => request<ModelSettings>(`/models/${encodeURIComponent(id)}/settings`),
+  setModelSettings: (id: string, settings: ModelSettings) => request<ModelSettings>(`/models/${encodeURIComponent(id)}/settings`, { method: "PUT", body: JSON.stringify(settings) }),
   setCursorDefaultModel: (model_id: string) => request<CursorModelSettings>("/settings/cursor-model", { method: "PUT", body: JSON.stringify({ model_id }) }),
   setCommitSettings: (settings: CommitSettings) => request<CommitSettingsView>("/settings/commit", { method: "PUT", body: JSON.stringify(settings) }),
   pricingSettings: () => request<TokenPricingSettings>("/settings/pricing"),

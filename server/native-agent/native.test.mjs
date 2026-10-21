@@ -47,7 +47,7 @@ test('routing uses the real model family, preserves parameters and leaves offici
   }));
   const savedFetch = globalThis.fetch;
   let fetches = 0,
-    options;
+    options, contextWindowTokens = 500000;
   t.after(() => {
     globalThis.fetch = savedFetch;
   });
@@ -56,7 +56,7 @@ test('routing uses the real model family, preserves parameters and leaves offici
     assert.match(url, /byok%3Aaccount-a/);
     assert.equal(init.headers.Authorization, 'Bearer test-key');
     return Response.json({
-      modelId: 'gpt-5.4'
+      modelId: 'gpt-5.4', contextWindowTokens
     });
   };
   const native = {
@@ -85,7 +85,8 @@ test('routing uses the real model family, preserves parameters and leaves offici
   const routed = await route(turn, () => native, () => 2, config);
   assert.equal(routed.details.modelId, 'gpt-5.4');
   assert.equal(routed.options.requestedModel.modelId, 'gpt-5.4');
-  assert.deepEqual(routed.options.requestedModel.parameters, turn.runOptions.requestedModel.parameters);
+  assert.deepEqual(routed.options.requestedModel.parameters, [{id:'reasoning',value:'high'},{id:'context',value:'500000'}]);
+  assert.equal(turn.runOptions.requestedModel.parameters[0].value, '200000');
   assert.equal(turn.modelDetails.modelId, 'byok:account-a');
   assert.equal(turn.runOptions.requestedModel.modelId, 'byok:account-a');
   assert.match(options.localProvider.endpoints[0].baseUrl, /byok%3Aaccount-a\/v1$/);
@@ -100,6 +101,15 @@ test('routing uses the real model family, preserves parameters and leaves offici
   }, () => 2, config), undefined);
   assert.equal(fetches, 1);
   turn.runOptions.requestedModel.parameters[0].value = '200k';
+  for (const count of [200000, 500000, 1000000]) {
+    contextWindowTokens = count;
+    const next = await route(turn, () => native, () => 2, config);
+    assert.equal(next.options.requestedModel.parameters.find(p=>p.id==='context').value,String(count));
+  }
+  contextWindowTokens = null;
+  const reset = await route(turn, () => native, () => 2, config);
+  assert.deepEqual(reset.options.requestedModel.parameters,[{id:'reasoning',value:'high'}]);
+  contextWindowTokens = '200k';
   await assert.rejects(route(turn, () => native, () => 2, config), /完整 token/);
   fs.writeFileSync(config, JSON.stringify({
     enabled: false

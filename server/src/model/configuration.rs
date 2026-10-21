@@ -267,7 +267,7 @@ pub fn normalize_model_input(input: &ModelConfigInput) -> Result<ModelConfigInpu
         } else {
             empty_object()
         },
-        context_window_tokens: positive(input.context_window_tokens, "context window")?,
+        context_window_tokens: validate_context_window(input.context_window_tokens)?,
         max_completion_tokens: positive(input.max_completion_tokens, "max completion tokens")?,
         anthropic_max_tokens: positive(input.anthropic_max_tokens, "Anthropic max tokens")?,
         anthropic_thinking_effort,
@@ -388,6 +388,16 @@ fn normalize_effort(value: Option<&str>, allow_empty: bool) -> Result<Option<Str
             "unsupported reasoning effort: {value}"
         )))
     }
+}
+
+pub fn validate_context_window(value: Option<u64>) -> Result<Option<u64>> {
+    let value = positive(value, "context window")?;
+    if value.is_some_and(|n| n > 9_007_199_254_740_991) {
+        return Err(Error::Config(
+            "context window must be a safe integer token count".into(),
+        ));
+    }
+    Ok(value)
 }
 
 fn positive(value: Option<u64>, label: &str) -> Result<Option<u64>> {

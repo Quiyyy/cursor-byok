@@ -30,6 +30,7 @@ type CursorModelCardsProps = {
   testResults: Map<string, CursorModelTestState>;
   onTest: (model: Model) => void;
   onEdit: (model: Model) => void;
+  onModelSettings: (id: string, name: string) => void;
   onDuplicate: (model: Model) => void;
   onDelete: (model: Model) => void;
   onTestPluginModel: (model: PluginModelDescriptor) => void;
@@ -76,6 +77,7 @@ export function CursorModelCards(props: CursorModelCardsProps) {
           result={props.testResults.get(model.model_hash)}
           onTest={() => props.onTest(model)}
           onEdit={() => props.onEdit(model)}
+          onSettings={() => props.onModelSettings(model.model_hash, model.display_name)}
           onDuplicate={() => props.onDuplicate(model)}
           onDelete={() => props.onDelete(model)}
         />)}
@@ -98,6 +100,7 @@ export function CursorModelCards(props: CursorModelCardsProps) {
         testing={props.testingModelHashes.has(model.id)}
         result={props.testResults.get(model.id)}
         onTest={() => props.onTestPluginModel(model)}
+        onSettings={() => props.onModelSettings(model.id, model.displayName)}
       />)}
     </CollapsibleGroup>)}
   </div>;
@@ -150,13 +153,14 @@ function CollapsibleGroup({ label, icon, iconSrc, count, defaultOpen = true, onS
   </section>;
 }
 
-function ModelListRow({ model, disabled, testing, result, onTest, onEdit, onDuplicate, onDelete }: {
+function ModelListRow({ model, disabled, testing, result, onTest, onEdit, onSettings, onDuplicate, onDelete }: {
   model: Model;
   disabled: boolean;
   testing: boolean;
   result: CursorModelTestState | undefined;
   onTest: () => void;
   onEdit: () => void;
+  onSettings: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
@@ -168,8 +172,9 @@ function ModelListRow({ model, disabled, testing, result, onTest, onEdit, onDupl
     <CursorModelTestResult compact state={result} testing={testing} />
     <div className={styles.modelCardActions}>
       <Button variant="ghost" size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
-      <TooltipTrigger label={t("编辑模型")}><Button variant="ghost" size="small" className={styles.editAction} aria-label={t("编辑模型")} disabled={disabled || testing} onClick={onEdit}><Icon icon={editIcon} size="1.1em" /></Button></TooltipTrigger>
+      <TooltipTrigger label={t("模型设置")}><Button variant="ghost" size="small" className={styles.editAction} aria-label={t("模型设置")} disabled={disabled || testing} onClick={onSettings}><Icon icon={editIcon} size="1.1em" /></Button></TooltipTrigger>
       <ActionMenu iconOnly label={t("更多")} disabled={disabled || testing} items={[
+        { id: "connection", label: t("编辑连接"), onSelect: onEdit },
         { id: "duplicate", label: t("复制为新模型"), onSelect: onDuplicate },
         { id: "delete", label: t("删除"), onSelect: onDelete },
       ]} />
@@ -177,21 +182,23 @@ function ModelListRow({ model, disabled, testing, result, onTest, onEdit, onDupl
   </div>;
 }
 
-function PluginModelRow({ model, disabled, testing, result, onTest }: {
+function PluginModelRow({ model, disabled, testing, result, onTest, onSettings }: {
   model: PluginModelDescriptor;
   disabled: boolean;
   testing: boolean;
   result: CursorModelTestState | undefined;
   onTest: () => void;
+  onSettings: () => void;
 }) {
   return <div className={styles.modelRow}>
     <div className={styles.modelRowName}>
-      <span className={styles.modelRowNameText} title={model.displayName}>{model.displayName}</span>
+      <button className={styles.modelNameButton} title={model.displayName} disabled={disabled || testing} onClick={onSettings}>{model.displayName}</button>
       <span className={styles.modelRowModelId} title={model.modelId}>{model.modelId}</span>
     </div>
     <CursorModelTestResult compact state={result} testing={testing} />
     <div className={styles.modelCardActions}>
       <Button variant="ghost" size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
+      <TooltipTrigger label={t("模型设置")}><Button variant="ghost" size="small" className={styles.editAction} aria-label={t("模型设置")} disabled={disabled || testing} onClick={onSettings}><Icon icon={editIcon} size="1.1em" /></Button></TooltipTrigger>
     </div>
   </div>;
 }
@@ -207,6 +214,7 @@ function ModelGrid({
   onDuplicate,
   onDelete,
   onReorder,
+  onModelSettings,
 }: ModelGridProps) {
   const grid = useRef<HTMLDivElement>(null);
   const sortable = useRef<Sortable | null>(null);
@@ -282,8 +290,9 @@ function ModelGrid({
           </div>
           <div className={styles.modelCardActions}>
             <Button size="small" disabled={disabled && !testing} onClick={() => onTest(model)}>{testing ? t("取消测试") : t("测试")}</Button>
-            <Button size="small" disabled={disabled || testing} onClick={() => onEdit(model)}>{t("编辑")}</Button>
+            <Button size="small" disabled={disabled || testing} onClick={() => onModelSettings(model.model_hash, model.display_name)}>{t("模型设置")}</Button>
             <ActionMenu iconOnly label={t("更多")} disabled={disabled || testing} items={[
+              { id: "connection", label: t("编辑连接"), onSelect: () => onEdit(model) },
               { id: "duplicate", label: t("复制为新模型"), onSelect: () => onDuplicate(model) },
               { id: "delete", label: t("删除"), onSelect: () => onDelete(model) },
             ]} />

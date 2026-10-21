@@ -72,7 +72,11 @@ async fn lookup(state: &ApiState, id: &str) -> Result<(ListedModel, Value)> {
                 model.model_id,
                 model.display_name,
                 vec!["openai_chat", "openai_responses"],
-                None,
+                state
+                    .store
+                    .model_settings(internal)
+                    .await?
+                    .context_window_tokens,
                 model.max_output_tokens,
                 model.images,
             )
@@ -105,7 +109,7 @@ async fn resolve(
         return *e;
     }
     match lookup(&state, &id).await {
-        Ok((model, _)) => Json(json!({"modelId":model.public_id})).into_response(),
+        Ok((model, metadata)) => Json(json!({"modelId":model.public_id,"contextWindowTokens":metadata.pointer("/capabilities/context_length")})).into_response(),
         Err(e) => api_error(StatusCode::NOT_FOUND, e),
     }
 }

@@ -41,8 +41,13 @@ async fn configured_models(services: &CursorServices) -> Result<Vec<serde_json::
     }
     if let Some(plugins) = services.plugins() {
         for model in plugins.configured_models().await {
+            let context = services
+                .store()
+                .model_settings(&model.id)
+                .await?
+                .context_window_tokens;
             models.push(json!({"cursorId":format!("byok:{}",model.id),"id":model.model_id,"displayName":model.display_name,
-                "source":model.plugin_name,"maxOutputTokens":model.max_output_tokens,"supportsVision":model.images,"extendedCapabilitiesDetected":true}));
+                "source":model.plugin_name,"contextLength":context,"maxOutputTokens":model.max_output_tokens,"supportsVision":model.images,"extendedCapabilitiesDetected":true}));
         }
     }
     // Native optional fields use undefined, not null, for absent metadata.

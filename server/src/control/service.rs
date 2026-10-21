@@ -693,6 +693,22 @@ impl ControlService {
         self.store.cursor_model_settings().await
     }
 
+    pub async fn model_settings(&self, id: &str) -> Result<crate::store::ModelSettings> {
+        if id.starts_with(crate::plugin::ADAPTER_ID_PREFIX) {
+            self.plugins.model_descriptor(id).await?;
+        }
+        self.store.model_settings(id).await
+    }
+
+    pub async fn set_model_settings(
+        &self,
+        id: &str,
+        settings: crate::store::ModelSettings,
+    ) -> Result<crate::store::ModelSettings> {
+        self.model_settings(id).await?;
+        self.store.set_model_settings(id, settings).await
+    }
+
     pub async fn set_cursor_default_model(
         &self,
         model_id: &str,

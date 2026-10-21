@@ -86,6 +86,85 @@ async fn setup() -> (
 }
 
 #[tokio::test]
+async fn model_context_settings_preserve_identity_and_reject_invalid_values() {
+    let (router, _, store, _directory) = setup().await;
+    let model = store.models().await.unwrap().remove(0);
+    let path = format!("/__byok-api__/api/models/{}/settings", model.model_hash);
+    for count in [200000, 500000, 1000000] {
+        let (status, body) = send(
+            router.clone(),
+            "PUT",
+            &path,
+            None,
+            json!({"context_window_tokens":count}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            serde_json::from_str::<Value>(&body).unwrap()["context_window_tokens"],
+            count
+        );
+        let saved = store.model(&model.model_hash).await.unwrap().unwrap();
+        assert_eq!(saved.context_window_tokens, Some(count));
+        assert_eq!(saved.api_key, model.api_key);
+        let (_, body) = send(router.clone(), "GET", &path, None, json!({})).await;
+        assert_eq!(
+            serde_json::from_str::<Value>(&body).unwrap()["context_window_tokens"],
+            count
+        );
+    }
+    for value in [
+        json!(0),
+        json!(-1),
+        json!(1.5),
+        json!("200k"),
+        json!(9007199254740992u64),
+    ] {
+        assert!(send(
+            router.clone(),
+            "PUT",
+            &path,
+            None,
+            json!({"context_window_tokens":value})
+        )
+        .await
+        .0
+        .is_client_error());
+    }
+    assert_eq!(
+        send(
+            router.clone(),
+            "PUT",
+            &path,
+            None,
+            json!({"context_window_tokens":null})
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        store
+            .model(&model.model_hash)
+            .await
+            .unwrap()
+            .unwrap()
+            .context_window_tokens,
+        None
+    );
+    assert!(send(
+        router,
+        "PUT",
+        "/__byok-api__/api/models/missing/settings",
+        None,
+        json!({"context_window_tokens":200000})
+    )
+    .await
+    .0
+    .is_client_error());
+}
+
+#[tokio::test]
 async fn management_settings_enable_the_external_route_without_restart() {
     let (router, _provider, _store, _directory) = setup().await;
     let (status, body) = send(

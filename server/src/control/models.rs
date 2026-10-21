@@ -30,6 +30,21 @@ pub async fn list(State(service): State<ControlService>) -> Result<Json<Vec<Mode
     Ok(Json(service.models().await?))
 }
 
+pub async fn settings(
+    State(service): State<ControlService>,
+    Path(id): Path<String>,
+) -> Result<Json<crate::store::ModelSettings>> {
+    Ok(Json(service.model_settings(&id).await?))
+}
+
+pub async fn update_settings(
+    State(service): State<ControlService>,
+    Path(id): Path<String>,
+    Json(settings): Json<crate::store::ModelSettings>,
+) -> Result<Json<crate::store::ModelSettings>> {
+    Ok(Json(service.set_model_settings(&id, settings).await?))
+}
+
 pub async fn create(
     State(service): State<ControlService>,
     Json(input): Json<SaveModels>,

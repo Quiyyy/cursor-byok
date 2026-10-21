@@ -24,7 +24,7 @@ server/
 - Keep stable native conversation and generation identifiers in the model gateway. Per-call log IDs must not become the conversation cache key.
 - Treat each gateway request independently. Protocol conversion must preserve signed reasoning, text/custom tool inputs, tool-call identities, tool results, and ordering without editing earlier messages.
 - The same-protocol path forwards native payloads; configured defaults must preserve explicitly supplied values. Configured templates must use a stable conversation identifier.
-- Context limits are integer token counts. Never send display units such as `200k` into native parameters parsed with `parseInt`.
+- Context limits are integer token counts owned by BYOK model settings for both API and account models. At each Run, replace stale per-chat context parameters with the configured count, or remove them when reset to the native default. Preserve other native parameters and all Host state. Never send display units such as `200k` into native parameters parsed with `parseInt`.
 - Cached model catalogs invalidate on metadata or installed-runtime changes. Reuse the native picker and protobuf factories rather than maintaining a second capability table.
 
 ## Workflow and verification

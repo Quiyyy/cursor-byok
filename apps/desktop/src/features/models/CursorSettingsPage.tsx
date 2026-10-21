@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, configuredPluginModels, type Model, type ModelInput } from "../../shared/api";
 import { CursorModelCards, cursorModelGroups, type CursorModelGroup, type CursorModelGrouping } from "./CursorModelCards";
 import { CursorModelEditor, emptyCursorModelDraft, type CursorModelDraft } from "./CursorModelEditor";
+import { ModelSettingsDialog } from "./ModelSettingsDialog";
 import { CursorModelTestResult, type CursorModelTestState } from "./CursorModelTestResult";
 import { Button } from "../../shared/ui/Button";
 import { ActionMenu } from "../../shared/ui/ActionMenu";
@@ -26,6 +27,7 @@ export function CursorSettingsPage() {
   const [draft, setDraft] = useState<CursorModelDraft | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Model | null>(null);
+  const [settingsModel, setSettingsModel] = useState<{ id: string; name: string } | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState(false);
   const [deleting, setDeleting] = useState<Model | null>(null);
@@ -279,6 +281,7 @@ export function CursorSettingsPage() {
     testResults={modelTestResults}
     onTest={(model) => void testModel(model)}
     onEdit={openEdit}
+    onModelSettings={(id, name) => setSettingsModel({ id, name })}
     onDuplicate={duplicateModel}
     onDelete={setDeleting}
     onTestPluginModel={(model) => void testModel({ model_hash: model.id, display_name: model.displayName })}
@@ -296,6 +299,7 @@ export function CursorSettingsPage() {
     : Math.max(380, activeGroups.reduce((height, group) => height + 60 + group.models.length * 56, 0) + Math.max(0, activeGroups.length - 1) * 20 + pluginSectionHeight);
 
   return <>
+    {settingsModel && <ModelSettingsDialog key={settingsModel.id} model={settingsModel} onClose={() => setSettingsModel(null)} />}
     <PageActions position="left">
       <Button variant="ghost" disabled={cursorBusy || (!batchTesting && (!testTargets.length || testingModelHashes.size > 0))} onClick={() => void (batchTesting ? cancelAllModelTests() : testAllModels())}>{batchTesting ? t("取消全部测试") : t("测试全部")}</Button>
     </PageActions>
