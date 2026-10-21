@@ -30,6 +30,12 @@ pub async fn list(State(service): State<ControlService>) -> Result<Json<Vec<Mode
     Ok(Json(service.models().await?))
 }
 
+pub async fn all_settings(
+    State(service): State<ControlService>,
+) -> Result<Json<std::collections::BTreeMap<String, crate::store::ModelSettings>>> {
+    Ok(Json(service.all_model_settings().await?))
+}
+
 pub async fn settings(
     State(service): State<ControlService>,
     Path(id): Path<String>,

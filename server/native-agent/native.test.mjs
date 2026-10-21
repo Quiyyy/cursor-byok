@@ -7,6 +7,7 @@ import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { patchAgentHost } from './patch.mjs';
 import { install } from './install.mjs';
+import { catalogEntry } from './catalog.mjs';
 const require = createRequire(import.meta.url);
 const {
   route
@@ -14,7 +15,7 @@ const {
 const host = `class Adapter {constructor(client){this.client=client;this.mintLlmGatewayCredential=null;}run(t){return this.client.run(t);}}
 class Router {async run(t){log('Selected Agent Host turn runtime');return 'official';}} globalThis.Router=Router;`;
 const runtime = `(()=>{class Model{constructor(p){Object.assign(this,p)}static fromBinary(p){return p}}class Client{};
-const modules={12(e,t,r){r.d(t,{LocalAgentClient:()=>Client,buildBottlerocketPickerModels:()=>null});}};
+const modules={12(e,t,r){r.d(t,{LocalAgentClient:()=>Client,buildBottlerocketPickerModels:()=>null,fetchLocalProviderModels:()=>null});}};
 function __webpack_require__(id){return id===12?{LocalAgentClient:Client}:{Type:Model}}
 const __webpack_exports__={};(()=>{const p=__webpack_require__(34);function decode(input){return p.Type.fromBinary(input.defaultModel)}})();
 const __webpack_export_target__=exports;Object.assign(__webpack_export_target__,__webpack_exports__);})();`;
@@ -47,7 +48,7 @@ test('routing uses the real model family, preserves parameters and leaves offici
   }));
   const savedFetch = globalThis.fetch;
   let fetches = 0,
-    options, contextWindowTokens = 500000;
+    options, contextWindowTokens = 500000, refreshes = 0;
   t.after(() => {
     globalThis.fetch = savedFetch;
   });
@@ -56,10 +57,11 @@ test('routing uses the real model family, preserves parameters and leaves offici
     assert.match(url, /byok%3Aaccount-a/);
     assert.equal(init.headers.Authorization, 'Bearer test-key');
     return Response.json({
-      modelId: 'gpt-5.4', contextWindowTokens
+      modelId: 'gpt-5.4', contextWindowTokens, reasoningEfforts:['low','high']
     });
   };
   const native = {
+    __byokRefreshModels: async endpoint => { refreshes++; assert.match(endpoint.baseUrl,/byok%3Aaccount-a\/v1$/); return {allModelIds:['gpt-5.4']}; },
     __byokCreateModelDetails: model,
     __byokLocalAgentClient: () => class {
       constructor(value) {
@@ -83,6 +85,7 @@ test('routing uses the real model family, preserves parameters and leaves offici
     }
   };
   const routed = await route(turn, () => native, () => 2, config);
+  assert.equal(refreshes, 1, 'refresh the native metadata cache at every Run');
   assert.equal(routed.details.modelId, 'gpt-5.4');
   assert.equal(routed.options.requestedModel.modelId, 'gpt-5.4');
   assert.deepEqual(routed.options.requestedModel.parameters, [{id:'reasoning',value:'high'},{id:'context',value:'500000'}]);
@@ -91,6 +94,7 @@ test('routing uses the real model family, preserves parameters and leaves offici
   assert.equal(turn.runOptions.requestedModel.modelId, 'byok:account-a');
   assert.match(options.localProvider.endpoints[0].baseUrl, /byok%3Aaccount-a\/v1$/);
   assert.equal(options.privacyMode, 2);
+  assert.equal(options.customHeaders['x-byok-reasoning-effort'],'high');
   assert.equal(await route({
     ...turn,
     runOptions: {
@@ -115,6 +119,16 @@ test('routing uses the real model family, preserves parameters and leaves offici
     enabled: false
   }));
   await assert.rejects(route(turn, () => native, () => 2, config), /接管未开启/);
+});
+test('provider reasoning and context metadata retain native routing and default variants', () => {
+  class Entry { constructor(value){this.value=value;} toJson(){return structuredClone(this.value);} static fromJson(value){return new Entry(value);} }
+  const source = new Entry({name:'gpt-6.1-sol',clientDisplayName:'GPT',supportsThinking:false,parameterDefinitions:[],variants:[]});
+  const result = catalogEntry(source,{cursorId:'byok:account',source:'Codex',contextLength:1000000,reasoningEfforts:['low','high','xhigh'],defaultReasoningEffort:'high'}).toJson();
+  assert.equal(result.name,'byok:account');assert.equal(result.contextTokenLimit,1000000);
+  assert.deepEqual(result.parameterDefinitions[0].parameterType.enumParameter.values.map(v=>v.value),['low','high','xhigh']);
+  assert.equal(result.variants.find(v=>v.isDefaultNonMaxConfig).parameterValues[0].value,'high');
+  assert.ok(result.variants.every(v=>v.legacySlug==='byok:account'));
+  assert.equal(source.toJson().supportsThinking,false);
 });
 test('native router retains every host-owned state object and callback', async () => {
   let received;

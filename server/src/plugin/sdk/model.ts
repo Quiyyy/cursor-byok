@@ -3,6 +3,8 @@ import type { ResourceSnapshot } from "./resource.ts";
 
 export type ModelCapabilities = {
   images?: boolean;
+  reasoningEfforts?: string[];
+  defaultReasoningEffort?: string;
 };
 
 export type ModelDefinition = {
@@ -10,6 +12,7 @@ export type ModelDefinition = {
   displayName: string;
   description?: string;
   maxOutputTokens?: number;
+  contextWindowTokens?: number;
   capabilities?: ModelCapabilities;
   /** 之后的调用原样传回;永远不会展示给用户。 */
   privateData?: JsonValue;

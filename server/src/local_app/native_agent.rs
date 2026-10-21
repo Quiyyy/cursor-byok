@@ -369,7 +369,7 @@ mod tests {
                     .unwrap();
             assert_eq!(
                 metadata["data"][0]["capabilities"]["context_length"],
-                json!(context)
+                json!(crate::model::effective_context_window(context, None))
             );
             let response = router
                 .clone()
@@ -384,7 +384,10 @@ mod tests {
             let resolved: serde_json::Value =
                 serde_json::from_slice(&to_bytes(response.into_body(), 65536).await.unwrap())
                     .unwrap();
-            assert_eq!(resolved["contextWindowTokens"], json!(context));
+            assert_eq!(
+                resolved["contextWindowTokens"],
+                json!(crate::model::effective_context_window(context, None))
+            );
         }
         let response = router
             .oneshot(

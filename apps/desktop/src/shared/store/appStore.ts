@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { api, type CursorHarnessStatus, type LlmCall, type Model, type ModelInput, type Overview, type PluginDescriptor, type PluginRuntimeStatus, type PortSettings, type TokenPricingSettings } from "../api";
+import { api, type CursorHarnessStatus, type LlmCall, type Model, type ModelInput, type ModelSettings, type Overview, type PluginDescriptor, type PluginRuntimeStatus, type PortSettings, type TokenPricingSettings } from "../api";
 import { applyTheme, isThemeId, type ThemeId } from "../theme/theme";
 
 export const DEFAULT_TOKEN_PRICING: TokenPricingSettings = {
@@ -11,6 +11,8 @@ export const DEFAULT_TOKEN_PRICING: TokenPricingSettings = {
 
 export type AppSnapshot = {
   models: Model[];
+  modelSettings: Record<string, ModelSettings>;
+  savingModelSettings: ReadonlySet<string>;
   calls: LlmCall[];
   overview: Overview;
   detailed: boolean;
@@ -32,6 +34,8 @@ const savedTheme = (): ThemeId => {
 
 let snapshot: AppSnapshot = {
   models: [],
+  modelSettings: {},
+  savingModelSettings: new Set(),
   calls: [],
   overview: {
     metrics: {
@@ -86,7 +90,7 @@ export const appStore = {
   async refresh() {
     update({ busy: true, error: null });
     try {
-      const [models, calls, overview, settings, ports, pricing, cursorHarness, pluginRuntime, plugins] = await Promise.all([
+      const [models, calls, overview, settings, ports, pricing, cursorHarness, pluginRuntime, plugins, modelSettings] = await Promise.all([
         api.models(),
         api.calls(),
         api.overview(),
@@ -96,8 +100,9 @@ export const appStore = {
         api.cursorHarness(),
         api.pluginRuntime(),
         api.plugins(),
+        api.allModelSettings(),
       ]);
-      update({ models, calls, overview, detailed: settings.detailed, ports, pricing, cursorHarness, pluginRuntime, plugins });
+      update({ models, calls, overview, detailed: settings.detailed, ports, pricing, cursorHarness, pluginRuntime, plugins, modelSettings });
     } catch (cause) {
       update({ error: cause instanceof Error ? cause.message : String(cause) });
     } finally {
@@ -110,6 +115,22 @@ export const appStore = {
       await api.deleteModel(modelHash);
       await appStore.refresh();
     });
+  },
+
+  async setModelContext(id: string, context_window_tokens: number | null) {
+    if (snapshot.savingModelSettings.has(id)) return false;
+    update({ savingModelSettings: new Set(snapshot.savingModelSettings).add(id), error: null });
+    try {
+      const saved = await api.setModelSettings(id, { context_window_tokens });
+      update({ modelSettings: { ...snapshot.modelSettings, [id]: saved }, models: snapshot.models.map(model => model.model_hash === id ? { ...model, ...saved } : model) });
+      return true;
+    } catch (cause) {
+      update({ error: cause instanceof Error ? cause.message : String(cause) });
+      return false;
+    } finally {
+      const saving = new Set(snapshot.savingModelSettings); saving.delete(id);
+      update({ savingModelSettings: saving });
+    }
   },
 
   async initializeCursorCa() {

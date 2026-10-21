@@ -1,7 +1,8 @@
 import type { IconifyIcon } from "@iconify/react/offline";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Sortable from "sortablejs";
-import type { Model, PluginModelDescriptor } from "../../shared/api";
+import type { Model, ModelSettings, PluginModelDescriptor } from "../../shared/api";
+import { InlineContextWindow } from "./InlineContextWindow";
 import { Card } from "../../shared/ui/Card";
 import { Icon } from "../../shared/ui/Icon";
 import { chevronDownIcon, chevronRightIcon, claudeIcon, dragIcon, editIcon, openAiIcon } from "../../shared/ui/icons";
@@ -30,7 +31,9 @@ type CursorModelCardsProps = {
   testResults: Map<string, CursorModelTestState>;
   onTest: (model: Model) => void;
   onEdit: (model: Model) => void;
-  onModelSettings: (id: string, name: string) => void;
+  modelSettings: Record<string, ModelSettings>;
+  savingModelSettings: ReadonlySet<string>;
+  onContextChange: (id: string, value: number | null) => Promise<boolean>;
   onDuplicate: (model: Model) => void;
   onDelete: (model: Model) => void;
   onTestPluginModel: (model: PluginModelDescriptor) => void;
@@ -77,7 +80,7 @@ export function CursorModelCards(props: CursorModelCardsProps) {
           result={props.testResults.get(model.model_hash)}
           onTest={() => props.onTest(model)}
           onEdit={() => props.onEdit(model)}
-          onSettings={() => props.onModelSettings(model.model_hash, model.display_name)}
+          contextControl={contextControl(props, model.model_hash)}
           onDuplicate={() => props.onDuplicate(model)}
           onDelete={() => props.onDelete(model)}
         />)}
@@ -100,7 +103,7 @@ export function CursorModelCards(props: CursorModelCardsProps) {
         testing={props.testingModelHashes.has(model.id)}
         result={props.testResults.get(model.id)}
         onTest={() => props.onTestPluginModel(model)}
-        onSettings={() => props.onModelSettings(model.id, model.displayName)}
+        contextControl={contextControl(props, model.id, model.contextWindowTokens ?? 200000)}
       />)}
     </CollapsibleGroup>)}
   </div>;
@@ -153,14 +156,14 @@ function CollapsibleGroup({ label, icon, iconSrc, count, defaultOpen = true, onS
   </section>;
 }
 
-function ModelListRow({ model, disabled, testing, result, onTest, onEdit, onSettings, onDuplicate, onDelete }: {
+function ModelListRow({ model, disabled, testing, result, onTest, onEdit, contextControl, onDuplicate, onDelete }: {
   model: Model;
   disabled: boolean;
   testing: boolean;
   result: CursorModelTestState | undefined;
   onTest: () => void;
   onEdit: () => void;
-  onSettings: () => void;
+  contextControl: ReactNode;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
@@ -169,12 +172,12 @@ function ModelListRow({ model, disabled, testing, result, onTest, onEdit, onSett
       <button className={styles.modelNameButton} title={model.display_name} disabled={disabled || testing} onClick={onEdit}>{model.display_name}</button>
       <span className={styles.modelRowModelId} title={model.model_id}>{model.model_id}</span>
     </div>
+    {contextControl}
     <CursorModelTestResult compact state={result} testing={testing} />
     <div className={styles.modelCardActions}>
       <Button variant="ghost" size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
-      <TooltipTrigger label={t("模型设置")}><Button variant="ghost" size="small" className={styles.editAction} aria-label={t("模型设置")} disabled={disabled || testing} onClick={onSettings}><Icon icon={editIcon} size="1.1em" /></Button></TooltipTrigger>
+      <TooltipTrigger label={t("编辑连接")}><Button variant="ghost" size="small" className={styles.editAction} aria-label={t("编辑连接")} disabled={disabled || testing} onClick={onEdit}><Icon icon={editIcon} size="1.1em" /></Button></TooltipTrigger>
       <ActionMenu iconOnly label={t("更多")} disabled={disabled || testing} items={[
-        { id: "connection", label: t("编辑连接"), onSelect: onEdit },
         { id: "duplicate", label: t("复制为新模型"), onSelect: onDuplicate },
         { id: "delete", label: t("删除"), onSelect: onDelete },
       ]} />
@@ -182,28 +185,29 @@ function ModelListRow({ model, disabled, testing, result, onTest, onEdit, onSett
   </div>;
 }
 
-function PluginModelRow({ model, disabled, testing, result, onTest, onSettings }: {
+function PluginModelRow({ model, disabled, testing, result, onTest, contextControl }: {
   model: PluginModelDescriptor;
   disabled: boolean;
   testing: boolean;
   result: CursorModelTestState | undefined;
   onTest: () => void;
-  onSettings: () => void;
+  contextControl: ReactNode;
 }) {
   return <div className={styles.modelRow}>
     <div className={styles.modelRowName}>
-      <button className={styles.modelNameButton} title={model.displayName} disabled={disabled || testing} onClick={onSettings}>{model.displayName}</button>
+      <span className={styles.modelRowNameText} title={model.displayName}>{model.displayName}</span>
       <span className={styles.modelRowModelId} title={model.modelId}>{model.modelId}</span>
     </div>
+    {contextControl}
     <CursorModelTestResult compact state={result} testing={testing} />
     <div className={styles.modelCardActions}>
       <Button variant="ghost" size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
-      <TooltipTrigger label={t("模型设置")}><Button variant="ghost" size="small" className={styles.editAction} aria-label={t("模型设置")} disabled={disabled || testing} onClick={onSettings}><Icon icon={editIcon} size="1.1em" /></Button></TooltipTrigger>
     </div>
   </div>;
 }
 
-function ModelGrid({
+function ModelGrid(props: ModelGridProps) {
+  const {
   models,
   sortable: sortableEnabled,
   disabled,
@@ -214,8 +218,7 @@ function ModelGrid({
   onDuplicate,
   onDelete,
   onReorder,
-  onModelSettings,
-}: ModelGridProps) {
+  } = props;
   const grid = useRef<HTMLDivElement>(null);
   const sortable = useRef<Sortable | null>(null);
   const currentModels = useRef(models);
@@ -285,14 +288,14 @@ function ModelGrid({
               {model.type === "anthropic" ? "Anthropic" : "OpenAI"}
             </span>
           </div>
-          <div className={styles.modelCardTest}>
+          {(result || testing) && <div className={styles.modelCardTest}>
             <CursorModelTestResult state={result} testing={testing} />
-          </div>
+          </div>}
+          {contextControl(props, model.model_hash)}
           <div className={styles.modelCardActions}>
             <Button size="small" disabled={disabled && !testing} onClick={() => onTest(model)}>{testing ? t("取消测试") : t("测试")}</Button>
-            <Button size="small" disabled={disabled || testing} onClick={() => onModelSettings(model.model_hash, model.display_name)}>{t("模型设置")}</Button>
+            <Button size="small" disabled={disabled || testing} onClick={() => onEdit(model)}>{t("编辑连接")}</Button>
             <ActionMenu iconOnly label={t("更多")} disabled={disabled || testing} items={[
-              { id: "connection", label: t("编辑连接"), onSelect: () => onEdit(model) },
               { id: "duplicate", label: t("复制为新模型"), onSelect: () => onDuplicate(model) },
               { id: "delete", label: t("删除"), onSelect: () => onDelete(model) },
             ]} />
@@ -307,6 +310,10 @@ function providerGroup(model: Model) {
   const key = providerDomain(model.base_url);
   const label = model.group_name?.trim() || key;
   return { key, label, icon: sourceIcon };
+}
+
+function contextControl(props: Pick<CursorModelCardsProps, "modelSettings" | "savingModelSettings" | "onContextChange" | "disabled">, id: string, defaultTokens = 200000) {
+  return <InlineContextWindow value={props.modelSettings[id]?.context_window_tokens ?? null} defaultTokens={defaultTokens} disabled={props.disabled || props.savingModelSettings.has(id)} onChange={(value) => props.onContextChange(id, value)} />;
 }
 
 function providerDomain(baseUrl: string) {

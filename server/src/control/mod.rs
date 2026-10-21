@@ -120,6 +120,7 @@ pub fn api_router(service: ControlService) -> Router {
             get(models::preview_v0049).post(models::import_v0049),
         )
         .route("/__byok-api__/api/models/order", put(models::reorder))
+        .route("/__byok-api__/api/model-settings", get(models::all_settings))
         .route("/__byok-api__/api/models/{model_hash}/settings", get(models::settings).put(models::update_settings))
         .route("/__byok-api__/api/overview", get(overview::get))
         .route(

@@ -137,6 +137,9 @@ pub struct PluginModelDescriptor {
     pub icon: String,
     pub provider_type: String,
     pub max_output_tokens: Option<u64>,
+    pub context_window_tokens: Option<u64>,
+    pub reasoning_efforts: Vec<String>,
+    pub default_reasoning_effort: Option<String>,
     pub images: bool,
     pub enabled: bool,
 }
@@ -294,6 +297,9 @@ impl PluginModelDescriptor {
             icon: icon.to_owned(),
             provider_type: provider.provider_type.clone(),
             max_output_tokens: model.max_output_tokens,
+            context_window_tokens: model.context_window_tokens,
+            reasoning_efforts: model.reasoning_efforts.clone(),
+            default_reasoning_effort: model.default_reasoning_effort.clone(),
             images: model.images,
             enabled: model.enabled,
         }

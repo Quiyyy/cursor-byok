@@ -700,6 +700,12 @@ impl ControlService {
         self.store.model_settings(id).await
     }
 
+    pub async fn all_model_settings(
+        &self,
+    ) -> Result<BTreeMap<String, crate::store::ModelSettings>> {
+        self.store.all_model_settings().await
+    }
+
     pub async fn set_model_settings(
         &self,
         id: &str,

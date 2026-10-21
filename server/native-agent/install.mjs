@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import Module, { createRequire } from 'node:module';
 import { patchAgentHost, exposeNativeClient } from './patch.mjs';
+import { catalogEntry } from './catalog.mjs';
 const files = ['extensions/cursor-agent-host/dist/main.js', 'extensions/cursor-local-agent-runtime/dist/main.js'];
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const read = file => fs.readFileSync(file, 'utf8');
@@ -98,11 +99,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       } of models) {
         const [entry] = library.__byokModelCatalog([model]);
         if (!entry) throw Error(`Native Cursor cannot describe ${model.id}`);
-        entry.name = cursorId;
-        entry.serverModelName = cursorId;
-        entry.defaultOn = true;
-        entry.vendorName = source;
-        catalog.available.push(Buffer.from(entry.toBinary()).toString('base64'));
+        const enriched = catalogEntry(entry, {...model, cursorId, source});
+        catalog.available.push(Buffer.from(enriched.toBinary()).toString('base64'));
         const details = library.__byokCreateModelDetails(cursorId);
         details.displayModelId = cursorId;
         details.displayName = model.displayName;

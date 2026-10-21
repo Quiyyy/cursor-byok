@@ -10,7 +10,6 @@ import { Combobox, Select, type ComboboxHandle } from "../../shared/ui/Select";
 import { Switch } from "../../shared/ui/Switch";
 import { claudeIcon, openAiIcon } from "../../shared/ui/icons";
 import { CursorPresetChips } from "./CursorPresetChips";
-import { ContextWindowField } from "./ContextWindowField";
 import styles from "./CursorSettings.module.scss";
 
 export type CursorModelDraft = {
@@ -162,7 +161,6 @@ export function CursorModelEditor({ draft, modelOptions, discovering, onChange, 
         display_name: !draft.model.display_name || draft.model.display_name === draft.model.model_id ? model_id : draft.model.display_name,
       })} /></FormField>
       <FormField label={t("显示名称")} hint={t("仅用于界面展示，不会改变发送给模型服务的模型名称。")}> <TextInput placeholder={t("留空使用模型名称")} value={draft.model.display_name} onChange={(event) => setModel({ display_name: event.target.value })} /></FormField>
-      <ContextWindowField value={draft.model.context_window_tokens} onChange={(context_window_tokens) => setModel({ context_window_tokens })} />
     </div>
     <details className={styles.advanced}>
       <summary>{t("高级参数")}</summary>

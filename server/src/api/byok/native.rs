@@ -50,7 +50,7 @@ async fn lookup(state: &ApiState, id: &str) -> Result<(ListedModel, Value)> {
     let internal = id
         .strip_prefix("byok:")
         .ok_or_else(|| Error::Protocol("expected a BYOK model identifier".into()))?;
-    let (model_id, name, apis, context, output, images) =
+    let (model_id, name, apis, context, output, images, efforts) =
         if let Some(model) = state.store.model(internal).await? {
             let api = match model.provider_type() {
                 crate::model::ProviderType::Anthropic => "anthropic_messages",
@@ -62,9 +62,10 @@ async fn lookup(state: &ApiState, id: &str) -> Result<(ListedModel, Value)> {
                 model.model_id,
                 model.display_name,
                 vec![api],
-                model.context_window_tokens,
+                crate::model::effective_context_window(model.context_window_tokens, None),
                 output,
                 true,
+                Vec::new(),
             )
         } else {
             let model = state.plugins.model_descriptor(internal).await?;
@@ -72,19 +73,23 @@ async fn lookup(state: &ApiState, id: &str) -> Result<(ListedModel, Value)> {
                 model.model_id,
                 model.display_name,
                 vec!["openai_chat", "openai_responses"],
-                state
-                    .store
-                    .model_settings(internal)
-                    .await?
-                    .context_window_tokens,
+                crate::model::effective_context_window(
+                    state
+                        .store
+                        .model_settings(internal)
+                        .await?
+                        .context_window_tokens,
+                    model.context_window_tokens,
+                ),
                 model.max_output_tokens,
                 model.images,
+                model.reasoning_efforts,
             )
         };
-    let mut capabilities =
-        json!({"supports_tool_use":true,"supports_streaming":true,"supports_vision":images});
-    if let Some(n) = context {
-        capabilities["context_length"] = json!(n);
+    let mut capabilities = json!({"supports_tool_use":true,"supports_streaming":true,"supports_vision":images,"output_modalities":["text"],"context_length":context});
+    if !efforts.is_empty() {
+        capabilities["supports_reasoning"] = json!(true);
+        capabilities["reasoning_effort"] = json!(efforts);
     }
     if let Some(n) = output {
         capabilities["max_output_tokens"] = json!(n);
@@ -109,7 +114,7 @@ async fn resolve(
         return *e;
     }
     match lookup(&state, &id).await {
-        Ok((model, metadata)) => Json(json!({"modelId":model.public_id,"contextWindowTokens":metadata.pointer("/capabilities/context_length")})).into_response(),
+        Ok((model, metadata)) => Json(json!({"modelId":model.public_id,"contextWindowTokens":metadata.pointer("/capabilities/context_length"),"reasoningEfforts":metadata.pointer("/capabilities/reasoning_effort")})).into_response(),
         Err(e) => api_error(StatusCode::NOT_FOUND, e),
     }
 }
@@ -130,14 +135,14 @@ async fn generate(
     state: ApiState,
     id: String,
     headers: HeaderMap,
-    body: Value,
+    mut body: Value,
     protocol: Protocol,
 ) -> Response {
     if let Err(e) = authorized(&state, &headers).await {
         return *e;
     }
-    let model = match lookup(&state, &id).await {
-        Ok((model, _)) => model,
+    let (model, metadata) = match lookup(&state, &id).await {
+        Ok(found) => found,
         Err(e) => return api_error(StatusCode::NOT_FOUND, e),
     };
     if body.get("model").and_then(Value::as_str) != Some(&model.public_id) {
@@ -146,8 +151,53 @@ async fn generate(
             "request model does not match the selected route",
         );
     }
+    if let Err(error) = preserve_selected_effort(&mut body, protocol, &headers, &metadata) {
+        return api_error(StatusCode::BAD_REQUEST, error);
+    }
     invoke(state, headers, body, protocol, model, "native-agent").await
 }
+
+// Native releases may not serialize effort for newly named models. Carry only an
+// explicitly selected, provider-advertised value; keep native overrides intact.
+fn preserve_selected_effort(
+    body: &mut Value,
+    protocol: Protocol,
+    headers: &HeaderMap,
+    metadata: &Value,
+) -> Result<()> {
+    let Some(effort) = headers
+        .get("x-byok-reasoning-effort")
+        .and_then(|h| h.to_str().ok())
+    else {
+        return Ok(());
+    };
+    if !metadata
+        .pointer("/capabilities/reasoning_effort")
+        .and_then(Value::as_array)
+        .is_some_and(|values| values.iter().any(|value| value.as_str() == Some(effort)))
+    {
+        return Err(Error::Protocol(
+            "selected reasoning effort is not advertised by this model".into(),
+        ));
+    }
+    match protocol {
+        Protocol::Chat if body.get("reasoning_effort").is_none_or(Value::is_null) => {
+            body["reasoning_effort"] = json!(effort)
+        }
+        Protocol::Responses if body.pointer("/reasoning/effort").is_none_or(Value::is_null) => {
+            if body.get("reasoning").is_none_or(Value::is_null) {
+                body["reasoning"] = json!({});
+            }
+            if !body["reasoning"].is_object() {
+                return Err(Error::Protocol("reasoning must be an object".into()));
+            }
+            body["reasoning"]["effort"] = json!(effort);
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 async fn chat(
     State(s): State<ApiState>,
     Path(id): Path<String>,
@@ -234,5 +284,30 @@ async fn images(
     {
         Ok(response) => response,
         Err(e) => api_error(StatusCode::BAD_GATEWAY, e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn forwards_advertised_effort_without_replacing_native_parameters() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-byok-reasoning-effort", "high".parse().unwrap());
+        let metadata = json!({"capabilities":{"reasoning_effort":["low","high"]}});
+        let mut responses = json!({"reasoning":{"summary":"auto"}});
+        preserve_selected_effort(&mut responses, Protocol::Responses, &headers, &metadata).unwrap();
+        assert_eq!(
+            responses,
+            json!({"reasoning":{"effort":"high","summary":"auto"}})
+        );
+        let mut chat = json!({});
+        preserve_selected_effort(&mut chat, Protocol::Chat, &headers, &metadata).unwrap();
+        assert_eq!(chat["reasoning_effort"], "high");
+        chat["reasoning_effort"] = json!("low");
+        preserve_selected_effort(&mut chat, Protocol::Chat, &headers, &metadata).unwrap();
+        assert_eq!(chat["reasoning_effort"], "low");
+        headers.insert("x-byok-reasoning-effort", "max".parse().unwrap());
+        assert!(preserve_selected_effort(&mut chat, Protocol::Chat, &headers, &metadata).is_err());
     }
 }

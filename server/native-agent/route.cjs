@@ -33,21 +33,30 @@ async function route(turn, loadNative, getPrivacyMode, configPath = path.join(__
     if (context != null) options.requestedModel.parameters.push({id: 'context', value: String(context)});
   }
   const Client = library.__byokLocalAgentClient();
+  const selectedEffort = options.requestedModel?.parameters?.find(p => p.id === 'reasoning')?.value;
+  const advertisedEffort = model.reasoningEfforts?.includes(selectedEffort) ? selectedEffort : undefined;
+  const endpoint = {
+    baseUrl: `${config.baseUrl}/models/${encodeURIComponent(selected)}/v1`,
+    apiKey: config.apiKey
+  };
+  const refreshed = await library.__byokRefreshModels({
+    ...endpoint,
+    fetchImpl: (url, init) => fetch(url, {...init, signal: turn.ctx.signal})
+  });
+  if (!refreshed.allModelIds.includes(model.modelId)) throw new Error('Cursor BYOK model metadata unavailable');
   return {
     details,
     options,
     client: new Client({
       localProvider: {
         kind: 'http',
-        endpoints: [{
-          baseUrl: `${config.baseUrl}/models/${encodeURIComponent(selected)}/v1`,
-          apiKey: config.apiKey
-        }]
+        endpoints: [endpoint]
       },
       defaultModel: details,
       availableModels: () => [details],
       privacyMode: getPrivacyMode(),
       customHeaders: {
+        ...(advertisedEffort ? {'x-byok-reasoning-effort':advertisedEffort} : {}),
         ...(turn.runOptions.conversationId ? {
           'x-byok-conversation-id': turn.runOptions.conversationId
         } : {}),

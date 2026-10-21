@@ -11,6 +11,28 @@ pub struct ModelSettings {
 }
 
 impl Store {
+    pub async fn all_model_settings(
+        &self,
+    ) -> Result<std::collections::BTreeMap<String, ModelSettings>> {
+        let mut settings = std::collections::BTreeMap::new();
+        for model in self.models().await? {
+            settings.insert(
+                model.model_hash,
+                ModelSettings {
+                    context_window_tokens: model.context_window_tokens,
+                },
+            );
+        }
+        let rows: Vec<(String,String)> = sqlx::query_as("SELECT setting_key, value_json FROM service_settings WHERE setting_key LIKE 'model_settings:plugin:%'").fetch_all(&self.pool).await?;
+        for (key, value) in rows {
+            settings.insert(
+                key["model_settings:".len()..].to_owned(),
+                serde_json::from_str(&value)?,
+            );
+        }
+        Ok(settings)
+    }
+
     pub async fn model_settings(&self, id: &str) -> Result<ModelSettings> {
         if id.starts_with(crate::plugin::ADAPTER_ID_PREFIX) {
             let value: Option<String> =
@@ -78,6 +100,7 @@ mod tests {
             .unwrap();
         let reopened = Store::connect(&url).await.unwrap();
         assert_eq!(reopened.model_settings(id).await.unwrap(), settings);
+        assert_eq!(reopened.all_model_settings().await.unwrap()[id], settings);
         assert_eq!(
             reopened
                 .model_settings("plugin:test/other/grok-4.7")

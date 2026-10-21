@@ -297,6 +297,9 @@ export interface PluginModelDescriptor {
   icon: string;
   providerType: string;
   maxOutputTokens: number | null;
+  contextWindowTokens: number | null;
+  reasoningEfforts: string[];
+  defaultReasoningEffort: string | null;
   images: boolean;
   enabled: boolean;
 }
@@ -556,6 +559,7 @@ export const api = {
   setDesktopSettings: (settings: DesktopSettings) => request<DesktopSettings>("/settings/desktop", { method: "PUT", body: JSON.stringify(settings) }),
   commitSettings: (locale: Locale) => request<CommitSettingsView>("/settings/commit", { headers: { "accept-language": locale } }),
   cursorModelSettings: () => request<CursorModelSettings>("/settings/cursor-model"),
+  allModelSettings: () => request<Record<string, ModelSettings>>("/model-settings"),
   modelSettings: (id: string) => request<ModelSettings>(`/models/${encodeURIComponent(id)}/settings`),
   setModelSettings: (id: string, settings: ModelSettings) => request<ModelSettings>(`/models/${encodeURIComponent(id)}/settings`, { method: "PUT", body: JSON.stringify(settings) }),
   setCursorDefaultModel: (model_id: string) => request<CursorModelSettings>("/settings/cursor-model", { method: "PUT", body: JSON.stringify({ model_id }) }),

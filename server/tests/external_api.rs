@@ -119,6 +119,7 @@ async fn model_context_settings_preserve_identity_and_reject_invalid_values() {
         json!(1.5),
         json!("200k"),
         json!(9007199254740992u64),
+        json!(2147483648u64),
     ] {
         assert!(send(
             router.clone(),

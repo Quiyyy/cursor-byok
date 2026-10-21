@@ -96,6 +96,8 @@ Cursor 模型菜单
 
 上下文窗口由 BYOK 的模型设置统一管理。`store/model_settings.rs` 复用 API 模型的现有字段，并在现有设置表中独立保存账号模型覆盖值；同一个管理 API 服务两种模型。模型目录和原生网关读取同一配置，`native-agent/route.cjs` 在每个 Run 开始时将整数 Token 数传给原生参数，并移除旧会话遗留的 context 参数。进行中的 Run 不被重置，下一轮沿用原会话状态并应用新容量。
 
+目录补充由 `native-agent/catalog.mjs` 完成：上游声明的思考档位、默认档位和上下文容量进入原生消息，variant 的路由字段保持 BYOK 模型身份，避免被 Workbench 误当作 Auto。原生客户端每轮刷新自己的模型元数据缓存；当新型号的原生传输层省略已选思考档位时，网关只补齐上游明确支持且请求中缺失的值。上下文占用量仍来自原生会话 Token 状态，不在 BYOK 重建估算器。
+
 ## 已移除的实现
 
 已删除 `server/src/run/`，以及 `cursor/` 下的 `compile/`、`prompting/`、`tools/`、`checkpoint/`、`conversation/`、`transport/`、`native/`。旧 Node 工具 worker、Agent 提示模板、固定工具快照、协议提取器和整套 Agent protobuf 也已删除。

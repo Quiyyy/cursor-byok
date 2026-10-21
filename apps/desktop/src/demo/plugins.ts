@@ -9,6 +9,7 @@ const provider = (id: string, name: string, modelIds: string[], invalid = false)
     models: modelIds.map((modelId) => ({
       id: `plugin:${id}/${modelId}`, pluginId: id, pluginName: name, providerId: "models", modelId, displayName: modelId,
       description: null, icon: "", providerType: "openai-responses", maxOutputTokens: 16384, images: true, enabled: true,
+      contextWindowTokens: null, reasoningEfforts: [], defaultReasoningEffort: null,
     })),
   }],
   resources: [{

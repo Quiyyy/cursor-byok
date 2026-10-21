@@ -392,12 +392,21 @@ fn normalize_effort(value: Option<&str>, allow_empty: bool) -> Result<Option<Str
 
 pub fn validate_context_window(value: Option<u64>) -> Result<Option<u64>> {
     let value = positive(value, "context window")?;
-    if value.is_some_and(|n| n > 9_007_199_254_740_991) {
+    if value.is_some_and(|n| n > i32::MAX as u64) {
         return Err(Error::Config(
-            "context window must be a safe integer token count".into(),
+            "context window must fit Cursor's positive int32 token count".into(),
         ));
     }
     Ok(value)
+}
+
+/// BYOK's working budget when neither the user nor the provider advertises a window.
+pub const DEFAULT_CONTEXT_WINDOW_TOKENS: u64 = 200_000;
+
+pub fn effective_context_window(configured: Option<u64>, advertised: Option<u64>) -> u64 {
+    configured
+        .or(advertised)
+        .unwrap_or(DEFAULT_CONTEXT_WINDOW_TOKENS)
 }
 
 fn positive(value: Option<u64>, label: &str) -> Result<Option<u64>> {

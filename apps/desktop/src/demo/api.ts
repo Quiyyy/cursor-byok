@@ -5,6 +5,7 @@ import type {
   LlmCall,
   Model,
   ModelInput,
+  ModelSettings,
   Overview,
   OverviewTokenUsageBucket,
   ProxySettings,
@@ -15,6 +16,7 @@ import { demoPlugins } from "./plugins";
 
 const API_ROOT = "/__byok-api__/api";
 const FIXED_NOW = Date.now();
+const modelSettings: Record<string, ModelSettings> = {};
 
 const models: Model[] = [
   createModel({ hash: "mock-claude-sonnet", order: 1, name: "Claude Sonnet 4", type: "anthropic", url: "https://api.anthropic.com", modelId: "claude-sonnet-4-20250514" }),
@@ -113,6 +115,16 @@ export function installDemoApi() {
     const body = await readBody(input, init);
 
     if (path === "/models" && method === "GET") return json(models);
+    if (path === "/model-settings") return json({ ...Object.fromEntries(models.map(model => [model.model_hash, { context_window_tokens: model.context_window_tokens }])), ...modelSettings });
+    if (/^\/models\/[^/]+\/settings$/.test(path)) {
+      const id = decodeURIComponent(path.split("/")[2]);
+      const model = models.find(model => model.model_hash === id);
+      if (method === "PUT") {
+        modelSettings[id] = body as ModelSettings;
+        if (model) model.context_window_tokens = modelSettings[id].context_window_tokens;
+      }
+      return json(modelSettings[id] ?? { context_window_tokens: model?.context_window_tokens ?? null });
+    }
     if (path === "/models" && method === "POST") {
       const created = (body as { models: ModelInput[] }).models.map((input) => ({ ...input, model_hash: crypto.randomUUID(), created_at_ms: Date.now(), updated_at_ms: Date.now() }));
       models.push(...created);
