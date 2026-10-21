@@ -22,6 +22,21 @@
   gap: 8px;
   padding: 0 10px;
 }
+.ghost {
+  height: 28px;
+  padding: 0 6px;
+  color: var(--vscode-descriptionForeground);
+  background: transparent;
+  border-color: transparent;
+  cursor: pointer;
+  &:hover:not(:disabled), &[aria-expanded="true"] {
+    color: var(--vscode-foreground);
+    background: var(--vscode-toolbar-hoverBackground);
+  }
+  &:focus:not(:focus-visible):not([aria-expanded="true"]) { border-color: transparent; }
+  &:focus-visible, &[aria-expanded="true"] { border-color: var(--vscode-focusBorder); }
+  &:disabled { opacity: .5; cursor: not-allowed; }
+}
 .optionContent {
   min-width: 0;
   display: flex;

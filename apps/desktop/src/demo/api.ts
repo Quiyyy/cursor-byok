@@ -16,7 +16,17 @@ import { demoPlugins } from "./plugins";
 
 const API_ROOT = "/__byok-api__/api";
 const FIXED_NOW = Date.now();
-const modelSettings: Record<string, ModelSettings> = {};
+const modelSettings: Record<string, Pick<ModelSettings, "context_window_tokens">> = {};
+
+function demoModelSettings(id: string): ModelSettings {
+  const model = models.find(model => model.model_hash === id);
+  const plugin = demoPlugins.flatMap(plugin => plugin.providers.flatMap(provider => provider.models)).find(model => model.id === id);
+  const name = (model?.model_id ?? plugin?.modelId ?? "").toLowerCase();
+  return {
+    context_window_tokens: modelSettings[id]?.context_window_tokens ?? model?.context_window_tokens ?? null,
+    default_context_window_tokens: name.startsWith("gpt-") ? 1000000 : name.startsWith("grok") ? 500000 : plugin?.contextWindowTokens ?? 200000,
+  };
+}
 
 const models: Model[] = [
   createModel({ hash: "mock-claude-sonnet", order: 1, name: "Claude Sonnet 4", type: "anthropic", url: "https://api.anthropic.com", modelId: "claude-sonnet-4-20250514" }),
@@ -100,6 +110,7 @@ let proxySettings: ProxySettings = {
   has_password: false,
 };
 let tabSettings: TabSettings = { mode: "direct", address: "" };
+let cursorModelSettings = { model_id: "plugin:demo.grok/Grok 4.7", updated_at_ms: FIXED_NOW };
 let storage: StatisticsStorage = { call_count: calls.length, trace_count: calls.length };
 
 export function installDemoApi() {
@@ -115,15 +126,22 @@ export function installDemoApi() {
     const body = await readBody(input, init);
 
     if (path === "/models" && method === "GET") return json(models);
-    if (path === "/model-settings") return json({ ...Object.fromEntries(models.map(model => [model.model_hash, { context_window_tokens: model.context_window_tokens }])), ...modelSettings });
+    if (path === "/settings/cursor-model") {
+      if (method === "PUT") cursorModelSettings = { model_id: (body as { model_id: string }).model_id, updated_at_ms: Date.now() };
+      return json(cursorModelSettings);
+    }
+    if (path === "/model-settings") return json(Object.fromEntries([
+      ...models.map(model => model.model_hash),
+      ...demoPlugins.flatMap(plugin => plugin.providers.flatMap(provider => provider.models.map(model => model.id))),
+    ].map(id => [id, demoModelSettings(id)])));
     if (/^\/models\/[^/]+\/settings$/.test(path)) {
       const id = decodeURIComponent(path.split("/")[2]);
       const model = models.find(model => model.model_hash === id);
       if (method === "PUT") {
-        modelSettings[id] = body as ModelSettings;
+        modelSettings[id] = body as Pick<ModelSettings, "context_window_tokens">;
         if (model) model.context_window_tokens = modelSettings[id].context_window_tokens;
       }
-      return json(modelSettings[id] ?? { context_window_tokens: model?.context_window_tokens ?? null });
+      return json(demoModelSettings(id));
     }
     if (path === "/models" && method === "POST") {
       const created = (body as { models: ModelInput[] }).models.map((input) => ({ ...input, model_hash: crypto.randomUUID(), created_at_ms: Date.now(), updated_at_ms: Date.now() }));

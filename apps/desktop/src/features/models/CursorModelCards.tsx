@@ -34,6 +34,10 @@ type CursorModelCardsProps = {
   modelSettings: Record<string, ModelSettings>;
   savingModelSettings: ReadonlySet<string>;
   onContextChange: (id: string, value: number | null) => Promise<boolean>;
+  defaultModelId: string | null;
+  defaultModelDisabled: boolean;
+  savingDefaultModelId: string | null;
+  onSetDefault: (id: string) => void;
   onDuplicate: (model: Model) => void;
   onDelete: (model: Model) => void;
   onTestPluginModel: (model: PluginModelDescriptor) => void;
@@ -81,6 +85,7 @@ export function CursorModelCards(props: CursorModelCardsProps) {
           onTest={() => props.onTest(model)}
           onEdit={() => props.onEdit(model)}
           contextControl={contextControl(props, model.model_hash)}
+          defaultControl={defaultControl(props, model.model_hash)}
           onDuplicate={() => props.onDuplicate(model)}
           onDelete={() => props.onDelete(model)}
         />)}
@@ -103,7 +108,8 @@ export function CursorModelCards(props: CursorModelCardsProps) {
         testing={props.testingModelHashes.has(model.id)}
         result={props.testResults.get(model.id)}
         onTest={() => props.onTestPluginModel(model)}
-        contextControl={contextControl(props, model.id, model.contextWindowTokens ?? 200000)}
+        contextControl={contextControl(props, model.id)}
+        defaultControl={defaultControl(props, model.id)}
       />)}
     </CollapsibleGroup>)}
   </div>;
@@ -156,7 +162,7 @@ function CollapsibleGroup({ label, icon, iconSrc, count, defaultOpen = true, onS
   </section>;
 }
 
-function ModelListRow({ model, disabled, testing, result, onTest, onEdit, contextControl, onDuplicate, onDelete }: {
+function ModelListRow({ model, disabled, testing, result, onTest, onEdit, contextControl, defaultControl, onDuplicate, onDelete }: {
   model: Model;
   disabled: boolean;
   testing: boolean;
@@ -164,6 +170,7 @@ function ModelListRow({ model, disabled, testing, result, onTest, onEdit, contex
   onTest: () => void;
   onEdit: () => void;
   contextControl: ReactNode;
+  defaultControl: ReactNode;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
@@ -176,6 +183,7 @@ function ModelListRow({ model, disabled, testing, result, onTest, onEdit, contex
     <CursorModelTestResult compact state={result} testing={testing} />
     <div className={styles.modelCardActions}>
       <Button variant="ghost" size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
+      {defaultControl}
       <TooltipTrigger label={t("编辑连接")}><Button variant="ghost" size="small" className={styles.editAction} aria-label={t("编辑连接")} disabled={disabled || testing} onClick={onEdit}><Icon icon={editIcon} size="1.1em" /></Button></TooltipTrigger>
       <ActionMenu iconOnly label={t("更多")} disabled={disabled || testing} items={[
         { id: "duplicate", label: t("复制为新模型"), onSelect: onDuplicate },
@@ -185,13 +193,14 @@ function ModelListRow({ model, disabled, testing, result, onTest, onEdit, contex
   </div>;
 }
 
-function PluginModelRow({ model, disabled, testing, result, onTest, contextControl }: {
+function PluginModelRow({ model, disabled, testing, result, onTest, contextControl, defaultControl }: {
   model: PluginModelDescriptor;
   disabled: boolean;
   testing: boolean;
   result: CursorModelTestState | undefined;
   onTest: () => void;
   contextControl: ReactNode;
+  defaultControl: ReactNode;
 }) {
   return <div className={styles.modelRow}>
     <div className={styles.modelRowName}>
@@ -202,6 +211,7 @@ function PluginModelRow({ model, disabled, testing, result, onTest, contextContr
     <CursorModelTestResult compact state={result} testing={testing} />
     <div className={styles.modelCardActions}>
       <Button variant="ghost" size="small" disabled={disabled && !testing} onClick={onTest}>{testing ? t("取消测试") : t("测试")}</Button>
+      {defaultControl}
     </div>
   </div>;
 }
@@ -294,6 +304,7 @@ function ModelGrid(props: ModelGridProps) {
           {contextControl(props, model.model_hash)}
           <div className={styles.modelCardActions}>
             <Button size="small" disabled={disabled && !testing} onClick={() => onTest(model)}>{testing ? t("取消测试") : t("测试")}</Button>
+            {defaultControl(props, model.model_hash)}
             <Button size="small" disabled={disabled || testing} onClick={() => onEdit(model)}>{t("编辑连接")}</Button>
             <ActionMenu iconOnly label={t("更多")} disabled={disabled || testing} items={[
               { id: "duplicate", label: t("复制为新模型"), onSelect: () => onDuplicate(model) },
@@ -312,8 +323,18 @@ function providerGroup(model: Model) {
   return { key, label, icon: sourceIcon };
 }
 
-function contextControl(props: Pick<CursorModelCardsProps, "modelSettings" | "savingModelSettings" | "onContextChange" | "disabled">, id: string, defaultTokens = 200000) {
-  return <InlineContextWindow value={props.modelSettings[id]?.context_window_tokens ?? null} defaultTokens={defaultTokens} disabled={props.disabled || props.savingModelSettings.has(id)} onChange={(value) => props.onContextChange(id, value)} />;
+function contextControl(props: Pick<CursorModelCardsProps, "modelSettings" | "savingModelSettings" | "onContextChange" | "disabled">, id: string) {
+  const settings = props.modelSettings[id];
+  if (!settings) return null;
+  return <InlineContextWindow value={settings.context_window_tokens} defaultTokens={settings.default_context_window_tokens} disabled={props.disabled || props.savingModelSettings.has(id)} onChange={(value) => props.onContextChange(id, value)} />;
+}
+
+function defaultControl(props: Pick<CursorModelCardsProps, "defaultModelId" | "defaultModelDisabled" | "savingDefaultModelId" | "onSetDefault" | "disabled">, id: string) {
+  return <span className={styles.defaultModelControl}>
+    {props.defaultModelId === id
+      ? <span className={styles.defaultModelLabel}>{t("默认模型")}</span>
+      : <Button variant="ghost" size="small" disabled={props.disabled || props.defaultModelDisabled} onClick={() => props.onSetDefault(id)}>{props.savingDefaultModelId === id ? t("保存中…") : t("设为默认")}</Button>}
+  </span>;
 }
 
 function providerDomain(baseUrl: string) {

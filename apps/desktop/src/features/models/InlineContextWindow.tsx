@@ -7,9 +7,9 @@ import styles from "./InlineContextWindow.module.scss";
 const PRESETS = [128000, 200000, 256000, 500000, 1000000];
 const format = (n: number) => n >= 1000000 ? `${n / 1000000}m` : `${n / 1000}k`;
 
-export function InlineContextWindow({ value, defaultTokens = 200000, disabled, onChange }: {
+export function InlineContextWindow({ value, defaultTokens, disabled, onChange }: {
   value: number | null;
-  defaultTokens?: number;
+  defaultTokens: number;
   disabled: boolean;
   onChange: (value: number | null) => Promise<boolean>;
 }) {
@@ -19,7 +19,6 @@ export function InlineContextWindow({ value, defaultTokens = 200000, disabled, o
   const valid = Number.isSafeInteger(parsed) && parsed > 0 && parsed <= 2147483647;
   const saveCustom = async () => { if (valid && await onChange(parsed)) setCustom(false); };
   return <div className={styles.root}>
-    <span className={styles.label}>{t("上下文")}</span>
     {custom ? <div className={styles.custom}>
       <TextInput aria-label={t("上下文 Token 数")} type="number" min={1} max={2147483647} step={1} value={draft} disabled={disabled} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => {
         if (e.key === "Enter") { e.preventDefault(); void saveCustom(); }
@@ -27,7 +26,7 @@ export function InlineContextWindow({ value, defaultTokens = 200000, disabled, o
       }} />
       <Button size="small" disabled={disabled || !valid} onClick={() => void saveCustom()}>{t("保存")}</Button>
       <Button variant="ghost" size="small" disabled={disabled} onClick={() => setCustom(false)}>{t("取消")}</Button>
-    </div> : <Select ariaLabel={t("上下文窗口")} value={String(value ?? "")} disabled={disabled} options={[
+    </div> : <Select variant="ghost" selectedLabel={format(value ?? defaultTokens)} ariaLabel={t("上下文窗口")} value={String(value ?? "")} disabled={disabled} options={[
       { value: "", label: t("默认 {size}", { size: format(defaultTokens) }) },
       ...PRESETS.map((n) => ({ value: String(n), label: format(n) })),
       ...(value !== null && !PRESETS.includes(value) ? [{ value: String(value), label: format(value) }] : []),

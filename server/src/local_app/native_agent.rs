@@ -349,7 +349,11 @@ mod tests {
             assert_eq!(value["data"][0]["api_types"], json!(["openai_chat"]));
             assert!(!String::from_utf8_lossy(&bytes).contains("provider-secret"));
         }
-        for context in [Some(500000), Some(1000000), None] {
+        for (context, expected) in [
+            (Some(200000), 200000),
+            (Some(1000000), 1000000),
+            (None, 500000),
+        ] {
             store
                 .set_model_settings(
                     &ids[0],
@@ -369,7 +373,7 @@ mod tests {
                     .unwrap();
             assert_eq!(
                 metadata["data"][0]["capabilities"]["context_length"],
-                json!(crate::model::effective_context_window(context, None))
+                json!(expected)
             );
             let response = router
                 .clone()
@@ -384,10 +388,7 @@ mod tests {
             let resolved: serde_json::Value =
                 serde_json::from_slice(&to_bytes(response.into_body(), 65536).await.unwrap())
                     .unwrap();
-            assert_eq!(
-                resolved["contextWindowTokens"],
-                json!(crate::model::effective_context_window(context, None))
-            );
+            assert_eq!(resolved["contextWindowTokens"], json!(expected));
         }
         let response = router
             .oneshot(

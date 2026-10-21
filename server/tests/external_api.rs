@@ -86,6 +86,47 @@ async fn setup() -> (
 }
 
 #[tokio::test]
+async fn model_context_defaults_are_shared_by_list_detail_and_reset() {
+    let (router, _, store, _directory) = setup().await;
+    for (id, expected) in [("gpt-new-model", 1_000_000), ("grok-new-model", 500_000)] {
+        let mut input = model_input();
+        input.model_id = id.into();
+        let model = store.create_model(&input).await.unwrap();
+        let path = format!("/__byok-api__/api/models/{}/settings", model.model_hash);
+        let (_, body) = send(
+            router.clone(),
+            "GET",
+            "/__byok-api__/api/model-settings",
+            None,
+            json!({}),
+        )
+        .await;
+        let list: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(
+            list[&model.model_hash]["default_context_window_tokens"],
+            expected
+        );
+        assert!(list[&model.model_hash]["context_window_tokens"].is_null());
+        for count in [json!(128_000), Value::Null] {
+            let (status, body) = send(
+                router.clone(),
+                "PUT",
+                &path,
+                None,
+                json!({"context_window_tokens": count}),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+            let saved: Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(saved["context_window_tokens"], count);
+            assert_eq!(saved["default_context_window_tokens"], expected);
+            let (_, body) = send(router.clone(), "GET", &path, None, json!({})).await;
+            assert_eq!(serde_json::from_str::<Value>(&body).unwrap(), saved);
+        }
+    }
+}
+
+#[tokio::test]
 async fn model_context_settings_preserve_identity_and_reject_invalid_values() {
     let (router, _, store, _directory) = setup().await;
     let model = store.models().await.unwrap().remove(0);

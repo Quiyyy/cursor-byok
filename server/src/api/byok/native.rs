@@ -58,29 +58,36 @@ async fn lookup(state: &ApiState, id: &str) -> Result<(ListedModel, Value)> {
                 _ => "openai_chat",
             };
             let output = model.max_completion_tokens.or(model.anthropic_max_tokens);
+            let context = crate::model::effective_context_window(
+                &model.model_id,
+                model.context_window_tokens,
+                None,
+            );
             (
                 model.model_id,
                 model.display_name,
                 vec![api],
-                crate::model::effective_context_window(model.context_window_tokens, None),
+                context,
                 output,
                 true,
                 Vec::new(),
             )
         } else {
             let model = state.plugins.model_descriptor(internal).await?;
+            let context = crate::model::effective_context_window(
+                &model.model_id,
+                state
+                    .store
+                    .model_settings(internal)
+                    .await?
+                    .context_window_tokens,
+                model.context_window_tokens,
+            );
             (
                 model.model_id,
                 model.display_name,
                 vec!["openai_chat", "openai_responses"],
-                crate::model::effective_context_window(
-                    state
-                        .store
-                        .model_settings(internal)
-                        .await?
-                        .context_window_tokens,
-                    model.context_window_tokens,
-                ),
+                context,
                 model.max_output_tokens,
                 model.images,
                 model.reasoning_efforts,

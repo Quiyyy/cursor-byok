@@ -1,6 +1,5 @@
 @use "../../styles/typography" as type;
-.root { flex: 0 0 auto; display: grid; gap: 2px; min-width: 106px; }
-.label { color: var(--vscode-descriptionForeground); font-size: type.$font-size-2xs; }
-.root > button { min-height: 28px; padding: 2px 8px; font-size: type.$font-size-xs; }
+.root { flex: 0 0 auto; display: flex; align-items: center; }
+.root > button { width: 76px; font-variant-numeric: tabular-nums; }
 .custom { display: flex; align-items: center; gap: 3px; }
 .custom input { width: 100px; min-height: 28px; font-size: type.$font-size-xs; }
