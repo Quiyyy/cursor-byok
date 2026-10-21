@@ -12,7 +12,7 @@ use crate::{
     model::ToolCall,
     search::{WebFetch, WebSearch},
     store::Store,
-    Error, Result,
+    Result,
 };
 
 use super::{
@@ -52,9 +52,6 @@ pub(super) async fn start(
         return local::subagents_disabled(call);
     }
 
-    let normalized_call = normalize_block_until_ms(call)?;
-    let call = normalized_call.as_ref().unwrap_or(call);
-
     match normalized(&call.name).as_str() {
         "shell" | "bash" | "read" | "delete" | "grep" | "glob" | "readlints" | "task"
         | "callmcptool" | "fetchmcpresource" | "getmcptools" => {
@@ -76,55 +73,6 @@ fn unavailable_tool(call: &ToolCall) -> ToolStart {
     }
 }
 
-fn normalize_block_until_ms(call: &ToolCall) -> Result<Option<ToolCall>> {
-    if !is_shell_tool(&call.name) {
-        return Ok(None);
-    }
-    let Some(value) = call.arguments.get("block_until_ms") else {
-        return Ok(None);
-    };
-
-    let integer = if let Some(value) = value.as_i64() {
-        value
-    } else {
-        let value = value.as_f64().ok_or_else(|| {
-            Error::Protocol(format!("{} block_until_ms must be an integer", call.name))
-        })?;
-        if !value.is_finite() || value.fract() != 0.0 {
-            return Err(Error::Protocol(format!(
-                "{} block_until_ms must be an integer",
-                call.name
-            )));
-        }
-        if value < i64::MIN as f64 || value > i64::MAX as f64 {
-            return Err(Error::Protocol(format!(
-                "{} block_until_ms is out of range",
-                call.name
-            )));
-        }
-        value as i64
-    };
-
-    if integer < 0 {
-        return Err(Error::Protocol(format!(
-            "{} block_until_ms is out of range",
-            call.name
-        )));
-    }
-
-    if value.as_i64().is_some() {
-        return Ok(None);
-    }
-
-    let mut normalized_call = call.clone();
-    normalized_call
-        .arguments
-        .as_object_mut()
-        .ok_or_else(|| Error::Protocol(format!("{} arguments must be a JSON object", call.name)))?
-        .insert("block_until_ms".into(), serde_json::Value::from(integer));
-    Ok(Some(normalized_call))
-}
-
 fn is_mcp_auth(call: &ToolCall) -> bool {
     normalized(&call.name) == "callmcptool"
         && call
@@ -142,10 +90,6 @@ pub(super) async fn resume_interaction(
     response: &pb::InteractionResponse,
 ) -> Result<InteractionContinuation> {
     interaction::resume(results, search, fetch, pending, response).await
-}
-
-fn is_shell_tool(name: &str) -> bool {
-    matches!(normalized(name).as_str(), "shell" | "bash")
 }
 
 pub(super) fn normalized(name: &str) -> String {

@@ -143,7 +143,7 @@ pub fn tool_query(id: u32, call: &ToolCall) -> Result<pb::AgentServerMessage> {
                 args: Some(pb::CreatePlanArgs {
                     plan: string("plan")?,
                     todos,
-                    overview: string("overview")?,
+                    overview: optional_string("overview").unwrap_or_default(),
                     name: optional_string("name").unwrap_or_default(),
                     is_project: false,
                     phases: Vec::new(),

@@ -13,7 +13,9 @@
 | `apps/desktop/src/shared/assets/provider-icons/` | 服务商品牌标识 | 保持对应服务含义，不作为项目品牌使用 |
 | `server/plugins/build-in/*/assets/` | 内置账号插件图标 | 随对应插件更新 |
 | `apps/desktop/src/shared/assets/fonts/` | 当前 UI 字体资源 | 单独核对字体来源和分发许可 |
-| `server/prompt/` | 嵌入的提示模板 | 视为运行时资源，保持语义与 LF 换行 |
+| `server/prompt/cursor/protocol.json` | 从本机 Cursor 提取的统一提示词与内置工具定义 | 使用[资产提取器](../support/cursor-assets-extractor/README.md)，保留来源和构建指纹 |
+| `server/prompt/cursor/extensions.json` | BYOK 自有扩展工具 | 与本地工具执行实现一同维护 |
+| `server/prompt/` 下其余模板 | 动态上下文、模式提醒、压缩与提交信息模板 | 视为运行时资源，保持语义与 LF 换行 |
 | `protocols/cursor/` | 协议定义 | 按协议提取与适配流程更新 |
 
 第三方图形、字体和模型权重不因位于本仓库而自动获得项目 MIT 许可。详见[第三方说明](./THIRD_PARTY.md)。

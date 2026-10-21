@@ -12,7 +12,6 @@ use cursor_server::{
         ToolResultContent,
     },
 };
-use sha2::{Digest, Sha256};
 
 #[test]
 fn projecting_an_append_only_context_preserves_the_complete_prefix() {
@@ -133,220 +132,44 @@ fn split_tool_pairs_reconstruct_the_original_provider_assistant_message() {
 }
 
 #[test]
-fn every_prompt_mode_loads_the_captured_tool_set() {
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
-    assert_eq!(assets.mode(Mode::Agent).tools.len(), 21);
-    assert_eq!(
-        assets
-            .mode(Mode::Agent)
-            .tools
-            .iter()
-            .map(|tool| tool.name.as_str())
-            .collect::<Vec<_>>(),
-        vec![
-            "Shell",
-            "Grep",
-            "Delete",
-            "WebSearch",
-            "WebFetch",
-            "GenerateImage",
-            "EditNotebook",
-            "TodoWrite",
-            "StrReplace",
-            "Write",
-            "Read",
-            "ReadLints",
-            "Glob",
-            "AskQuestion",
-            "Task",
-            "GetMcpTools",
-            "FetchMcpResource",
-            "SwitchMode",
-            "CallMcpTool",
-            "SembleSearch",
-            "SembleFindRelated",
-        ]
-    );
-    assert_mode(
-        &assets,
-        Mode::Ask,
-        &[
-            "AskQuestion",
-            "CallMcpTool",
-            "Delete",
-            "FetchMcpResource",
-            "Glob",
-            "Grep",
-            "Read",
-            "ReadLints",
-            "Shell",
-            "StrReplace",
-            "Task",
-            "TodoWrite",
-            "WebFetch",
-            "WebSearch",
-            "Write",
-            "SembleSearch",
-            "SembleFindRelated",
-        ],
-        "98bb57a9ade7f1a572c5c5fe77a905a129d28ecfd42b8d318250f6486b09e1ec",
-    );
-    assert_mode(
-        &assets,
-        Mode::Plan,
-        &[
-            "Shell",
-            "Glob",
-            "Grep",
-            "Read",
-            "TodoWrite",
-            "ReadLints",
-            "WebSearch",
-            "WebFetch",
-            "AskQuestion",
-            "CreatePlan",
-            "Task",
-            "FetchMcpResource",
-            "CallMcpTool",
-            "SembleSearch",
-            "SembleFindRelated",
-        ],
-        "9a7e0f9e0bd8ef0af01032fa311686f72c42ec260e3057f6fae5e68f5ed36fb8",
-    );
-    assert_mode(
-        &assets,
-        Mode::Debug,
-        &[
-            "AskQuestion",
-            "CallMcpTool",
-            "Delete",
-            "FetchMcpResource",
-            "Glob",
-            "Grep",
-            "Read",
-            "ReadLints",
-            "Shell",
-            "StrReplace",
-            "Task",
-            "TodoWrite",
-            "WebFetch",
-            "WebSearch",
-            "Write",
-            "SembleSearch",
-            "SembleFindRelated",
-        ],
-        "98bb57a9ade7f1a572c5c5fe77a905a129d28ecfd42b8d318250f6486b09e1ec",
-    );
-    assert_mode(
-        &assets,
-        Mode::Multitask,
-        &[
-            "AskQuestion",
-            "CallMcpTool",
-            "Delete",
-            "FetchMcpResource",
-            "Glob",
-            "Grep",
-            "Read",
-            "ReadLints",
-            "Shell",
-            "StrReplace",
-            "SwitchMode",
-            "Task",
-            "TodoWrite",
-            "WebFetch",
-            "WebSearch",
-            "Write",
-            "GenerateImage",
-            "SembleSearch",
-            "SembleFindRelated",
-        ],
-        "976b309dd91e314d4916439ebb9da8995751d011532e39934a1da7593dc78ccb",
-    );
-    assert_mode(
-        &assets,
-        Mode::Subagent,
-        &[
-            "Shell",
-            "Grep",
-            "Delete",
-            "WebSearch",
-            "WebFetch",
-            "GenerateImage",
-            "ReadLints",
-            "EditNotebook",
-            "TodoWrite",
-            "StrReplace",
-            "Write",
-            "Read",
-            "Glob",
-            "GetMcpTools",
-            "FetchMcpResource",
-            "SwitchMode",
-            "UpdateCurrentStep",
-            "CallMcpTool",
-            "SembleSearch",
-            "SembleFindRelated",
-        ],
-        "6de1ee86a131ca093c7143f54fffcba2fc14b32ff45fd6f5e0df1347058ad744",
-    );
-    assert_mode(
-        &assets,
-        Mode::Compaction,
-        &[],
-        "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-    );
-    assert_eq!(
-        schema_digest(&assets.mode(Mode::Agent).tools),
-        "282a1dff7957090d0a75eac4a46474ac7cffa1b0937bdf97354544e729bb15c2"
-    );
-    let task = assets
-        .mode(Mode::Agent)
-        .tools
-        .iter()
-        .find(|tool| tool.name == "Task")
-        .unwrap();
-    assert!(task.description.contains(
-        "When the user does not specify a number, launch at most three subagents in a single response. If the user explicitly requests more, you may launch the requested number."
-    ));
-    assert!(task.description.contains(
-        "If the user explicitly requests parallel subagents, follow the number requested by the user."
-    ));
-    assert!(!task
-        .description
-        .chars()
-        .any(|character| ('\u{4e00}'..='\u{9fff}').contains(&character)));
-    let shell = assets
-        .mode(Mode::Agent)
-        .tools
-        .iter()
-        .find(|tool| tool.name == "Shell")
-        .unwrap();
-    assert!(
-        shell.parameters["properties"]["block_until_ms"]["description"]
-            .as_str()
-            .unwrap()
-            .contains("do not combine it with `nohup`, `&`, `disown`")
-    );
+fn every_mode_uses_the_shared_extracted_contract() {
+    let assets = PromptAssets::embedded().unwrap();
+    let native: serde_json::Value =
+        serde_json::from_str(include_str!("../prompt/cursor/protocol.json")).unwrap();
+    let tools: Vec<ToolDefinition> = serde_json::from_value(native["tools"].clone()).unwrap();
     for mode in [
         Mode::Agent,
         Mode::Ask,
+        Mode::Plan,
         Mode::Debug,
         Mode::Multitask,
         Mode::Subagent,
-        Mode::Compaction,
     ] {
-        assert!(!assets
-            .mode(mode)
-            .tools
-            .iter()
-            .any(|tool| tool.name == "CreatePlan" || tool.name == "PatchEdit"));
+        assert_eq!(
+            assets.mode(mode).prompt,
+            native["instructions"].as_str().unwrap()
+        );
+        for tool in &assets.mode(mode).tools {
+            assert!(!tool.name.contains("Mcp"));
+            if !tool.name.starts_with("Semble") && tool.name != "UpdateCurrentStep" {
+                assert_eq!(
+                    Some(tool),
+                    tools.iter().find(|native| native.name == tool.name)
+                );
+            }
+        }
     }
+    assert!(assets.mode(Mode::Compaction).tools.is_empty());
+    assert!(assets
+        .mode(Mode::Plan)
+        .tools
+        .iter()
+        .any(|t| t.name == "CreatePlan"));
+    assert!(!assets
+        .mode(Mode::Agent)
+        .tools
+        .iter()
+        .any(|t| t.name == "CreatePlan"));
 }
 
 #[test]
@@ -381,23 +204,6 @@ fn every_captured_mode_owns_and_renders_its_runtime_template() {
         assert!(rendered.contains("<user_query>\nquestion\n</user_query>"));
         assert_eq!(rendered.matches("<user_query>").count(), 1);
     }
-}
-
-fn assert_mode(assets: &PromptAssets, mode: Mode, expected: &[&str], digest: &str) {
-    assert_eq!(
-        assets
-            .mode(mode)
-            .tools
-            .iter()
-            .map(|tool| tool.name.as_str())
-            .collect::<Vec<_>>(),
-        expected
-    );
-    assert_eq!(schema_digest(&assets.mode(mode).tools), digest);
-}
-
-fn schema_digest(tools: &[ToolDefinition]) -> String {
-    hex::encode(Sha256::digest(serde_json::to_vec(tools).unwrap()))
 }
 
 #[test]
@@ -481,7 +287,7 @@ fn image_generation_capability_controls_only_the_generate_image_definition() {
 }
 
 #[test]
-fn agent_system_prompt_is_static_and_substitutes_the_model_name() {
+fn agent_system_prompt_is_static_and_independent_of_model_name() {
     let assets = PromptAssets::load(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("prompt/cursor")
@@ -495,7 +301,8 @@ fn agent_system_prompt_is_static_and_substitutes_the_model_name() {
         .prompt_spec(Mode::Agent, &model, &[], false)
         .unwrap();
     let prompt = &request.instructions;
-    assert!(prompt.contains("powered by Test Model"));
+    assert!(prompt.contains("powered by the configured model"));
+    assert!(!prompt.contains("Test Model"));
     assert!(!prompt.contains("test-model-hash"));
     assert!(!prompt.contains("{{FAKE_MODEL_NAME}}"));
     assert!(!prompt.contains("<user_info>"));
@@ -540,11 +347,8 @@ fn subagent_uses_the_agent_prompt_and_only_the_captured_tool_delta() {
             "Write",
             "Read",
             "Glob",
-            "GetMcpTools",
-            "FetchMcpResource",
             "SwitchMode",
             "UpdateCurrentStep",
-            "CallMcpTool",
             "SembleSearch",
             "SembleFindRelated",
         ]

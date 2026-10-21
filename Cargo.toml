@@ -4,6 +4,7 @@ members = [
     "apps/desktop/src-tauri",
     "crates/semble-core",
     "support/benchmarks/semble",
+    "support/cursor-assets-extractor/verify-native",
 ]
 resolver = "2"
 

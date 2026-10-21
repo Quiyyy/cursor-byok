@@ -4,6 +4,7 @@ use std::{path::Path, sync::OnceLock};
 use crate::{model::ToolDefinition, Error, Result};
 
 use super::catalog::Catalog;
+use super::protocol::NativeProtocol;
 
 static EMBEDDED_PROMPTS: include_dir::Dir<'_> =
     include_dir::include_dir!("$CARGO_MANIFEST_DIR/prompt/cursor");
@@ -81,7 +82,21 @@ impl PromptAssets {
     }
 
     pub fn embedded() -> Result<Self> {
+        Self::embedded_with_protocol(None)
+    }
+
+    pub fn with_protocol_file(path: &Path) -> Result<Self> {
+        let protocol = std::fs::read_to_string(path)?;
+        Self::embedded_with_protocol(Some(&protocol))
+    }
+
+    fn embedded_with_protocol(protocol: Option<&str>) -> Result<Self> {
         Self::read(|path| {
+            if path == "protocol.json" {
+                if let Some(protocol) = protocol {
+                    return Ok(Some(protocol.into()));
+                }
+            }
             EMBEDDED_PROMPTS
                 .get_file(path)
                 .map(|file| {
@@ -94,10 +109,17 @@ impl PromptAssets {
     }
 
     fn read(mut asset: impl FnMut(&str) -> Result<Option<String>>) -> Result<Self> {
-        let catalog = Catalog::parse(
-            &asset("tools.json")?
-                .ok_or_else(|| Error::Config("missing Cursor tools.json".into()))?,
+        let protocol = NativeProtocol::parse(
+            &asset("protocol.json")?
+                .ok_or_else(|| Error::Config("missing Cursor protocol.json".into()))?,
         )?;
+        let mut tools = protocol.tools;
+        let extensions: Vec<ToolDefinition> = serde_json::from_str(
+            &asset("extensions.json")?
+                .ok_or_else(|| Error::Config("missing Cursor extensions.json".into()))?,
+        )?;
+        tools.extend(extensions);
+        let catalog = Catalog::new(tools)?;
         let mut modes = Vec::with_capacity(7);
         for mode in [
             Mode::Agent,
@@ -108,8 +130,12 @@ impl PromptAssets {
             Mode::Subagent,
             Mode::Compaction,
         ] {
-            let prompt = asset(&format!("{}/prompt.md", mode.name()))?
-                .ok_or_else(|| Error::Config(format!("missing prompt for {mode:?}")))?;
+            let prompt = if mode == Mode::Compaction {
+                asset("compaction/prompt.md")?
+                    .ok_or_else(|| Error::Config("missing compaction prompt".into()))?
+            } else {
+                protocol.instructions.clone()
+            };
             let runtime = asset(&format!("{}/runtime.md", mode.name()))?
                 .ok_or_else(|| Error::Config(format!("missing runtime template for {mode:?}")))?;
             validate_runtime_template(mode, &runtime)?;

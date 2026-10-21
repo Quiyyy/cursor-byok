@@ -36,8 +36,10 @@ impl App {
                 .listen_addr
                 .set_port(store.port_settings().await?.service_port);
         }
-        let assets = PromptAssets::embedded()?;
-        let compiler = PromptCompiler::new(assets);
+        let compiler = match std::env::var_os("CURSOR_PROTOCOL_FILE") {
+            Some(path) => PromptCompiler::from_protocol_file(path.into())?,
+            None => PromptCompiler::new(PromptAssets::embedded()?),
+        };
         let plugin_runtime = PluginRuntime::managed()?;
         let plugins = PluginRegistry::managed(
             store.clone(),

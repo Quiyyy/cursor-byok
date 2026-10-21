@@ -1,5 +1,5 @@
 //! Compiles stable Prompt specifications for Cursor modes.
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use crate::{
     model::{ModelSpec, PromptSpec, ToolDefinition},
@@ -11,11 +11,31 @@ use super::{assets::runtime_expression, Mode, PromptAssets};
 #[derive(Clone)]
 pub struct PromptCompiler {
     assets: PromptAssets,
+    protocol_file: Option<PathBuf>,
 }
 
 impl PromptCompiler {
     pub fn new(assets: PromptAssets) -> Self {
-        Self { assets }
+        Self {
+            assets,
+            protocol_file: None,
+        }
+    }
+
+    pub fn from_protocol_file(path: PathBuf) -> Result<Self> {
+        let assets = PromptAssets::with_protocol_file(&path)?;
+        Ok(Self {
+            assets,
+            protocol_file: Some(path),
+        })
+    }
+
+    /// Reload at a turn boundary; the returned snapshot is immutable for that run.
+    pub fn snapshot(&self) -> Result<Self> {
+        match &self.protocol_file {
+            Some(path) => Ok(Self::new(PromptAssets::with_protocol_file(path)?)),
+            None => Ok(self.clone()),
+        }
     }
 
     pub fn runtime_message(&self, mode: Mode, values: &BTreeMap<&str, String>) -> Result<String> {
@@ -36,16 +56,8 @@ impl PromptCompiler {
         if !model.supports_image_generation {
             tools.retain(|tool| tool.name != "GenerateImage");
         }
-        let fake_model_name = model
-            .display_name
-            .as_deref()
-            .unwrap_or(model.model_id.as_str());
         Ok(PromptSpec {
-            instructions: self
-                .assets
-                .mode(mode)
-                .prompt
-                .replace("{{FAKE_MODEL_NAME}}", fake_model_name),
+            instructions: self.assets.mode(mode).prompt.clone(),
             tools,
         })
     }

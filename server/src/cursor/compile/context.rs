@@ -288,68 +288,38 @@ pub fn compile_context(context: &pb::RequestContext, today: &str) -> String {
             subagents.join("\n")
         ));
     }
-    {
-        let servers = context
-            .mcp_meta_tool_options
-            .as_ref()
-            .into_iter()
-            .flat_map(|options| &options.mcp_descriptors)
-            .filter_map(compile_mcp_descriptor)
-            .collect::<Vec<_>>();
-        if !servers.is_empty() {
-            sections.push(format!(
-                "<mcp_meta_tools>\nThe following MCP tools are available. Call a listed tool directly with CallMcpTool without calling GetMcpTools first. If a call returns an error, use it to correct the arguments or authentication and retry when appropriate.\n<mcp_meta_tool_servers>\n{}\n</mcp_meta_tool_servers>\n</mcp_meta_tools>",
-                servers.join("\n")
-            ));
+    let mut mcp_servers = HashSet::new();
+    sections.extend(native_mcp_descriptors(context).filter_map(|server| {
+        let instructions = server.server_use_instructions.as_deref()?.trim();
+        if instructions.is_empty() || !mcp_servers.insert(&server.server_identifier) {
+            return None;
         }
-    }
+        Some(format!(
+            "<mcp_server_instructions server=\"{}\">\n{}\n</mcp_server_instructions>",
+            xml(&server.server_identifier),
+            instructions
+        ))
+    }));
     sections.join("\n\n")
 }
 
-fn compile_mcp_descriptor(server: &pb::McpDescriptor) -> Option<String> {
-    if server.server_identifier.trim().is_empty() {
-        return None;
-    }
-    let tools = server
-        .tools
-        .iter()
-        .filter(|tool| !tool.tool_name.trim().is_empty())
-        .map(|tool| {
-            let mut lines = vec![format!("<mcp_tool name=\"{}\">", xml(&tool.tool_name))];
-            if let Some(path) = tool
-                .definition_path
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-            {
-                lines.push(format!("<definition_path>{}</definition_path>", xml(path)));
-            }
-            if let Some(description) = tool
-                .description
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-            {
-                lines.push(format!("<description>{}</description>", xml(description)));
-            }
-            if let Some(schema) = mcp_input_schema(tool) {
-                lines.push(format!("<input_schema>{}</input_schema>", xml(&schema)));
-            }
-            lines.push("</mcp_tool>".into());
-            lines.join("\n")
-        })
-        .collect::<Vec<_>>();
-    if tools.is_empty() {
-        return None;
-    }
-    Some(format!(
-        "<mcp_meta_tool_server name=\"{}\" identifier=\"{}\">\n<tools>\n{}\n</tools>\n</mcp_meta_tool_server>",
-        xml(if server.server_name.trim().is_empty() {
-            &server.server_identifier
-        } else {
-            &server.server_name
-        }),
-        xml(&server.server_identifier),
-        tools.join("\n"),
-    ))
+fn native_mcp_descriptors(
+    context: &pb::RequestContext,
+) -> impl Iterator<Item = &pb::McpDescriptor> {
+    context
+        .mcp_meta_tool_options
+        .as_ref()
+        .filter(|options| options.enabled)
+        .into_iter()
+        .flat_map(|options| &options.mcp_descriptors)
+        .chain(
+            context
+                .mcp_file_system_options
+                .as_ref()
+                .filter(|options| options.enabled)
+                .into_iter()
+                .flat_map(|options| &options.mcp_descriptors),
+        )
 }
 
 fn mcp_input_schema(tool: &pb::McpToolDescriptor) -> Option<String> {
@@ -506,6 +476,51 @@ pub fn dynamic_mcp(
             return Err(Error::Protocol(format!(
                 "duplicate MCP tool name after normalization: {name}"
             )));
+        }
+    }
+    for server in native_mcp_descriptors(context) {
+        for tool in &server.tools {
+            if server.server_identifier.trim().is_empty() || tool.tool_name.trim().is_empty() {
+                return Err(Error::Protocol(
+                    "Cursor MCP descriptor is missing server or tool identity".into(),
+                ));
+            }
+            let name =
+                normalize_tool_name(&format!("{}-{}", server.server_identifier, tool.tool_name));
+            if output.values().any(|(wire, _)| {
+                wire.tool_name == tool.tool_name
+                    && (wire.provider_identifier == server.server_name
+                        || wire.provider_identifier == server.server_identifier)
+            }) {
+                continue;
+            }
+            let Some(schema) = mcp_input_schema(tool) else {
+                tracing::warn!(server = %server.server_identifier, tool = %tool.tool_name, "Cursor MCP descriptor has no input schema; cannot expose tool");
+                continue;
+            };
+            let parameters = normalize_mcp_parameters(&name, serde_json::from_str(&schema)?)?;
+            let wire = pb::McpToolDefinition {
+                name: name.clone(),
+                provider_identifier: if server.server_name.is_empty() {
+                    server.server_identifier.clone()
+                } else {
+                    server.server_name.clone()
+                },
+                tool_name: tool.tool_name.clone(),
+                description: tool.description.clone().unwrap_or_default(),
+                input_schema: None,
+                input_schema_json: Some(schema),
+            };
+            let definition = ToolDefinition {
+                name: name.clone(),
+                description: wire.description.clone(),
+                parameters,
+            };
+            if output.insert(name.clone(), (wire, definition)).is_some() {
+                return Err(Error::Protocol(format!(
+                    "duplicate native MCP tool: {name}"
+                )));
+            }
         }
     }
     Ok(output)
@@ -675,6 +690,46 @@ fn xml(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_mcp_descriptors_are_forwarded_without_a_static_catalog() {
+        let schema =
+            r#"{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}"#;
+        let mut context = pb::RequestContext {
+            mcp_meta_tool_options: Some(pb::McpMetaToolOptions {
+                enabled: true,
+                mcp_descriptors: vec![pb::McpDescriptor {
+                    server_name: "Native MCP".into(),
+                    server_identifier: "native".into(),
+                    server_use_instructions: Some("Keep fixture text unchanged".into()),
+                    tools: vec![pb::McpToolDescriptor {
+                        tool_name: "echo".into(),
+                        description: Some("Echo fixture text".into()),
+                        input_schema_json: Some(schema.into()),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }],
+            }),
+            ..Default::default()
+        };
+        let tools = dynamic_mcp(&pb::AgentRunRequest::default(), &context).unwrap();
+        let (wire, tool) = &tools["native-echo"];
+        assert_eq!(tool.description, "Echo fixture text");
+        assert_eq!(
+            tool.parameters,
+            serde_json::from_str::<Value>(schema).unwrap()
+        );
+        assert_eq!(wire.provider_identifier, "Native MCP");
+        assert_eq!(wire.tool_name, "echo");
+        assert_eq!(tools.len(), 1);
+        assert!(compile_context(&context, "today").contains("Keep fixture text unchanged"));
+        context.mcp_meta_tool_options.as_mut().unwrap().enabled = false;
+        assert!(dynamic_mcp(&pb::AgentRunRequest::default(), &context)
+            .unwrap()
+            .is_empty());
+        assert!(!compile_context(&context, "today").contains("Keep fixture text unchanged"));
+    }
 
     fn rule(content: &str) -> pb::CursorRule {
         pb::CursorRule {

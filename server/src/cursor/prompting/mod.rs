@@ -4,6 +4,7 @@ mod assets;
 mod catalog;
 mod compiler;
 mod derived_state;
+mod protocol;
 
 pub use assets::*;
 pub use compiler::*;

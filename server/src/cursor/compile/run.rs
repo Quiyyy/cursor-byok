@@ -69,6 +69,7 @@ pub(crate) async fn prepare(
         context_sync,
         local_rules_dir,
     } = dependencies;
+    let compiler = compiler.snapshot()?;
     checkpoint
         .import_prefetched(&request.pre_fetched_blobs)
         .await?;
@@ -209,7 +210,7 @@ pub(crate) async fn prepare(
                     projected_user_context
                         .as_ref()
                         .map(|message| &message.content),
-                    compiler,
+                    &compiler,
                     blob_sync,
                 )
                 .await?,
@@ -277,7 +278,7 @@ pub(crate) async fn prepare(
                             &user,
                             &request_context,
                             &action_context,
-                            compiler,
+                            &compiler,
                             blob_sync,
                         )
                         .await?

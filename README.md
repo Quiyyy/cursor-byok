@@ -65,6 +65,8 @@ Cursor ← streaming responses and tool events ←─────────┘
 
 Settings, account data, and request records are stored locally. TAB completion connects directly to Cursor’s official service by default, with an optional custom service address. It is separate from the chat models.
 
+BYOK runs the model/tool loop while Cursor executes client tools. All providers share one built-in prompt and tool contract extracted from the installed Cursor runtime. MCP definitions and execution come from Cursor. See the [asset extractor](./support/cursor-assets-extractor/README.md) for provenance, updates, and local verification.
+
 ## Documentation
 
 | Document | Purpose |

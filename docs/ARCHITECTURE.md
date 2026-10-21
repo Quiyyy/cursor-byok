@@ -101,6 +101,10 @@ local_app 本地代理
 
 接入协议负责将客户端请求转换为通用消息和命令；`run/` 驱动模型与工具轮次；`provider/` 和 `plugin/` 负责服务商差异。外部服务返回结果不会直接绕过运行时写入客户端会话。
 
+基础提示词与内置工具定义统一保存在 `server/prompt/cursor/protocol.json`，由本机 Cursor 工厂提取，不按模型家族维护。`extensions.json` 只包含 BYOK 自有扩展，`modes/` 决定模式可用工具，`*/runtime.md` 提供每轮动态内容。MCP 定义来自 Cursor 请求，调用与结果通过客户端原生 MCP 执行器转发，BYOK 不维护 MCP 工具目录或连接管理。
+
+设置 `CURSOR_PROTOCOL_FILE` 时，每轮开始读取当前协议快照，旧会话下一轮直接使用更新后的提示词与工具定义。当前 Run 不热替换资产，会话历史不重写。默认使用发行包内嵌资产；更新来源、校验与本地原生验证见[资产提取器](../support/cursor-assets-extractor/README.md)。
+
 ## 状态与生命周期
 
 | 状态 | 所有者 | 生命周期 |
