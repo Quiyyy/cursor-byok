@@ -60,10 +60,11 @@ impl Provider for OpenAiChatProvider {
         invocation: ModelInvocation,
         cancellation: tokio_util::sync::CancellationToken,
     ) -> ProviderStream {
+        let (invocation, raw_tools) = super::text_tools::json_request(invocation);
         let client = self.client.clone();
         let config = self.config.clone();
         let recorder = self.recorder.clone();
-        Box::pin(try_stream! {
+        let stream = Box::pin(try_stream! {
             let ModelInvocation { call_id, request, .. } = invocation;
             tracing::debug!(
                 model = %request.model.model_id,
@@ -211,7 +212,8 @@ impl Provider for OpenAiChatProvider {
             let finish = finish.or_else(|| saw_done_marker.then_some(if tools.is_empty() { FinishReason::Stop } else { FinishReason::ToolUse }))
                 .ok_or_else(|| Error::Provider("OpenAI Chat stream ended without finish_reason".into()))?;
             yield ModelEvent::Done(finish);
-        })
+        });
+        super::text_tools::json_response(stream, raw_tools)
     }
 }
 

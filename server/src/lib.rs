@@ -10,8 +10,6 @@ pub mod model;
 pub mod network;
 pub mod plugin;
 pub mod provider;
-pub mod run;
-pub mod search;
 pub mod store;
 
 pub use app::App;

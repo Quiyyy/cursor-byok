@@ -40,13 +40,13 @@ cursor-byok/                         # Release source checkout
 │   └── src-tauri/                  # Native desktop package
 │       ├── Cargo.toml              # Rust desktop package version
 │       └── tauri.conf.json         # App version, bundles, and updater configuration
-├── protocols/cursor/               # Tracked protocol build inputs
-│   ├── agent_v1.proto              # Agent protocol schema
-│   └── aiserver_v1.proto           # Cursor service wire contracts
+├── server/native-agent/            # Native entry integration
+│   ├── install.bundle.mjs          # Tracked generated installer
+│   └── THIRD_PARTY_LICENSES.txt     # Bundled dependency notices
 └── .github/workflows/release.yml    # Release build, signing, and publication
 ```
 
-The listed Proto files are required build inputs; preserve their tracked imported definitions in `protocols/cursor/` as well. The extraction tools live in `support/cursor-protocol-extractor/`.
+Check `node server/native-agent/build.mjs --check` and its portable tests before packaging. Cursor runtime bundles and installation backups are loaded from the user's installation and must not be published in release assets. Agent protocol extraction and generated Agent bindings are no longer build inputs.
 
 ## Prepare and validate
 

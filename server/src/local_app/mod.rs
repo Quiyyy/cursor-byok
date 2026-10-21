@@ -1,9 +1,11 @@
 //! Exposes the local desktop application integration.
 mod account;
 mod ca;
+mod native_agent;
 mod process;
 mod proxy;
 mod settings;
+pub use native_agent::NativeAgent;
 
 use std::{net::SocketAddr, sync::Arc};
 
@@ -74,6 +76,7 @@ pub struct CursorHarness {
 }
 
 struct Inner {
+    native: NativeAgent,
     store: Store,
     ca: CaManager,
     ca_initialization: Mutex<()>,
@@ -86,6 +89,7 @@ impl CursorHarness {
     pub fn new(store: Store) -> Result<Self> {
         Ok(Self {
             inner: Arc::new(Inner {
+                native: NativeAgent::managed()?,
                 store,
                 ca: CaManager::managed()?,
                 ca_initialization: Mutex::new(()),
@@ -98,6 +102,10 @@ impl CursorHarness {
 
     pub fn set_backend_addr(&self, addr: SocketAddr) {
         *self.inner.backend_addr.write() = Some(addr);
+    }
+
+    pub fn native_agent(&self) -> NativeAgent {
+        self.inner.native.clone()
     }
 
     pub async fn proxy_port(&self) -> Option<u16> {
@@ -154,8 +162,17 @@ impl CursorHarness {
 
     pub async fn set_enabled(&self, enabled: bool) -> Result<CursorHarnessStatus> {
         if enabled {
-            self.inner.store.set_cursor_takeover_enabled(true).await?;
-            self.enable().await?;
+            if let Err(error) = self.enable().await {
+                let _ = self.inner.store.set_cursor_takeover_enabled(false).await;
+                if let Err(cleanup) = self.disable().await {
+                    tracing::warn!(%cleanup, "failed to clean up unsuccessful Cursor takeover");
+                }
+                return Err(error);
+            }
+            if let Err(error) = self.inner.store.set_cursor_takeover_enabled(true).await {
+                let _ = self.disable().await;
+                return Err(error);
+            }
         } else {
             self.inner.store.set_cursor_takeover_enabled(false).await?;
             self.disable().await?;
@@ -181,13 +198,14 @@ impl CursorHarness {
             .read()
             .ok_or_else(|| Error::Config("desktop management server is not ready".into()))?;
         let mut proxy = self.inner.proxy.lock().await;
+        let native_changed = self.inner.native.enable(backend_addr).await?;
         let settings_applied = proxy
             .url()
             .as_deref()
             .map(settings::settings_match)
             .transpose()?
             .unwrap_or(false);
-        if !settings_applied {
+        if !settings_applied || native_changed {
             // Terminating Cursor only makes the freshly written http.proxy take effect
             // sooner; it is optional, so a failed probe or kill must not block takeover.
             if let Err(error) = process::terminate_cursor().await {
@@ -223,9 +241,11 @@ impl CursorHarness {
     }
 
     pub async fn disable(&self) -> Result<()> {
-        settings::clear_proxy_settings()?;
+        let native = self.inner.native.disable().await;
+        let settings = settings::clear_proxy_settings();
         self.inner.proxy.lock().await.stop().await;
-        Ok(())
+        native?;
+        settings
     }
 }
 

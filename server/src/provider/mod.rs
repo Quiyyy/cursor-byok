@@ -8,6 +8,7 @@ mod openai_responses;
 mod recorder;
 mod request_template;
 mod router;
+pub(crate) mod text_tools;
 
 use std::pin::Pin;
 
@@ -21,6 +22,7 @@ pub use event::*;
 pub use openai_chat::OpenAiChatProvider;
 pub use openai_responses::OpenAiResponsesProvider;
 pub use recorder::CallRecorder;
+pub(crate) use request_template::render_json_strings;
 pub(crate) use router::custom_headers;
 
 pub(crate) fn native_usage(

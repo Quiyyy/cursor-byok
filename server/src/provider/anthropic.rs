@@ -47,10 +47,11 @@ impl Provider for AnthropicProvider {
         invocation: ModelInvocation,
         cancellation: tokio_util::sync::CancellationToken,
     ) -> ProviderStream {
+        let (invocation, raw_tools) = super::text_tools::json_request(invocation);
         let client = self.client.clone();
         let config = self.config.clone();
         let recorder = self.recorder.clone();
-        Box::pin(try_stream! {
+        let stream = Box::pin(try_stream! {
             let ModelInvocation { call_id, request, .. } = invocation;
             let mut messages = anthropic_messages(&request.history)?;
             mark_cache_breakpoint(&mut messages);
@@ -261,7 +262,8 @@ impl Provider for AnthropicProvider {
             if !terminal {
                 Err(Error::Provider("Anthropic stream ended without message_stop".into()))?;
             }
-        })
+        });
+        super::text_tools::json_response(stream, raw_tools)
     }
 }
 

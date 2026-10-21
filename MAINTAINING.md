@@ -8,6 +8,7 @@
 
 - Rust stable、Cargo、rustfmt 和 Clippy。
 - Node.js 22 或更新的兼容版本，以及 npm。
+- 运行 BYOK Agent 需要本机 Cursor 安装。非默认路径设置 `CURSOR_APP_DIR`；原生入口安装、恢复与本机验证见[维护说明](./server/native-agent/README.md)。
 - Tauri 2 对应平台的构建依赖；Windows 使用 MSVC 工具链，Linux 依赖可参照 [CI](./.github/workflows/ci.yml) 的安装步骤。
 - Deno 2.9.6 用于插件开发和测试。普通用户可通过应用准备插件运行组件。
 
@@ -35,6 +36,8 @@ npm --prefix apps/desktop run check
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
+node server/native-agent/build.mjs --check
+node --test server/native-agent/native.test.mjs
 deno test --config server/plugins/build-in/grok-auth/deno.json server/plugins/build-in/grok-auth/
 deno test --config server/plugins/build-in/codex-auth/deno.json server/plugins/build-in/codex-auth/
 deno test --config server/plugins/build-in/antigravity-auth/deno.json server/plugins/build-in/antigravity-auth/
@@ -101,6 +104,6 @@ npm --prefix apps/desktop run tauri:build -- --debug --bundles nsis --config <�
 
 - README 介绍产品、下载和当前使用路径，不记录个人宣传或临时开发过程。
 - 使用指南与 UI 标签保持一致；源码截图明确标注演示数据，不承诺尚未发布的版本行为。
-- 架构说明只写当前存在的目录；运行时提示文件 `server/prompt/` 属于程序资源，不作为普通说明文档批量修改。
+- 架构说明只写当前存在的目录；Commit 提示文件 `server/prompt/cursor/commit/` 属于程序资源，不作为普通说明文档批量修改。
 - 修复结论关联可验证代码、测试或本仓库 PR；未验证的行为保留为待验收项。
 - 图标、字体和第三方代码遵循各自许可，保留 [LICENSE](./LICENSE) 和必要来源记录。

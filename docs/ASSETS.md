@@ -13,8 +13,8 @@
 | `apps/desktop/src/shared/assets/provider-icons/` | 服务商品牌标识 | 保持对应服务含义，不作为项目品牌使用 |
 | `server/plugins/build-in/*/assets/` | 内置账号插件图标 | 随对应插件更新 |
 | `apps/desktop/src/shared/assets/fonts/` | 当前 UI 字体资源 | 单独核对字体来源和分发许可 |
-| `server/prompt/` | 嵌入的提示模板 | 视为运行时资源，保持语义与 LF 换行 |
-| `protocols/cursor/` | 协议定义 | 按协议提取与适配流程更新 |
+| `server/prompt/cursor/commit/` | 独立 Commit 生成模板 | 保持语义与 LF 换行 |
+| `server/native-agent/install.bundle.mjs` | 本项目原生入口安装器及依赖 | 使用 `node server/native-agent/build.mjs` 生成，保留依赖许可 |
 
 第三方图形、字体和模型权重不因位于本仓库而自动获得项目 MIT 许可。详见[第三方说明](./THIRD_PARTY.md)。
 

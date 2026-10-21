@@ -1,53 +1,35 @@
 //! Implements Cursor HTTP endpoints outside the Agent Run stream.
 use axum::{
-    body::{to_bytes, Body, Bytes},
-    extract::{DefaultBodyLimit, Extension, State},
-    http::{header, HeaderMap, HeaderValue, Request, Response, StatusCode},
+    body::Body,
+    extract::{DefaultBodyLimit, Extension},
+    http::{header, HeaderValue, Response, StatusCode},
     routing::{get, post},
     Router,
 };
 use tower_http::decompression::RequestDecompressionLayer;
 
 use crate::{
-    api::cursor::{
-        bidi,
-        proxy::{self, CursorProxy},
-        run_sse,
-    },
+    api::cursor::proxy::{self, CursorProxy},
     cursor::{
-        protocol::{
-            connect,
-            proto::{agent::v1 as agent, aiserver::v1 as ai},
-        },
+        protocol::{connect, proto::aiserver::v1 as ai},
+        services::CursorServices,
         services::{
-            account, analytics, commit_message, compatibility, entitlement::FreeEntitlementCache,
-            knowledge, model_catalog, server_config, tab,
+            account, commit_message, compatibility, entitlement::FreeEntitlementCache,
+            model_catalog, tab,
         },
-        transport::{TransportParent, TransportRegistry},
     },
     Result,
 };
 
-pub fn router(
-    registry: TransportRegistry,
-    clients: crate::network::NetworkClients,
-) -> Result<Router> {
+pub fn router(registry: CursorServices, clients: crate::network::NetworkClients) -> Result<Router> {
     let proxy = CursorProxy::cursor(clients);
-    let knowledge = knowledge::KnowledgeService::managed()?;
-    Ok(router_with_proxy(registry, proxy, knowledge))
+    Ok(router_with_proxy(registry, proxy))
 }
 
-fn router_with_proxy(
-    registry: TransportRegistry,
-    proxy: CursorProxy,
-    knowledge_service: knowledge::KnowledgeService,
-) -> Router {
-    let web_cache = registry.web_cache().router();
+fn router_with_proxy(registry: CursorServices, proxy: CursorProxy) -> Router {
     let free_entitlements = FreeEntitlementCache::default();
     Router::new()
         .route("/__byok-api__/healthz", get(health))
-        .route("/agent.v1.AgentService/RunSSE", post(run_sse_handler))
-        .route("/aiserver.v1.BidiService/BidiAppend", post(bidi_handler))
         .route(
             "/aiserver.v1.AiService/AvailableDocs",
             post(compatibility::available_docs),
@@ -63,14 +45,6 @@ fn router_with_proxy(
         .route(
             "/agent.v1.AgentService/UpdateConversationMetadata",
             post(compatibility::update_conversation_metadata),
-        )
-        .route(
-            "/aiserver.v1.AiService/GetServerConfig",
-            post(server_config::get),
-        )
-        .route(
-            "/aiserver.v1.ServerConfigService/GetServerConfig",
-            post(server_config::get),
         )
         .route(
             "/aiserver.v1.AiService/AvailableModels",
@@ -91,22 +65,6 @@ fn router_with_proxy(
         .route(
             "/aiserver.v1.NetworkService/IsConnected",
             post(is_connected),
-        )
-        .route(
-            "/agent.v1.AgentService/GetDefaultModelForCli",
-            post(model_catalog::default_model_for_cli),
-        )
-        .route(
-            "/aiserver.v1.AiService/GetDefaultModelForCli",
-            post(model_catalog::default_model_for_cli),
-        )
-        .route(
-            "/aiserver.v1.AiService/GetDefaultModel",
-            post(model_catalog::default_model),
-        )
-        .route(
-            "/aiserver.v1.AiService/GetDefaultModelNudgeData",
-            post(model_catalog::default_model_nudge),
         )
         .route(
             "/aiserver.v1.AuthService/GetEmail",
@@ -133,26 +91,6 @@ fn router_with_proxy(
             "/aiserver.v1.DashboardService/GetUsageLimitStatusAndActiveGrants",
             post(account::usage_limit_status),
         )
-        .route(
-            "/aiserver.v1.AiService/KnowledgeBaseAdd",
-            post(knowledge::add),
-        )
-        .route(
-            "/aiserver.v1.AiService/KnowledgeBaseList",
-            post(knowledge::list),
-        )
-        .route(
-            "/aiserver.v1.AiService/KnowledgeBaseUpdate",
-            post(knowledge::update),
-        )
-        .route(
-            "/aiserver.v1.AiService/KnowledgeBaseRemove",
-            post(knowledge::remove),
-        )
-        .route(
-            analytics::BOOTSTRAP_STATSIG_PATH,
-            post(analytics::bootstrap_statsig),
-        )
         .route("/auth/full_stripe_profile", get(account::stripe_profile))
         .route("/auth/stripe_profile", get(account::stripe_profile))
         .merge(tab::router())
@@ -161,10 +99,8 @@ fn router_with_proxy(
         .fallback(proxy::forward)
         .method_not_allowed_fallback(proxy::forward)
         .layer(Extension(proxy))
-        .layer(Extension(knowledge_service))
         .layer(Extension(free_entitlements))
         .with_state(registry)
-        .merge(web_cache)
 }
 
 async fn health() -> StatusCode {
@@ -186,238 +122,4 @@ async fn is_connected() -> Result<Response<Body>> {
         HeaderValue::from_static("application/proto"),
     );
     Ok(response)
-}
-
-async fn run_sse_handler(
-    State(registry): State<TransportRegistry>,
-    Extension(proxy): Extension<CursorProxy>,
-    request: Request<Body>,
-) -> Result<Response<Body>> {
-    let (parts, body) = buffered(request).await?;
-    let request: agent::BidiRequestId = connect::decode_unary(&body)?;
-    let route = registry.wait_route(&request.request_id).await;
-    let trace = registry.trace(&request.request_id);
-    trace.resume();
-    trace.request(
-        "run_sse_request",
-        body.clone(),
-        serde_json::json!({"request_id": request.request_id}),
-    );
-    match route {
-        crate::cursor::transport::TransportRoute::Local => {
-            run_sse::stream(&registry, &request.request_id).await
-        }
-        crate::cursor::transport::TransportRoute::Upstream(generation) => {
-            let response = proxy::forward(
-                Extension(proxy),
-                Request::from_parts(parts, Body::from(body)),
-            )
-            .await?;
-            Ok(run_sse::upstream(
-                registry,
-                request.request_id,
-                generation,
-                response,
-                Some(trace),
-            )
-            .await)
-        }
-    }
-}
-
-async fn bidi_handler(
-    State(registry): State<TransportRegistry>,
-    Extension(proxy): Extension<CursorProxy>,
-    request: Request<Body>,
-) -> Result<Response<Body>> {
-    let (parts, body) = buffered(request).await?;
-    let request: ai::BidiAppendRequest = connect::decode_unary(&body)?;
-    let decoded = bidi::decode(&request)?;
-    let first_model = decoded.model_id().map(str::to_owned);
-    let conversation_id = decoded.conversation_id().map(str::to_owned);
-    let trace_metadata = decoded.trace_metadata();
-    let trace = registry.trace(&decoded.request_id);
-    let local = if let Some(model_id) = decoded.model_id() {
-        // 插件模型 ID 只在本地有意义,永远不转发到 Cursor 官方上游。
-        if model_id.starts_with(crate::plugin::ADAPTER_ID_PREFIX)
-            || registry.store().model(model_id).await?.is_some()
-        {
-            tracing::info!(
-                request_id = decoded.request_id,
-                model_id,
-                "routing Cursor Run to BYOK provider"
-            );
-            true
-        } else {
-            tracing::info!(
-                request_id = decoded.request_id,
-                model_id,
-                "routing Cursor Run to Cursor upstream"
-            );
-            false
-        }
-    } else if registry.local(&decoded.request_id).await.is_some() {
-        true
-    } else if registry.upstream(&decoded.request_id).await {
-        false
-    } else {
-        trace.resume();
-        trace.request(
-            "bidi_request",
-            body.clone(),
-            trace_outcome(trace_metadata, false, "missing_transport", None),
-        );
-        return Err(crate::Error::Protocol(
-            "first BidiAppend message must select a model".into(),
-        ));
-    };
-    if first_model.is_some() {
-        trace.begin(
-            conversation_id.as_deref(),
-            if local {
-                "local_byok"
-            } else {
-                "cursor_official"
-            },
-            first_model.as_deref(),
-        );
-    } else {
-        trace.resume();
-    }
-    if !local {
-        if first_model.is_some() {
-            registry.mark_upstream(&decoded.request_id).await;
-        }
-        trace.request(
-            "bidi_request",
-            body.clone(),
-            trace_outcome(trace_metadata, true, "upstream", None),
-        );
-        return proxy::forward(
-            Extension(proxy),
-            Request::from_parts(parts, Body::from(body)),
-        )
-        .await;
-    }
-    let parent = match parent_headers(&parts.headers) {
-        Ok(parent) => parent,
-        Err(error) => {
-            trace.request(
-                "bidi_request",
-                body,
-                trace_outcome(
-                    trace_metadata,
-                    false,
-                    "invalid_parent",
-                    Some(error.to_string()),
-                ),
-            );
-            return Err(error);
-        }
-    };
-    match bidi::append(&registry, decoded, parent).await {
-        Ok(_) => trace.request(
-            "bidi_request",
-            body,
-            trace_outcome(trace_metadata, true, "local", None),
-        ),
-        Err(error) => {
-            trace.request(
-                "bidi_request",
-                body,
-                trace_outcome(
-                    trace_metadata,
-                    false,
-                    "command_rejected",
-                    Some(error.to_string()),
-                ),
-            );
-            return Err(error);
-        }
-    }
-    let mut response = Response::new(axum::body::Body::empty());
-    *response.status_mut() = StatusCode::OK;
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/proto"),
-    );
-    Ok(response)
-}
-
-fn trace_outcome(
-    mut metadata: serde_json::Value,
-    accepted: bool,
-    route_outcome: &str,
-    error: Option<String>,
-) -> serde_json::Value {
-    if let Some(metadata) = metadata.as_object_mut() {
-        metadata.insert("accepted".into(), accepted.into());
-        metadata.insert("route_outcome".into(), route_outcome.into());
-        if let Some(error) = error {
-            metadata.insert("error".into(), error.into());
-        }
-    }
-    metadata
-}
-
-async fn buffered(request: Request<Body>) -> Result<(axum::http::request::Parts, Bytes)> {
-    let (parts, body) = request.into_parts();
-    let body = to_bytes(body, usize::MAX)
-        .await
-        .map_err(|error| crate::Error::Protocol(format!("cannot read request body: {error}")))?;
-    Ok((parts, body))
-}
-
-fn parent_headers(headers: &HeaderMap) -> Result<Option<TransportParent>> {
-    let request_id = header_text(headers, "x-parent-request-id")?;
-    let tool_call_id = header_text(headers, "x-parent-agent-tool-call-id")?;
-    match (request_id, tool_call_id) {
-        (None, None) => Ok(None),
-        // Cursor emits these headers independently. A subagent can carry only
-        // its parent tool call ID (or only its parent request ID).
-        (request_id, tool_call_id) => Ok(Some(TransportParent {
-            request_id: request_id.map(str::to_owned),
-            tool_call_id: tool_call_id.map(str::to_owned),
-        })),
-    }
-}
-
-fn header_text<'a>(headers: &'a HeaderMap, name: &str) -> Result<Option<&'a str>> {
-    headers
-        .get(name)
-        .map(|value| value.to_str())
-        .transpose()
-        .map_err(|error| crate::Error::Protocol(format!("invalid {name} header: {error}")))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parent_headers_are_independent() {
-        for (request, tool) in [
-            (None, None),
-            (Some("parent"), None),
-            (None, Some("task")),
-            (Some("parent"), Some("task")),
-        ] {
-            let mut headers = HeaderMap::new();
-            if let Some(value) = request {
-                headers.insert("x-parent-request-id", HeaderValue::from_static(value));
-            }
-            if let Some(value) = tool {
-                headers.insert(
-                    "x-parent-agent-tool-call-id",
-                    HeaderValue::from_static(value),
-                );
-            }
-            let parent = parent_headers(&headers).unwrap();
-            assert_eq!(parent.is_some(), request.is_some() || tool.is_some());
-            if let Some(parent) = parent {
-                assert_eq!(parent.request_id.as_deref(), request);
-                assert_eq!(parent.tool_call_id.as_deref(), tool);
-            }
-        }
-    }
 }

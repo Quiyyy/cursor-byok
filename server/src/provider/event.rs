@@ -28,6 +28,9 @@ pub enum ModelEvent {
         index: usize,
         delta: String,
     },
+    ToolCallRawInput {
+        index: usize,
+    },
     ToolCallEnd {
         index: usize,
     },

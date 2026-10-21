@@ -13,9 +13,8 @@ use axum::{
 use cursor_server::{
     api::cursor,
     cursor::{
-        prompting::{PromptAssets, PromptCompiler},
         protocol::{connect, proto::aiserver::v1 as ai},
-        transport::TransportRegistry,
+        services::CursorServices,
     },
     model::{ContentPart, ModelConfigInput, ModelType, ProjectedContent, OPENAI_CHAT_ENDPOINT},
     network::NetworkClients,
@@ -28,14 +27,8 @@ async fn commit_router(
     store: cursor_server::store::Store,
     provider: fake_provider::FakeProvider,
 ) -> axum::Router {
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
     let clients = NetworkClients::new(store.clone());
-    let registry = TransportRegistry::new(store, Arc::new(provider), PromptCompiler::new(assets));
+    let registry = CursorServices::new(store, Arc::new(provider), None);
     cursor::router(registry, clients).unwrap()
 }
 

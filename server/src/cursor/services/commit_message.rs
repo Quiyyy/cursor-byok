@@ -24,7 +24,7 @@ use crate::{
     api::cursor::proxy::{self, CursorProxy},
     cursor::{
         protocol::{connect, proto::aiserver::v1 as ai},
-        transport::TransportRegistry,
+        services::CursorServices,
     },
     model::{
         ContentPart, ModelInvocation, ModelRequest, ModelSpec, ProjectedContent, ProjectedMessage,
@@ -44,7 +44,7 @@ const GENERATION_TIMEOUT: Duration = Duration::from_secs(180);
 const COMMIT_MAX_OUTPUT_TOKENS: u64 = 30_000;
 
 pub async fn write_git_commit_message(
-    State(registry): State<TransportRegistry>,
+    State(registry): State<CursorServices>,
     Extension(upstream): Extension<CursorProxy>,
     request: Request<Body>,
 ) -> Result<Response<Body>> {
@@ -56,7 +56,7 @@ pub async fn write_git_commit_message(
 }
 
 async fn forward_direct(
-    registry: &TransportRegistry,
+    registry: &CursorServices,
     upstream: CursorProxy,
     request: Request<Body>,
 ) -> Result<Response<Body>> {
@@ -68,7 +68,7 @@ async fn forward_direct(
 }
 
 async fn generate_local(
-    registry: &TransportRegistry,
+    registry: &CursorServices,
     request: Request<Body>,
     settings: CommitSettings,
 ) -> Result<Response<Body>> {
@@ -90,7 +90,7 @@ async fn generate_local(
     let model_id = settings.model_id.trim();
     ensure_configured_model(registry, model_id).await?;
     let invocation = build_invocation(&settings, model_id, build_user_content(&request, &diffs));
-    let provider = registry.conversations().dependencies().provider.clone();
+    let provider = registry.provider().clone();
     let generated = generate(
         provider,
         invocation,
@@ -111,7 +111,7 @@ async fn generate_local(
     Ok(response)
 }
 
-async fn ensure_configured_model(registry: &TransportRegistry, model_id: &str) -> Result<()> {
+async fn ensure_configured_model(registry: &CursorServices, model_id: &str) -> Result<()> {
     if model_id.starts_with(ADAPTER_ID_PREFIX) {
         let plugins = registry.plugins().ok_or_else(|| {
             Error::Provider(format!("commit plugin model {model_id} is unavailable"))

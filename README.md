@@ -24,7 +24,7 @@ Development, documentation, issues, and releases are maintained in **[Quiyyy/cur
 - **Model connections:** OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages compatible endpoints; custom headers, reasoning settings, and request parameters.
 - **Account connections:** built-in Codex, Grok, and Google integrations, model synchronization, account status, and credential renewal where supported.
 - **Model management:** add, edit, duplicate into a draft, group, reorder, and test models. Model configuration and tests do not require enabling Cursor takeover.
-- **Cursor takeover:** a global sidebar switch controls the local integration. Enable it after completing certificate preparation; switching it off removes the managed local proxy configuration.
+- **Cursor takeover:** a global sidebar switch controls the local integration. Enable it after completing certificate preparation; switching it off restores the native entry files and removes the managed local proxy configuration.
 - **Usage and diagnostics:** call history, token usage, cache statistics, estimated cost, and daily activity.
 - **Desktop app:** Windows, macOS, and Linux; Chinese, English, and Portuguese; light and dark themes.
 
@@ -55,15 +55,16 @@ Account management and the model catalog share one dialog. Catalog selections ta
 ## How requests flow
 
 ```text
-Cursor → local integration → Cursor protocol adapter → runtime
-                                                      │
-                                                      ├─ configured model API
-                                                      └─ account plugin → provider API
-                                                      │
-Cursor ← streaming responses and tool events ←─────────┘
+Cursor Agent Host → native LocalAgentClient
+                         ├─ native prompts, tools, state and execution loop
+                         └─ BYOK model gateway → configured API / account plugin
+                                                    │
+Cursor native UI ← native Agent events ← model stream┘
 ```
 
 Settings, account data, and request records are stored locally. TAB completion connects directly to Cursor’s official service by default, with an optional custom service address. It is separate from the chat models.
+
+The current source reuses Cursor's complete installed local Agent runtime. Cursor owns model-family prompts, tool definitions, execution, checkpoints, permissions, and MCP. BYOK handles model routing, provider protocols, accounts, and usage recording. The native model picker factory also supplies model parameters and defaults. See [native integration maintenance](./server/native-agent/README.md) for installation, recovery, and verification boundaries. This source architecture may differ from previously published releases.
 
 ## Documentation
 

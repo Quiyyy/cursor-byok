@@ -157,21 +157,13 @@ pub fn is_cursor_host(host: &str) -> bool {
 fn is_local_path(path: &str) -> bool {
     matches!(
         path,
-        "/agent.v1.AgentService/RunSSE"
-            | "/aiserver.v1.BidiService/BidiAppend"
-            | "/aiserver.v1.AiService/AvailableDocs"
+        "/aiserver.v1.AiService/AvailableDocs"
             | "/aiserver.v1.DashboardService/GetEffectiveUserPlugins"
             | "/aiserver.v1.DashboardService/GetUserPrivacyMode"
             | "/agent.v1.AgentService/UpdateConversationMetadata"
-            | "/aiserver.v1.AiService/GetServerConfig"
-            | "/aiserver.v1.ServerConfigService/GetServerConfig"
             | "/aiserver.v1.AiService/AvailableModels"
             | "/agent.v1.AgentService/GetUsableModels"
             | "/aiserver.v1.AiService/GetUsableModels"
-            | "/agent.v1.AgentService/GetDefaultModelForCli"
-            | "/aiserver.v1.AiService/GetDefaultModelForCli"
-            | "/aiserver.v1.AiService/GetDefaultModel"
-            | "/aiserver.v1.AiService/GetDefaultModelNudgeData"
             | "/aiserver.v1.AuthService/GetEmail"
             | "/aiserver.v1.AuthService/GetUserMeta"
             | "/aiserver.v1.DashboardService/GetMe"
@@ -179,13 +171,8 @@ fn is_local_path(path: &str) -> bool {
             | "/aiserver.v1.DashboardService/GetUserProfile"
             | "/aiserver.v1.DashboardService/GetCurrentPeriodUsage"
             | "/aiserver.v1.DashboardService/GetUsageLimitStatusAndActiveGrants"
-            | "/aiserver.v1.AiService/KnowledgeBaseAdd"
-            | "/aiserver.v1.AiService/KnowledgeBaseList"
-            | "/aiserver.v1.AiService/KnowledgeBaseUpdate"
-            | "/aiserver.v1.AiService/KnowledgeBaseRemove"
             | "/aiserver.v1.AiService/WriteGitCommitMessage"
             | "/aiserver.v1.NetworkService/IsConnected"
-            | "/aiserver.v1.AnalyticsService/BootstrapStatsig"
             | "/auth/full_stripe_profile"
             | "/auth/stripe_profile"
     )
@@ -206,19 +193,13 @@ mod tests {
             assert!(should_route_locally(path, TabMode::Custom));
         }
         for mode in [TabMode::Direct, TabMode::Custom] {
-            assert!(should_route_locally("/agent.v1.AgentService/RunSSE", mode));
+            assert!(!should_route_locally("/agent.v1.AgentService/RunSSE", mode));
         }
     }
 
     #[test]
-    fn cursor_cli_transport_and_model_metadata_routes_stay_local() {
+    fn only_model_and_account_metadata_routes_stay_local() {
         for path in [
-            "/aiserver.v1.AiService/GetServerConfig",
-            "/aiserver.v1.ServerConfigService/GetServerConfig",
-            "/agent.v1.AgentService/GetDefaultModelForCli",
-            "/aiserver.v1.AiService/GetDefaultModelForCli",
-            "/aiserver.v1.AiService/GetDefaultModel",
-            "/aiserver.v1.AiService/GetDefaultModelNudgeData",
             "/aiserver.v1.AiService/AvailableDocs",
             "/aiserver.v1.DashboardService/GetEffectiveUserPlugins",
             "/aiserver.v1.DashboardService/GetUserPrivacyMode",

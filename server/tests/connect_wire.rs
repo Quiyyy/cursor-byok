@@ -6,35 +6,24 @@ mod fake_provider;
 #[path = "support/fixtures.rs"]
 mod fixtures;
 
-use std::{io::Write, sync::Arc};
-
-use axum::{
-    body::{to_bytes, Body},
-    http::{header, Request, StatusCode},
-};
 use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
-use cursor_server::{
-    api::cursor,
-    cursor::prompting::{PromptAssets, PromptCompiler},
-    cursor::protocol::{
-        connect,
-        proto::{agent::v1 as pb, aiserver::v1 as ai},
-    },
-    cursor::transport::TransportRegistry,
-    network::NetworkClients,
-};
-use flate2::{write::GzEncoder, Compression};
+use cursor_server::cursor::protocol::{connect, proto::aiserver::v1 as ai};
 use prost::Message;
-use tower::ServiceExt;
+
+#[derive(Clone, PartialEq, prost::Message)]
+struct RequestId {
+    #[prost(string, tag = "1")]
+    request_id: String,
+}
 
 #[test]
 fn connect_envelope_is_flag_plus_big_endian_length_plus_protobuf() {
-    let message = pb::BidiRequestId {
+    let message = RequestId {
         request_id: "abc".into(),
     };
     let frame = connect::encode_message(&message).unwrap();
     assert_eq!(&frame[..5], &[0, 0, 0, 0, 5]);
-    let decoded: pb::BidiRequestId = fake_cursor::decode_single(&frame).unwrap();
+    let decoded: RequestId = fake_cursor::decode_single(&frame).unwrap();
     assert_eq!(decoded.request_id, "abc");
 }
 
@@ -78,63 +67,4 @@ fn cursor_error_details_subset_decodes_captured_wire_value() {
     let custom = details.details.unwrap();
     assert_eq!(custom.title, "Authentication error");
     assert_eq!(custom.is_retryable, Some(false));
-}
-
-#[test]
-fn captured_kv_ack_hex_decodes_as_agent_client_message() {
-    let bytes = hex::decode("1a0408011a00").unwrap();
-    let message = pb::AgentClientMessage::decode(bytes.as_slice()).unwrap();
-    let Some(pb::agent_client_message::Message::KvClientMessage(kv)) = message.message else {
-        panic!("expected KV client message")
-    };
-    assert_eq!(kv.id, 1);
-    assert!(matches!(
-        kv.message,
-        Some(pb::kv_client_message::Message::SetBlobResult(_))
-    ));
-}
-
-#[tokio::test]
-async fn bidi_append_gzip_body_is_decompressed_before_protobuf_decode() {
-    let (_directory, store) = fixtures::temp_store().await;
-    let assets = PromptAssets::load(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("prompt/cursor")
-            .as_path(),
-    )
-    .unwrap();
-    let clients = NetworkClients::new(store.clone());
-    let registry = TransportRegistry::new(
-        store,
-        Arc::new(fake_provider::FakeProvider::default()),
-        PromptCompiler::new(assets),
-    );
-    let wire = ai::BidiAppendRequest {
-        request_id: Some(ai::BidiRequestId {
-            request_id: "gzip-request".into(),
-        }),
-        ..Default::default()
-    }
-    .encode_to_vec();
-    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-    encoder.write_all(&wire).unwrap();
-    let compressed = encoder.finish().unwrap();
-
-    let response = cursor::router(registry, clients)
-        .unwrap()
-        .oneshot(
-            Request::post("/aiserver.v1.BidiService/BidiAppend")
-                .header(header::CONTENT_TYPE, "application/proto")
-                .header(header::CONTENT_ENCODING, "gzip")
-                .body(Body::from(compressed))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let body = to_bytes(response.into_body(), 4096).await.unwrap();
-    let text = std::str::from_utf8(&body).unwrap();
-    assert!(text.contains("BidiAppend contains no AgentClientMessage"));
-    assert!(!text.contains("protobuf decode error"));
 }

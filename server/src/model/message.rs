@@ -1,24 +1,14 @@
-//! Defines canonical append-only Conversation Messages.
+//! Defines provider message content and signed replay payloads.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{ToolImageReference, ToolRoundId};
+use super::ToolImageReference;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
     System,
     User,
-    Assistant,
-    Tool,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum Origin {
-    Prompt,
-    User,
-    Runtime,
     Assistant,
     Tool,
 }
@@ -49,36 +39,6 @@ pub struct ProviderReplayState {
     pub value: Value,
 }
 
-impl ProviderReplayState {
-    /// A provider can emit several signed blocks within one assistant message.
-    pub(crate) fn append(&mut self, next: Self) -> Result<(), &'static str> {
-        if self.provider_kind != next.provider_kind {
-            return Err("assistant replay fragments belong to different providers");
-        }
-        let array_key = match self.provider_kind.as_str() {
-            "anthropic" => "blocks",
-            "openai_responses" => "items",
-            "openai_chat" => {
-                let current = self.value.get("reasoning_content").and_then(Value::as_str);
-                let incoming = next.value.get("reasoning_content").and_then(Value::as_str);
-                let (Some(current), Some(incoming)) = (current, incoming) else {
-                    return Err("OpenAI Chat replay fragment is missing reasoning_content");
-                };
-                self.value["reasoning_content"] = Value::String(format!("{current}{incoming}"));
-                return Ok(());
-            }
-            _ => return Err("unsupported replay fragment format"),
-        };
-        let incoming = next.value.get(array_key).and_then(Value::as_array);
-        let current = self.value.get_mut(array_key).and_then(Value::as_array_mut);
-        let (Some(current), Some(incoming)) = (current, incoming) else {
-            return Err("provider replay fragment is missing its signed blocks");
-        };
-        current.extend(incoming.iter().cloned());
-        Ok(())
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentPart {
@@ -90,68 +50,6 @@ pub enum ContentPart {
         #[serde(with = "base64_bytes")]
         data: Vec<u8>,
     },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum MessageContent {
-    Parts {
-        parts: Vec<ContentPart>,
-    },
-    Assistant {
-        text: String,
-        thinking: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        tool_round_id: Option<ToolRoundId>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        replay_state: Option<ProviderReplayState>,
-        tool_calls: Vec<ToolCallContent>,
-    },
-    ToolResult(ToolResultContent),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct CanonicalMessage {
-    pub message_id: String,
-    pub role: Role,
-    pub origin: Origin,
-    pub content: MessageContent,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub runtime_event_id: Option<String>,
-}
-
-impl CanonicalMessage {
-    pub fn text(
-        message_id: impl Into<String>,
-        role: Role,
-        origin: Origin,
-        text: impl Into<String>,
-    ) -> Self {
-        Self {
-            message_id: message_id.into(),
-            role,
-            origin,
-            content: MessageContent::Parts {
-                parts: vec![ContentPart::Text { text: text.into() }],
-            },
-            runtime_event_id: None,
-        }
-    }
-
-    pub fn parts(
-        message_id: impl Into<String>,
-        role: Role,
-        origin: Origin,
-        parts: Vec<ContentPart>,
-    ) -> Self {
-        Self {
-            message_id: message_id.into(),
-            role,
-            origin,
-            content: MessageContent::Parts { parts },
-            runtime_event_id: None,
-        }
-    }
 }
 
 mod base64_bytes {
@@ -171,25 +69,5 @@ mod base64_bytes {
     {
         let encoded = String::deserialize(deserializer)?;
         STANDARD.decode(encoded).map_err(serde::de::Error::custom)
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct RuntimeEvent {
-    pub event_id: String,
-    pub text: String,
-}
-
-impl RuntimeEvent {
-    pub fn into_message(self) -> CanonicalMessage {
-        CanonicalMessage {
-            message_id: format!("runtime:{}", self.event_id),
-            role: Role::User,
-            origin: Origin::Runtime,
-            content: MessageContent::Parts {
-                parts: vec![ContentPart::Text { text: self.text }],
-            },
-            runtime_event_id: Some(self.event_id),
-        }
     }
 }

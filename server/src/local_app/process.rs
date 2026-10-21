@@ -50,34 +50,25 @@ async fn terminate_unix_process(name: &str) -> Result<()> {
 
 #[cfg(target_os = "windows")]
 async fn terminate_platform_cursor() -> Result<()> {
-    let mut list = Command::new("tasklist");
-    hide_console(&mut list);
-    let processes = list
-        .args(["/FI", "IMAGENAME eq Cursor.exe", "/NH", "/FO", "CSV"])
+    // Scope restarts to the selected installation, including isolated verification copies.
+    let app = super::native_agent::installed_app_path()?;
+    let executable = super::native_agent::cursor_executable(&app).canonicalize()?;
+    let literal = executable
+        .to_string_lossy()
+        .trim_start_matches(r"\\?\")
+        .replace('\'', "''");
+    let script = format!("$ErrorActionPreference='Stop'; Get-Process -Name Cursor -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -eq '{literal}' }} | Stop-Process -Force -ErrorAction Stop; exit 0");
+    let mut command = Command::new("powershell.exe");
+    hide_console(&mut command);
+    let output = command
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .output()
         .await?;
-    if !processes.status.success() {
-        return Err(Error::Config(
-            "failed to inspect the Cursor.exe process".into(),
-        ));
-    }
-    if !String::from_utf8_lossy(&processes.stdout)
-        .to_ascii_lowercase()
-        .contains("cursor.exe")
-    {
-        return Ok(());
-    }
-    let mut kill = Command::new("taskkill");
-    hide_console(&mut kill);
-    let terminated = kill
-        .args(["/F", "/T", "/IM", "Cursor.exe"])
-        .status()
-        .await?;
-    if terminated.success() {
+    if output.status.success() {
         Ok(())
     } else {
         Err(Error::Config(
-            "failed to terminate the Cursor.exe process".into(),
+            "failed to restart the selected Cursor installation".into(),
         ))
     }
 }

@@ -1,125 +1,110 @@
 # 当前架构
 
-本说明对应仓库当前目录，覆盖桌面入口、请求执行、状态持久化与扩展边界。运行时提示模板是程序输入，位于 `server/prompt/`。
+Cursor BYOK 是模型网关与桌面管理器。当前源码在 Cursor 已初始化的 Agent Host 中选择完整的原生 `LocalAgentClient`，提示词、工具、执行循环和会话状态均由安装在本机的 Cursor 实现。
 
 ## 目录职责
 
 ```text
-cursor-byok/
-├── apps/desktop/                     # 桌面应用
-│   ├── src/
-│   │   ├── index.tsx                 # 前端启动与基础能力装配
-│   │   ├── App.tsx                   # 路由组合入口
-│   │   ├── shell/                    # 窗口框架、导航与页面布局
-│   │   ├── features/
-│   │   │   ├── cursor/               # 全局接管开关与证书准备
-│   │   │   ├── home/                 # 指标、趋势图与年度活动
-│   │   │   ├── models/               # API 模型配置与连通性测试
-│   │   │   ├── plugins/              # 账号授权、资源与模型目录管理
-│   │   │   ├── calls/                # 调用列表与详情
-│   │   │   └── settings/             # 应用与服务设置
-│   │   ├── shared/                   # API 客户端、状态、UI 与平台能力
-│   │   ├── demo/                     # 仅使用内存示例数据的产品演示
-│   │   ├── i18n/                     # 翻译目录与语言选择
-│   │   └── styles/                   # 主题和字号令牌
-│   └── src-tauri/
-│       ├── src/                      # 生命周期、托盘、更新与前端资源服务
-│       └── icons/                    # 应用图标源文件与平台产物
-├── server/
-│   ├── src/
-│   │   ├── app.rs                    # 依赖装配、路由组合与服务启动
-│   │   ├── config.rs                 # 环境配置与数据目录
-│   │   ├── api/                      # Cursor 协议入口与 External API
-│   │   ├── control/                  # 桌面管理 HTTP API
-│   │   ├── local_app/                # Cursor 本地代理、证书与设置管理
-│   │   ├── cursor/                   # Cursor 协议、提示编译、transport 与服务适配
-│   │   ├── run/                      # 模型调用、工具轮次、重试与压缩执行
-│   │   ├── model/                    # 通用领域类型与消息契约
-│   │   ├── provider/                 # 模型协议适配与调用路由
-│   │   ├── plugin/                   # 插件宿主、账号管理、OAuth 与 TypeScript SDK
-│   │   ├── store/                    # SQLite 持久化与事务
-│   │   └── search/                   # 搜索接入与缓存
-│   ├── plugins/build-in/             # 随应用交付的账号接入插件
-│   ├── prompt/                       # 嵌入的运行时提示与提交信息模板
-│   └── migrations/                   # SQLite 迁移
-├── crates/semble-core/               # 本地代码索引与混合搜索
-├── protocols/cursor/                 # Cursor 协议定义
-├── support/                          # 协议提取、抓包与基准测试工具
-├── docs/                             # 使用、架构、维护状态与资产文档
-├── images/                           # README 的演示截图
-└── .github/                          # CI 与正式发布工作流
+apps/desktop/
+├── src/                         # 模型、账号、调用记录、设置与接管开关
+└── src-tauri/                   # 桌面生命周期、托盘、更新与资源服务
+server/
+├── native-agent/
+│   ├── patch.mjs                # 定位原生入口，注入模型路由与工厂导出
+│   ├── route.cjs                # 在原 Agent Host 内选择真实模型与本地网关
+│   ├── install.mjs              # 安装、备份、还原与原生模型目录生成
+│   ├── native.test.mjs          # 路由、所有权与安装恢复回归
+│   ├── build.mjs                # 打包安装工具及依赖许可
+│   └── install.bundle.mjs       # 生成产物；不包含 Cursor 源码
+├── src/
+│   ├── app.rs                   # 依赖装配、路由与服务生命周期
+│   ├── local_app/               # 原生入口安装、代理、CA 与 Cursor 设置
+│   ├── api/byok/                # 原生模型网关和独立的 External API
+│   ├── api/cursor/              # 模型目录、账户展示及服务 RPC
+│   ├── cursor/services/         # 原生目录封装、TAB、Commit 与账户响应
+│   ├── cursor/protocol/         # Connect 帧及 Commit 等少量服务记录
+│   ├── provider/                # 模型协议、请求记录与流式转发
+│   ├── plugin/                  # 账号、授权续期、Deno 宿主及 SDK
+│   ├── model/                   # 模型配置、HTTP 消息与用量类型
+│   ├── store/                   # 配置、用量和诊断的 SQLite 存储
+│   └── control/                 # 桌面管理 API
+├── plugins/build-in/            # 内置账号连接插件
+├── prompt/cursor/commit/        # 独立 Commit 功能的中英文提示词
+└── migrations/                  # 已应用的数据库结构历史
+crates/semble-core/              # 独立搜索研究库；应用已不依赖它
+support/benchmarks/semble/       # 搜索基准；不参与 Agent 执行
 ```
 
-## 启动与管理路径
+## 启动与接管
 
 ```text
-桌面入口 / 独立服务入口
-        │
-        ▼
-Config → App::new → Store + PluginRuntime + ProviderRouter
-        │             + TransportRegistry + CursorHarness
-        ▼
-Rust HTTP 服务（桌面模式绑定本机地址）
-        ├─ /__byok-api__/        → WebView 前端资源
-        └─ /__byok-api__/api/*   → control → Store / 插件 / 本地接管
+Tauri / 独立服务
+  → Store + PluginRuntime + ProviderRouter + CursorHarness
+  → 本机 HTTP 服务
+      ├─ /__byok-api__/api/*        → 桌面配置与统计
+      ├─ /__byok-native__/models/*  → 原生 Agent 专用模型网关
+      └─ /byok/v1/*                 → 可单独启停的 External API
+
+开启接管 → 校验 CA → 备份并修改两个原生入口 → 写入连接与代理设置 → 重启对应 Cursor
+关闭接管 → 禁用网关 → 按哈希还原入口 → 清除托管代理设置 → 停止代理
 ```
 
-桌面 WebView 与管理 API 使用同一个 Rust 服务来源。开发时 Rust 将前端资源请求代理到 Vite，业务 API 仍由 Rust 处理。Tauri 命令只承担剪贴板、窗口、终端等原生能力。
+原生网关使用进程级随机凭据，独立于 External API 的开关和密钥。服务商密钥留在 BYOK 配置或账号插件中，不写进 Cursor 模型目录。备份位于用户数据目录；Cursor 更新替换文件后，不会用旧备份覆盖新版本。
 
-TAB 默认由本地代理沿 Cursor 官方路径透传；只有选择自定义服务时，相关请求才交给 `cursor/services/tab.rs` 转发至用户填写的地址。TAB 路由与 BYOK 聊天模型配置相互独立。
-
-## 一次模型请求
+## 一次 Agent 调用
 
 ```text
-Cursor 请求、客户端工具结果
-        │
-        ▼
-local_app 本地代理
-        ├─ 官方路径 → Cursor 官方服务
-        └─ 本地路径 → api/cursor → cursor/transport
-                                      │
-                           提示编译、消息规范化、会话定位
-                                      ▼
-                                  run 引擎
-                         ┌────────────┴─────────────┐
-                         ▼                          ▼
-                    provider                   plugin 宿主
-                         │                          │
-                  兼容协议 API                Deno 插件 / SDK
-                         └────────────┬─────────────┘
-                                      ▼
-                             模型事件 / 工具请求
-                                      │
-                           Cursor 工具执行 → 结果返回
-                                      │
-                          下一模型轮次或结束本次 Run
-                                      ▼
-                          Store 检查点、调用与用量记录
-                                      │
-                          transport 输出 Cursor 事件
+Cursor 模型菜单
+  ← 本机原生模型菜单工厂生成参数与默认值
+  ← BYOK 附加路由 ID、显示名称和来源
+
+用户选择 byok:<配置标识> 并提交
+  → 已初始化的 Cursor Agent Host
+  → 路由模块解析真实模型 ID 与专属模型地址
+  → Cursor LocalAgentClient + 现有原生 Host 适配器
+      ├─ 原生模型家族判断 → 提示词与工具定义
+      ├─ 原生会话上下文 / MCP / 权限 / checkpoint
+      └─ 原生模型与工具循环
+           ├─ 模型 HTTP 请求 → BYOK 网关 → provider / 账号插件 → 服务商
+           │                      ← 流式响应 ←────────────────────┘
+           ├─ 工具调用 → 原生工具执行与交互 → 结果回到原生循环
+           └─ 原生状态保存、工具卡片、编辑审阅与最终回答
 ```
 
-接入协议负责将客户端请求转换为通用消息和命令；`run/` 驱动模型与工具轮次；`provider/` 和 `plugin/` 负责服务商差异。外部服务返回结果不会直接绕过运行时写入客户端会话。
+路由继续传递 Host 原有的 `conversationState`、`resources`、`blobStore`、`checkpointHandler`、`conversationActionManager`、`interactionListener` 与 `mcpTools`。读取私有 API 的调用保留在原扩展上下文中，不新增 API 权限。
 
-## 状态与生命周期
+每个配置使用单独的网关路径，同名模型可属于不同账号或服务地址。真实模型 ID 进入原生工厂，配置哈希不会被误认为模型家族。菜单参数与模型详情由原生 protobuf 实现序列化，BYOK 不维护 Agent 工具 protobuf 或家族映射表。
+
+## 状态所有权
 
 | 状态 | 所有者 | 生命周期 |
 | --- | --- | --- |
-| 表单草稿、展开状态、弹窗 | 前端组件 | 当前编辑过程；保存后交给管理 API |
-| 模型、设置、调用记录、会话检查点 | `store/` | 持久化到 SQLite，可跨启动加载 |
-| 插件资源与续期凭据 | `plugin/` | 账号级管理；续期结果先持久化再继续请求 |
-| 模型与工具执行、取消信号 | `run/` | 一次 Run 的活动执行过程 |
-| Cursor 请求关联和事件输出 | `cursor/transport/` | 当前连接、请求与会话的传输关系 |
-| 本地代理、CA 与 Cursor 设置 | `local_app/` | 应用接管状态 |
+| 模型循环、工具任务、取消与重试 | Cursor 原生运行时 | 当前原生 Run |
+| 对话、待办、已读文件、checkpoint、Agent Store | Cursor | 同一会话，按原生机制恢复 |
+| 模型路由与网关凭据 | `local_app/` | BYOK 进程及接管状态 |
+| 模型、账号、用量与诊断 | BYOK | 本地持久化 |
+| 模型目录缓存 | `local_app/native_agent.rs` | 模型配置或运行时变化即失效 |
+| 表单草稿与展开状态 | 桌面前端 | 当前编辑过程 |
 
-模型重试或工具结果回传属于当前 Run 的推进，不应被当作新的对话；新请求与恢复流程通过会话和检查点定位已有状态。进程重启后的在途子任务恢复仍需单独验收，不能仅凭持久化检查点宣称已覆盖。
+停止按钮沿原生取消信号关闭模型 HTTP 流，网关同步终止上游连接。模型请求使用原生会话与 generation 标识记录，避免为每个工具往返生成新的会话缓存标识。
 
-## 扩展入口
+关闭接管拒绝后续模型请求，并恢复入口与代理设置；当前任务和进行中的工具交互仍归 Cursor 管理，停止当前运行使用 Cursor 的停止按钮。
 
-- 新服务商协议：`server/src/provider/`。
-- 账号登录、资源与模型发现：`server/plugins/build-in/` 和 `server/src/plugin/sdk/`。
-- Cursor 协议变化：`protocols/cursor/`、`server/src/cursor/`。
-- 桌面管理功能：`apps/desktop/src/features/` 与 `server/src/control/`。
-- 搜索能力：`server/src/search/` 与 `crates/semble-core/`。
+普通工具往返不改写历史；摘要由 Cursor 管理。切换模型或重启后，新 Run 使用当前安装的原生工厂。BYOK 不保存另一套 Agent checkpoint，也不承诺替代 Cursor 恢复在途任务。
 
-架构变更需要同步更新目录职责与完整请求路径；不要保留已删除目录的兼容说明。
+## 已移除的实现
+
+已删除 `server/src/run/`，以及 `cursor/` 下的 `compile/`、`prompting/`、`tools/`、`checkpoint/`、`conversation/`、`transport/`、`native/`。旧 Node 工具 worker、Agent 提示模板、固定工具快照、协议提取器和整套 Agent protobuf 也已删除。
+
+旧 Agent 会话的数据库读写模块不再参与运行。既有迁移文件保留校验和，应用不会自动销毁用户的历史数据库；统计与诊断的读取继续保留。
+
+## 其他功能与边界
+
+- TAB 默认官方直连，自定义地址仍由 `cursor/services/tab.rs` 转发。
+- Commit 生成仍是独立单次模型调用，使用自己的提交信息模板。
+- MCP 的连接、定义和执行由 Cursor 提供。
+- WebFetch 使用原生实现；WebSearch 需要上游支持 Responses 内置搜索。原生图像工具的标准 `/images/generations` 请求可转发到直接配置的 OpenAI 兼容接口；账号插件未提供该辅助接口时明确返回不支持。
+- 本地原生运行时与云端 Agent 产品不保证完全一致；新型号的家族识别范围取决于本机 Cursor 版本，不自行改写官方提示词或伪装模型家族。
+- 当前真实客户端基线为 Windows Cursor 3.25.6。macOS/Linux、Remote SSH、云端工作区和在途子任务跨进程恢复需独立验收。
+
+构建、恢复与验证步骤见[原生接入维护](../server/native-agent/README.md)。

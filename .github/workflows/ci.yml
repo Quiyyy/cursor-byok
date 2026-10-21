@@ -80,6 +80,11 @@ jobs:
         working-directory: apps/desktop
         run: npm run check
 
+      - name: Check native installer bundle and routing tests
+        run: |
+          node server/native-agent/build.mjs --check
+          node --test server/native-agent/native.test.mjs
+
   desktop-rust:
     name: Desktop Rust (${{ matrix.os }})
     strategy:

@@ -7,7 +7,7 @@ use axum::{
     Router,
 };
 
-use crate::{api::cursor::proxy, cursor::transport::TransportRegistry, Result};
+use crate::{api::cursor::proxy, cursor::services::CursorServices, Result};
 
 pub const TAB_PATHS: [&str; 16] = [
     "/aiserver.v1.AiService/StreamCpp",
@@ -32,14 +32,14 @@ pub fn is_tab_path(path: &str) -> bool {
     TAB_PATHS.contains(&path)
 }
 
-pub fn router() -> Router<TransportRegistry> {
+pub fn router() -> Router<CursorServices> {
     TAB_PATHS.into_iter().fold(Router::new(), |router, path| {
         router.route(path, post(forward))
     })
 }
 
 async fn forward(
-    State(registry): State<TransportRegistry>,
+    State(registry): State<CursorServices>,
     Extension(upstream): Extension<proxy::CursorProxy>,
     request: Request<Body>,
 ) -> Result<Response<Body>> {
