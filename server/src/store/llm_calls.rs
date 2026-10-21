@@ -8,12 +8,6 @@ use crate::{
 
 use super::{now_ms, Store};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct ContextUsageAnchor {
-    pub(crate) context_input_tokens: u64,
-    pub(crate) message_count: usize,
-}
-
 #[derive(Clone, Debug)]
 pub(crate) struct BufferedLlmChunk {
     pub(crate) seq: i64,
@@ -272,37 +266,6 @@ impl Store {
         Ok(())
     }
 
-    pub(crate) async fn latest_context_usage(
-        &self,
-        conversation_id: &str,
-    ) -> Result<Option<ContextUsageAnchor>> {
-        let row = sqlx::query(
-            "SELECT usage_json, message_count FROM llm_calls
-             WHERE conversation_id = ?
-               AND json_extract(usage_json, '$.context_input_tokens') IS NOT NULL
-             ORDER BY created_at_ms DESC, rowid DESC
-             LIMIT 1",
-        )
-        .bind(conversation_id)
-        .fetch_optional(&self.pool)
-        .await?;
-        let Some(row) = row else {
-            return Ok(None);
-        };
-        let usage: Usage = serde_json::from_str(row.try_get("usage_json")?)?;
-        let Some(context_input_tokens) = usage.context_input_tokens else {
-            return Ok(None);
-        };
-        let message_count = row.try_get::<i64, _>("message_count")?;
-        let Ok(message_count) = usize::try_from(message_count) else {
-            return Ok(None);
-        };
-        Ok(Some(ContextUsageAnchor {
-            context_input_tokens,
-            message_count,
-        }))
-    }
-
     pub async fn llm_calls(&self, limit: i64) -> Result<Vec<LlmCallSummary>> {
         let rows = sqlx::query("SELECT * FROM llm_calls ORDER BY created_at_ms DESC LIMIT ?")
             .bind(limit.clamp(1, 500))
@@ -457,66 +420,5 @@ mod tests {
             .unwrap();
         assert_eq!(overview.metrics.llm_calls, 1);
         assert_eq!(overview.metrics.successful_calls, 1);
-    }
-
-    #[tokio::test]
-    async fn latest_context_usage_follows_conversation_chronology() {
-        let directory = tempfile::tempdir().unwrap();
-        let store = Store::connect(&format!(
-            "sqlite://{}",
-            directory.path().join("test.db").display()
-        ))
-        .await
-        .unwrap();
-
-        for (call_id, model_id, context_input_tokens, message_count) in [
-            ("call-a-1", "model-a", 100_u64, 3_usize),
-            ("call-b", "model-b", 200_u64, 5_usize),
-            ("call-a-2", "model-a", 300_u64, 7_usize),
-        ] {
-            store
-                .start_llm_call(&NewLlmCall {
-                    call_id: call_id.into(),
-                    run_id: format!("run-{call_id}"),
-                    conversation_id: "conversation".into(),
-                    provider_call_index: 0,
-                    model_hash: model_id.into(),
-                    provider_type: ProviderType::Plugin,
-                    provider_url: "plugin://test".into(),
-                    request_type: ProviderType::Plugin,
-                    request_url: "plugin://test".into(),
-                    model_id: model_id.into(),
-                    display_name: model_id.into(),
-                    reasoning_effort: None,
-                    fast: false,
-                    message_count,
-                    tool_count: 0,
-                    detailed: false,
-                })
-                .await
-                .unwrap();
-            store
-                .record_llm_usage(
-                    call_id,
-                    Usage {
-                        input_tokens: Some(context_input_tokens),
-                        context_input_tokens: Some(context_input_tokens),
-                        output_tokens: Some(10),
-                        total_tokens: Some(context_input_tokens + 10),
-                        ..Default::default()
-                    },
-                )
-                .await
-                .unwrap();
-        }
-
-        assert_eq!(
-            store.latest_context_usage("conversation").await.unwrap(),
-            Some(ContextUsageAnchor {
-                context_input_tokens: 300,
-                message_count: 7,
-            })
-        );
-        assert_eq!(store.latest_context_usage("other").await.unwrap(), None);
     }
 }

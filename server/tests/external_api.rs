@@ -327,6 +327,57 @@ async fn streaming_chat_returns_incremental_sse_and_tool_calls() {
 }
 
 #[tokio::test]
+async fn responses_keep_native_custom_tool_input_and_signed_reasoning() {
+    let (router, provider, store, _directory) = setup().await;
+    store
+        .set_external_api_settings(ExternalApiSettings {
+            enabled: true,
+            api_key: "secret".into(),
+        })
+        .await
+        .unwrap();
+    let patch = "*** Begin Patch\n*** Add File: a.txt\n+hello\n*** End Patch";
+    for stream in [false, true] {
+        provider.push(vec![
+            ModelEvent::ProviderReplayState(cursor_server::model::ProviderReplayState {provider_kind:"openai_responses".into(),value:json!({"items":[{"id":"rs_test","type":"reasoning","encrypted_content":"signed-test-data","summary":[]}]})}),
+            ModelEvent::ToolCallStart{index:0,call_id:"call_patch".into(),name:"ApplyPatch".into()},
+            ModelEvent::ToolCallArgumentsDelta{index:0,delta:patch.into()},
+            ModelEvent::ToolCallEnd{index:0},
+            ModelEvent::Done(FinishReason::ToolUse),
+        ]);
+        let (status,body)=send(router.clone(),"POST","/byok/v1/responses",Some("secret"),json!({"model":"work/qwen/model","stream":stream,"input":[{"role":"system","content":"native system"},{"role":"user","content":"edit the file"}],"reasoning":{"effort":"high"},"tools":[{"type":"custom","name":"ApplyPatch","description":"Apply changes","format":{"type":"text"}}]})).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let response: Value = if stream {
+            body.lines()
+                .filter_map(|line| line.strip_prefix("data: "))
+                .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+                .find(|v| v["type"] == "response.completed")
+                .unwrap()["response"]
+                .clone()
+        } else {
+            serde_json::from_str(&body).unwrap()
+        };
+        let items = response["output"].as_array().unwrap();
+        assert_eq!(items[0]["encrypted_content"], "signed-test-data");
+        assert_eq!(items[1]["type"], "custom_tool_call");
+        assert_eq!(items[1]["input"], patch);
+        assert!(items[1].get("arguments").is_none());
+        if stream {
+            assert!(body.contains("response.custom_tool_call_input.delta"));
+        }
+        let requests = provider.requests();
+        assert_eq!(
+            requests.last().unwrap().model.reasoning.effort.as_deref(),
+            Some("high")
+        );
+        assert_eq!(
+            requests.last().unwrap().prompt.instructions,
+            "native system"
+        );
+    }
+}
+
+#[tokio::test]
 async fn chat_tool_result_keeps_the_assistant_function_name() {
     let (router, provider, store, _directory) = setup().await;
     store

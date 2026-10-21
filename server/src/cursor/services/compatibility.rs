@@ -8,7 +8,6 @@ use prost::Message;
 
 use crate::{
     api::cursor::proxy::{self, CursorProxy},
-    cursor::protocol::proto::agent::v1 as agent,
     local_app, Result,
 };
 
@@ -40,12 +39,7 @@ pub async fn update_conversation_metadata(
     Extension(proxy): Extension<CursorProxy>,
     request: Request<Body>,
 ) -> Result<Response<Body>> {
-    route(
-        &proxy,
-        request,
-        agent::UpdateConversationMetadataResponse {},
-    )
-    .await
+    route(&proxy, request, EmptyResponse {}).await
 }
 
 async fn route<M: Message>(

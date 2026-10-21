@@ -22,6 +22,7 @@ pub use event::*;
 pub use openai_chat::OpenAiChatProvider;
 pub use openai_responses::OpenAiResponsesProvider;
 pub use recorder::CallRecorder;
+pub(crate) use request_template::render_json_strings;
 pub(crate) use router::custom_headers;
 
 pub(crate) fn native_usage(

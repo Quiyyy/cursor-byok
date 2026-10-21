@@ -2,7 +2,7 @@
 
 const SESSION_ID_PLACEHOLDER: &str = "{{SessionId}}";
 
-pub(super) fn render_json_strings(
+pub(crate) fn render_json_strings(
     value: &serde_json::Value,
     conversation_id: &str,
 ) -> serde_json::Value {

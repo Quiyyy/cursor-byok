@@ -62,7 +62,6 @@ pub fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::ConversationId;
 
     async fn temporary_store() -> (tempfile::TempDir, Store) {
         let directory = tempfile::tempdir().unwrap();
@@ -73,10 +72,7 @@ mod tests {
 
     async fn assert_writes_recover(store: &Store) {
         for _ in 0..4 {
-            store
-                .ensure_conversation(&ConversationId::new("after-failed-write"))
-                .await
-                .unwrap();
+            store.set_detailed_logging(true).await.unwrap();
         }
     }
 
@@ -89,8 +85,8 @@ mod tests {
             .await
             .unwrap();
         sqlx::query(
-            "INSERT INTO checkpoint_messages(checkpoint_id, ordinal, conversation_id, message_id)
-             VALUES (999999, 0, 'missing-conversation', 'missing-message')",
+            "INSERT INTO llm_call_response_chunks(call_id, seq, received_offset_ms, data, byte_count)
+             VALUES ('missing-call', 0, 0, x'00', 1)",
         )
         .execute(&mut *transaction)
         .await

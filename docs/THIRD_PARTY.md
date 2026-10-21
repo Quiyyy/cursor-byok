@@ -11,7 +11,7 @@
 - 原来源记录标注许可：MIT
 - 使用的模型标识：`minishlab/potion-code-16M-v2`
 
-Rust 实现在运行时不依赖 Python。模型权重有独立的来源与使用条款，不能用仓库的代码许可证代替。
+该研究库目前不参与桌面应用的 Agent 执行。Rust 实现在运行时不依赖 Python。模型权重有独立的来源与使用条款，不能用仓库的代码许可证代替。
 
 基准数据与方法见 [Semble 基准说明](../support/benchmarks/semble/README.md)。既有报告是对应提交和机器上的历史测量，不能视为当前版本重新跑分的结果。
 
@@ -26,8 +26,8 @@ Rust 实现在运行时不依赖 Python。模型权重有独立的来源与使�
 
 Rust、JavaScript 和 Go 依赖分别以相应清单和锁文件为准。更新、再分发或替换依赖时保留该依赖要求的许可与版权文本。
 
-## Cursor 原生运行时与 worker
+## Cursor 原生运行时与入口安装器
 
-`server/cursor-runtime/worker.bundle.mjs` 仅包含本项目 bridge 与 Babel 等 JavaScript 依赖；构建保留依赖的 legal comments，并生成完整的 `server/cursor-runtime/THIRD_PARTY_LICENSES.txt`；启动时将许可说明与 worker 一起写入运行目录。它不包含 Cursor 原生 bundle 或其命令解析二进制。运行时从用户已安装的 Cursor 读取这些文件；Cursor 代码与服务受其自身条款约束，不属于本仓库 MIT 授权范围。
+`server/native-agent/install.bundle.mjs` 仅包含本项目安装与路由代码及 Babel 等构建依赖，不包含 Cursor 原生 bundle、提示词或工具实现。构建保留依赖 legal comments，并生成 `server/native-agent/THIRD_PARTY_LICENSES.txt`，安装器与许可说明一起写入本地用户数据目录。
 
-`server/tests/fixtures/cursor/protocol.json` 记录固定协议测试样本的 Cursor 版本、commit 与源 bundle SHA-256，不代表维护团队原创的提示词或工具说明。
+运行时从用户已安装的 Cursor 调用原生工厂，并为可恢复的安装改动在本机保存原始文件备份。Cursor 代码与服务受其自身条款约束，不属于本仓库 MIT 授权范围。原生备份、请求记录和本机账号数据不得提交到仓库。

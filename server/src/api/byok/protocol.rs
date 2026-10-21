@@ -4,7 +4,8 @@ use serde_json::Value;
 use crate::{
     model::{
         ContentPart, ModelRequest, ModelSpec, ProjectedContent, ProjectedMessage, PromptSpec,
-        ProviderType, Role, ToolCallContent, ToolDefinition, ToolResultContent,
+        ProviderReplayState, ProviderType, Role, ToolCallContent, ToolDefinition, ToolInputFormat,
+        ToolResultContent,
     },
     Error, Result,
 };
@@ -58,7 +59,7 @@ pub(super) fn parse(protocol: Protocol, body: &Value) -> Result<ParsedRequest> {
                 .to_owned();
             match body.get("input") {
                 Some(Value::String(text)) => history.push(text_message(0, Role::User, text)),
-                Some(input) => parse_responses_input(input, &mut history)?,
+                Some(input) => parse_responses_input(input, &mut prompt, &mut history)?,
                 None => return Err(Error::Protocol("input is required".into())),
             }
             parse_tools(body.get("tools"), protocol, &mut prompt)?;
@@ -76,6 +77,21 @@ pub(super) fn parse(protocol: Protocol, body: &Value) -> Result<ParsedRequest> {
             "at least one input message is required".into(),
         ));
     }
+    model.reasoning.effort = body
+        .get("reasoning_effort")
+        .or_else(|| body.pointer("/reasoning/effort"))
+        .or_else(|| body.pointer("/output_config/effort"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    model.reasoning.enabled = model
+        .reasoning
+        .effort
+        .as_deref()
+        .is_some_and(|effort| effort != "none")
+        || matches!(
+            body.pointer("/thinking/type").and_then(Value::as_str),
+            Some("enabled" | "adaptive")
+        );
     Ok(ParsedRequest {
         public_model_id,
         request: ModelRequest {
@@ -271,26 +287,36 @@ fn parse_chat_messages(
     Ok(())
 }
 
-fn parse_responses_input(value: &Value, history: &mut Vec<ProjectedMessage>) -> Result<()> {
+fn parse_responses_input(
+    value: &Value,
+    prompt: &mut PromptSpec,
+    history: &mut Vec<ProjectedMessage>,
+) -> Result<()> {
     let items = value
         .as_array()
         .ok_or_else(|| Error::Protocol("input must be text or an array".into()))?;
     for (index, item) in items.iter().enumerate() {
         match item.get("type").and_then(Value::as_str) {
-            Some("function_call_output") => history.push(ProjectedMessage {
-                message_id: format!("external:{index}"),
-                role: Role::Tool,
-                content: ProjectedContent::ToolResult(ToolResultContent {
-                    call_id: required_string(item, "call_id")?.into(),
-                    name: tool_name(history, required_string(item, "call_id")?)
-                        .unwrap_or_else(|| "tool".into()),
-                    content: text_content(item.get("output")).unwrap_or_default(),
-                    is_error: false,
-                    image: None,
-                    provider_parts: Vec::new(),
-                }),
-            }),
-            Some("function_call") => history.push(ProjectedMessage {
+            Some("function_call_output" | "custom_tool_call_output") => {
+                history.push(ProjectedMessage {
+                    message_id: format!("external:{index}"),
+                    role: Role::Tool,
+                    content: ProjectedContent::ToolResult(ToolResultContent {
+                        call_id: required_string(item, "call_id")?.into(),
+                        name: tool_name(history, required_string(item, "call_id")?)
+                            .unwrap_or_else(|| "tool".into()),
+                        content: text_content(item.get("output")).unwrap_or_default(),
+                        is_error: false,
+                        image: None,
+                        provider_parts: if item["output"].is_array() {
+                            parse_parts(item.get("output"))?
+                        } else {
+                            Vec::new()
+                        },
+                    }),
+                })
+            }
+            Some("function_call" | "custom_tool_call") => history.push(ProjectedMessage {
                 message_id: format!("external:{index}"),
                 role: Role::Assistant,
                 content: ProjectedContent::Assistant {
@@ -301,12 +327,43 @@ fn parse_responses_input(value: &Value, history: &mut Vec<ProjectedMessage>) -> 
                         index: 0,
                         call_id: required_string(item, "call_id")?.into(),
                         name: required_string(item, "name")?.into(),
-                        arguments: serde_json::from_str(required_string(item, "arguments")?)?,
+                        arguments: if item["type"] == "custom_tool_call" {
+                            Value::String(required_string(item, "input")?.into())
+                        } else {
+                            serde_json::from_str(required_string(item, "arguments")?)?
+                        },
                     }],
+                },
+            }),
+            Some("reasoning") => history.push(ProjectedMessage {
+                message_id: format!("external:{index}"),
+                role: Role::Assistant,
+                content: ProjectedContent::Assistant {
+                    text: String::new(),
+                    thinking: String::new(),
+                    calls: Vec::new(),
+                    replay_state: Some(ProviderReplayState {
+                        provider_kind: "openai_responses".into(),
+                        value: serde_json::json!({"items":[item]}),
+                    }),
                 },
             }),
             _ => {
                 let role = item.get("role").and_then(Value::as_str).unwrap_or("user");
+                if matches!(role, "system" | "developer") {
+                    if !history.is_empty() {
+                        return Err(Error::Protocol(
+                            "system messages must precede conversation messages".into(),
+                        ));
+                    }
+                    if !prompt.instructions.is_empty() {
+                        prompt.instructions.push('\n');
+                    }
+                    prompt
+                        .instructions
+                        .push_str(&text_content(item.get("content")).unwrap_or_default());
+                    continue;
+                }
                 let role = match role {
                     "user" => Role::User,
                     "assistant" => Role::Assistant,
@@ -441,7 +498,14 @@ fn parse_tools(value: Option<&Value>, protocol: Protocol, prompt: &mut PromptSpe
             tool
         };
         prompt.tools.push(ToolDefinition {
-            input_format: None,
+            input_format: if matches!(protocol, Protocol::Responses) && tool["type"] == "custom" {
+                Some(match tool.get("format") {
+                    Some(value) => serde_json::from_value::<ToolInputFormat>(value.clone())?,
+                    None => ToolInputFormat::Text,
+                })
+            } else {
+                None
+            },
             name: required_string(function, "name")?.into(),
             description: function
                 .get("description")

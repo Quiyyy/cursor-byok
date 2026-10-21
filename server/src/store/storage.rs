@@ -125,17 +125,15 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::ConversationId;
 
     #[tokio::test]
-    async fn manual_cleanup_reclaims_disk_space_and_preserves_conversations() {
+    async fn manual_cleanup_reclaims_disk_space_and_preserves_configuration() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("storage.db");
         let store = Store::connect(&format!("sqlite://{}", path.display()))
             .await
             .unwrap();
-        let conversation = ConversationId::new("keep-conversation");
-        store.ensure_conversation(&conversation).await.unwrap();
+        store.set_detailed_logging(true).await.unwrap();
         sqlx::query(
             "INSERT INTO llm_calls (
                 call_id, run_id, conversation_id, provider_call_index, provider_type,
@@ -163,10 +161,10 @@ mod tests {
         let before = std::fs::metadata(&path).unwrap().len();
         let stats = store.clear_statistics_storage().await.unwrap();
         assert_eq!(stats.call_count, 1);
-        assert!(store.conversation(&conversation).await.unwrap().is_some());
+        assert!(store.detailed_logging().await.unwrap());
         assert!(std::fs::metadata(&path).unwrap().len() < before / 2);
         let stats = store.clear_all_statistics_storage().await.unwrap();
         assert_eq!(stats.call_count, 0);
-        assert!(store.conversation(&conversation).await.unwrap().is_some());
+        assert!(store.detailed_logging().await.unwrap());
     }
 }

@@ -52,13 +52,25 @@ impl NativeForwarder {
         incoming_headers: &HeaderMap,
         mut body: Value,
         model: &ModelConfig,
+        kind: &str,
     ) -> Result<Response> {
-        let call_id = format!("external-api:{}", uuid::Uuid::new_v4());
+        let call_id = format!("{kind}:{}", uuid::Uuid::new_v4());
         let request_url = model.request_url()?;
+        let conversation_id =
+            super::native_identity(kind, incoming_headers, "x-byok-conversation-id", &call_id);
+        if kind == "native-agent" && (body.get("messages").is_some() || body.get("input").is_some())
+        {
+            apply_native_defaults(protocol, &mut body, model, &conversation_id);
+        }
         let new_call = NewLlmCall {
             call_id: call_id.clone(),
-            run_id: call_id.clone(),
-            conversation_id: call_id.clone(),
+            run_id: super::native_identity(
+                kind,
+                incoming_headers,
+                "x-byok-generation-id",
+                &call_id,
+            ),
+            conversation_id: conversation_id.clone(),
             provider_call_index: 0,
             model_hash: model.model_hash.clone(),
             provider_type: model.provider_type(),
@@ -67,7 +79,12 @@ impl NativeForwarder {
             request_url: request_url.clone(),
             model_id: model.model_id.clone(),
             display_name: model.display_name.clone(),
-            reasoning_effort: model.reasoning_effort.clone(),
+            reasoning_effort: body
+                .get("reasoning_effort")
+                .or_else(|| body.pointer("/reasoning/effort"))
+                .or_else(|| body.pointer("/output_config/effort"))
+                .and_then(Value::as_str)
+                .map(str::to_owned),
             fast: false,
             message_count: body
                 .get("messages")
@@ -83,28 +100,30 @@ impl NativeForwarder {
         body["model"] = Value::String(model.model_id.clone());
         let mut upstream_headers = HeaderMap::new();
         for (name, value) in incoming_headers {
-            if !matches!(
-                name.as_str(),
-                "authorization"
-                    | "x-api-key"
-                    | "host"
-                    | "content-length"
-                    | "content-type"
-                    | "connection"
-                    | "transfer-encoding"
-                    | "accept-encoding"
-                    | "cookie"
-                    | "proxy-authorization"
-                    | "proxy-authenticate"
-                    | "te"
-                    | "trailer"
-                    | "upgrade"
-            ) {
+            if !name.as_str().starts_with("x-byok-")
+                && !matches!(
+                    name.as_str(),
+                    "authorization"
+                        | "x-api-key"
+                        | "host"
+                        | "content-length"
+                        | "content-type"
+                        | "connection"
+                        | "transfer-encoding"
+                        | "accept-encoding"
+                        | "cookie"
+                        | "proxy-authorization"
+                        | "proxy-authenticate"
+                        | "te"
+                        | "trailer"
+                        | "upgrade"
+                )
+            {
                 upstream_headers.append(name, value.clone());
             }
         }
         if model.custom_headers_enabled {
-            upstream_headers.extend(custom_headers(&model.custom_headers, &call_id)?);
+            upstream_headers.extend(custom_headers(&model.custom_headers, &conversation_id)?);
         }
         match protocol {
             Protocol::Messages => {
@@ -250,6 +269,41 @@ impl NativeForwarder {
     }
 }
 
+fn apply_native_defaults(protocol: Protocol, body: &mut Value, model: &ModelConfig, session: &str) {
+    if let Some(tokens) = model.max_output_tokens() {
+        let field = match protocol {
+            Protocol::Responses => "max_output_tokens",
+            _ => "max_tokens",
+        };
+        if body.get(field).is_none() && body.get("max_completion_tokens").is_none() {
+            body[field] = serde_json::json!(tokens);
+        }
+    }
+    let mut defaults = crate::model::ModelSpec::new(&model.model_id);
+    model.configure(&mut defaults);
+    if let Some(effort) = defaults.reasoning.effort {
+        match protocol {
+            Protocol::Chat if body.get("reasoning_effort").is_none() => {
+                body["reasoning_effort"] = serde_json::json!(effort)
+            }
+            Protocol::Responses if body.get("reasoning").is_none() => {
+                body["reasoning"] = serde_json::json!({"effort":effort})
+            }
+            Protocol::Messages if body.get("output_config").is_none() => {
+                body["output_config"] = serde_json::json!({"effort":effort});
+                if body.get("thinking").is_none() {
+                    body["thinking"] = serde_json::json!({"type":"adaptive"});
+                }
+            }
+            _ => {}
+        }
+    }
+    let extra = crate::provider::render_json_strings(model.extra_params(), session);
+    if let (Some(body), Some(extra)) = (body.as_object_mut(), extra.as_object()) {
+        body.extend(extra.clone());
+    }
+}
+
 fn build_response(status: StatusCode, headers: &HeaderMap, body: Body) -> Response {
     let mut response = Response::new(body);
     *response.status_mut() = status;
@@ -376,4 +430,34 @@ async fn observe_events(
         }
     }
     summary
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn native_model_defaults_preserve_selected_effort_and_stable_session_templates() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = Store::connect(&format!(
+            "sqlite://{}",
+            directory.path().join("test.db").display()
+        ))
+        .await
+        .unwrap();
+        let input=serde_json::from_value(serde_json::json!({"display_name":"test","type":"openai","base_url":"https://example.invalid/v1","api_key":"test","tooltip_data":"test","model_id":"model","openai_endpoint":"/v1/chat/completions","max_completion_tokens":32000,"reasoning_effort":"high","openai_extra_params_enabled":true,"openai_extra_params":{"prompt_cache_key":"{{SessionId}}"}})).unwrap();
+        let model = store.create_model(&input).await.unwrap();
+        let mut body = serde_json::json!({"model":"model","messages":[{"role":"user","content":"hello"}],"reasoning_effort":"low"});
+        let original = body["messages"].clone();
+        apply_native_defaults(Protocol::Chat, &mut body, &model, "conversation-one");
+        assert_eq!(body["max_tokens"], 32000);
+        assert_eq!(body["reasoning_effort"], "low");
+        assert_eq!(body["prompt_cache_key"], "conversation-one");
+        assert_eq!(body["messages"], original);
+        let mut second =
+            serde_json::json!({"model":"model","input":"next turn","max_output_tokens":100});
+        apply_native_defaults(Protocol::Responses, &mut second, &model, "conversation-one");
+        assert_eq!(second["max_output_tokens"], 100);
+        assert_eq!(second["reasoning"]["effort"], "high");
+        assert_eq!(second["prompt_cache_key"], body["prompt_cache_key"]);
+    }
 }
