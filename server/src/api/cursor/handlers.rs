@@ -14,8 +14,8 @@ use crate::{
         protocol::{connect, proto::aiserver::v1 as ai},
         services::CursorServices,
         services::{
-            account, commit_message, compatibility, entitlement::FreeEntitlementCache,
-            model_catalog, tab,
+            account, commit_message, compatibility, default_model,
+            entitlement::FreeEntitlementCache, model_catalog, tab,
         },
     },
     Result,
@@ -30,6 +30,14 @@ fn router_with_proxy(registry: CursorServices, proxy: CursorProxy) -> Router {
     let free_entitlements = FreeEntitlementCache::default();
     Router::new()
         .route("/__byok-api__/healthz", get(health))
+        .route(
+            "/aiserver.v1.AiService/GetDefaultModel",
+            post(default_model::get_default_model),
+        )
+        .route(
+            "/aiserver.v1.AiService/GetDefaultModelNudgeData",
+            post(default_model::get_model_nudge),
+        )
         .route(
             "/aiserver.v1.AiService/AvailableDocs",
             post(compatibility::available_docs),

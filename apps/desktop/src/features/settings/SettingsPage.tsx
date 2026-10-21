@@ -4,6 +4,7 @@ import { PageContent } from "../../shell/layout/PageContent";
 import { LegacyModelImport } from "../models/LegacyModelImport";
 import { AppLifecycleSettingsCard } from "./AppLifecycleSettingsCard";
 import { CommitSettingsCard } from "./CommitSettingsCard";
+import { CursorModelSettingsCard } from "./CursorModelSettingsCard";
 import { ExternalApiSettingsCard } from "./ExternalApiSettingsCard";
 import { PricingSettingsCard } from "./PricingSettingsCard";
 import { ProxySettingsCard } from "./ProxySettingsCard";
@@ -159,6 +160,7 @@ export function SettingsPage() {
     : t("仅删除请求、响应和追踪附件等详细内容，保留调用汇总、统计指标和配置。");
   const content = (
     <div className={styles.page}>
+      <CursorModelSettingsCard />
       <TitledCard title={t("调用观测")}>
         <div className={styles.settingRow}>
           <div>

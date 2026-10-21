@@ -92,6 +92,8 @@ Cursor 模型菜单
 
 普通工具往返不改写历史；摘要由 Cursor 管理。切换模型或重启后，新 Run 使用当前安装的原生工厂。BYOK 不保存另一套 Agent checkpoint，也不承诺替代 Cursor 恢复在途任务。
 
+默认模型由 `store/cursor_model.rs` 持久化在现有设置表中。桌面通过管理 API 保存稳定的模型 ID，`cursor/services/default_model.rs` 将其作为 `GetDefaultModel` 的结果交给 Cursor，并用递增更新时间触发原生默认设置刷新。已配置时，`GetDefaultModelNudgeData` 关闭自动切回 Auto 的服务端提示。此路径不修改 Workbench bundle 或会话内容；Cursor 仍负责显式的会话模型选择。
+
 ## 已移除的实现
 
 已删除 `server/src/run/`，以及 `cursor/` 下的 `compile/`、`prompting/`、`tools/`、`checkpoint/`、`conversation/`、`transport/`、`native/`。旧 Node 工具 worker、Agent 提示模板、固定工具快照、协议提取器和整套 Agent protobuf 也已删除。

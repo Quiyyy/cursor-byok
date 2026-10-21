@@ -164,6 +164,11 @@ export interface CommitSettingsView extends CommitSettings {
   default_prompt: string;
 }
 
+export interface CursorModelSettings {
+  model_id: string;
+  updated_at_ms: number;
+}
+
 export interface TokenPricingSettings {
   input_per_million: number;
   output_per_million: number;
@@ -546,6 +551,8 @@ export const api = {
   desktopSettings: () => request<DesktopSettings>("/settings/desktop"),
   setDesktopSettings: (settings: DesktopSettings) => request<DesktopSettings>("/settings/desktop", { method: "PUT", body: JSON.stringify(settings) }),
   commitSettings: (locale: Locale) => request<CommitSettingsView>("/settings/commit", { headers: { "accept-language": locale } }),
+  cursorModelSettings: () => request<CursorModelSettings>("/settings/cursor-model"),
+  setCursorDefaultModel: (model_id: string) => request<CursorModelSettings>("/settings/cursor-model", { method: "PUT", body: JSON.stringify({ model_id }) }),
   setCommitSettings: (settings: CommitSettings) => request<CommitSettingsView>("/settings/commit", { method: "PUT", body: JSON.stringify(settings) }),
   pricingSettings: () => request<TokenPricingSettings>("/settings/pricing"),
   setPricingSettings: (settings: TokenPricingSettings) => request<TokenPricingSettings>("/settings/pricing", { method: "PUT", body: JSON.stringify(settings) }),

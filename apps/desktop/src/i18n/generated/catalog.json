@@ -88,6 +88,18 @@
         }
       ]
     },
+    "03ee801c464e852f": {
+      "source": "Cursor 默认模型",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 41,
+          "column": 29
+        }
+      ]
+    },
     "03ff62ab4b818492": {
       "source": "缓存写入：{tokens} × ${price}/1M = {cost}",
       "kind": "template",
@@ -116,8 +128,13 @@
         },
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 178,
+          "line": 149,
           "column": 10
+        },
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 44,
+          "column": 178
         },
         {
           "file": "features/settings/PricingSettingsCard.tsx",
@@ -131,7 +148,7 @@
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 183,
+          "line": 185,
           "column": 82
         },
         {
@@ -148,7 +165,7 @@
       "refs": [
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 225,
+          "line": 196,
           "column": 23
         }
       ]
@@ -251,6 +268,18 @@
           "file": "features/models/CursorSettingsPage.tsx",
           "line": 360,
           "column": 73
+        }
+      ]
+    },
+    "07c9f75b85d3e9b7": {
+      "source": "默认模型已保存，重载 Cursor 窗口后生效",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 35,
+          "column": 15
         }
       ]
     },
@@ -381,7 +410,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 100,
+          "line": 101,
           "column": 38
         }
       ]
@@ -398,6 +427,18 @@
         }
       ]
     },
+    "0e2b9e0862ee9bee": {
+      "source": "保存后重载 Cursor 窗口。新对话沿用所选模型，不自动切回 Auto；已有对话保留各自选择。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 48,
+          "column": 17
+        }
+      ]
+    },
     "0e41f8e3d59ec47b": {
       "source": "存储管理",
       "kind": "text",
@@ -405,7 +446,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 279,
+          "line": 281,
           "column": 26
         }
       ]
@@ -719,12 +760,12 @@
       "refs": [
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 175,
+          "line": 146,
           "column": 10
         },
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 207,
+          "line": 178,
           "column": 16
         }
       ]
@@ -809,7 +850,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 283,
+          "line": 285,
           "column": 131
         }
       ]
@@ -835,17 +876,17 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 70,
+          "line": 71,
           "column": 42
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 188,
+          "line": 190,
           "column": 22
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 215,
+          "line": 217,
           "column": 58
         }
       ]
@@ -883,6 +924,23 @@
           "file": "features/models/LegacyModelImport.tsx",
           "line": 65,
           "column": 20
+        }
+      ]
+    },
+    "1e2933c6b813322a": {
+      "source": "默认模型",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 47,
+          "column": 18
+        },
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 50,
+          "column": 83
         }
       ]
     },
@@ -956,7 +1014,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 256,
+          "line": 258,
           "column": 43
         }
       ]
@@ -980,7 +1038,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 125,
+          "line": 126,
           "column": 15
         }
       ]
@@ -992,7 +1050,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 306,
+          "line": 308,
           "column": 24
         }
       ]
@@ -1079,6 +1137,18 @@
           "file": "features/calls/callStatus.ts",
           "line": 4,
           "column": 27
+        }
+      ]
+    },
+    "29332c6dcc17574c": {
+      "source": "模型不可用，请重新选择",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 51,
+          "column": 107
         }
       ]
     },
@@ -1181,13 +1251,18 @@
         },
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 167,
+          "line": 138,
           "column": 78
         },
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 214,
+          "line": 185,
           "column": 21
+        },
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 42,
+          "column": 120
         },
         {
           "file": "features/settings/PricingSettingsCard.tsx",
@@ -1201,12 +1276,12 @@
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 179,
+          "line": 181,
           "column": 81
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 298,
+          "line": 300,
           "column": 22
         },
         {
@@ -1285,7 +1360,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 149,
+          "line": 150,
           "column": 15
         }
       ]
@@ -1454,7 +1529,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 241,
+          "line": 243,
           "column": 27
         }
       ]
@@ -1524,7 +1599,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 308,
+          "line": 310,
           "column": 42
         }
       ]
@@ -1609,7 +1684,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 290,
+          "line": 292,
           "column": 14
         }
       ]
@@ -1633,7 +1708,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 241,
+          "line": 243,
           "column": 39
         }
       ]
@@ -1712,12 +1787,12 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 248,
+          "line": 250,
           "column": 22
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 254,
+          "line": 256,
           "column": 26
         }
       ]
@@ -1819,7 +1894,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 156,
+          "line": 157,
           "column": 66
         }
       ]
@@ -1831,7 +1906,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 274,
+          "line": 276,
           "column": 52
         }
       ]
@@ -2070,8 +2145,13 @@
       "refs": [
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 164,
+          "line": 135,
           "column": 8
+        },
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 51,
+          "column": 55
         },
         {
           "file": "features/settings/ProxySettingsCard.tsx",
@@ -2399,7 +2479,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 177,
+          "line": 179,
           "column": 26
         }
       ]
@@ -2452,7 +2532,7 @@
       "refs": [
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 185,
+          "line": 156,
           "column": 26
         }
       ]
@@ -2510,7 +2590,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 234,
+          "line": 236,
           "column": 78
         }
       ]
@@ -2570,7 +2650,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 238,
+          "line": 240,
           "column": 21
         }
       ]
@@ -2843,7 +2923,7 @@
       "refs": [
         {
           "file": "shared/api.ts",
-          "line": 521,
+          "line": 526,
           "column": 43
         }
       ]
@@ -2963,7 +3043,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 100,
+          "line": 101,
           "column": 55
         }
       ]
@@ -3115,7 +3195,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 167,
+          "line": 169,
           "column": 16
         }
       ]
@@ -3139,7 +3219,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 266,
+          "line": 268,
           "column": 26
         }
       ]
@@ -3163,7 +3243,7 @@
       "refs": [
         {
           "file": "shared/api.ts",
-          "line": 516,
+          "line": 521,
           "column": 43
         }
       ]
@@ -3187,7 +3267,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 299,
+          "line": 301,
           "column": 23
         }
       ]
@@ -3254,7 +3334,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 143,
+          "line": 144,
           "column": 83
         }
       ]
@@ -3317,7 +3397,7 @@
       "refs": [
         {
           "file": "shared/api.ts",
-          "line": 460,
+          "line": 465,
           "column": 21
         }
       ]
@@ -3499,6 +3579,18 @@
         }
       ]
     },
+    "88f6fc489aa185af": {
+      "source": "尚未设置",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 51,
+          "column": 126
+        }
+      ]
+    },
     "8911e4f1407d58cb": {
       "source": "正在下载插件运行时",
       "kind": "text",
@@ -3593,7 +3685,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 237,
+          "line": 239,
           "column": 22
         }
       ]
@@ -3773,7 +3865,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 159,
+          "line": 160,
           "column": 7
         }
       ]
@@ -4136,7 +4228,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 245,
+          "line": 247,
           "column": 26
         }
       ]
@@ -4172,7 +4264,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 63,
+          "line": 64,
           "column": 34
         }
       ]
@@ -4273,13 +4365,18 @@
         },
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 169,
+          "line": 140,
           "column": 36
         },
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 213,
+          "line": 184,
           "column": 22
+        },
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 43,
+          "column": 165
         },
         {
           "file": "features/settings/ExternalApiSettingsCard.tsx",
@@ -4298,7 +4395,7 @@
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 180,
+          "line": 182,
           "column": 133
         },
         {
@@ -4715,7 +4812,7 @@
       "refs": [
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 59,
+          "line": 58,
           "column": 63
         }
       ]
@@ -4852,7 +4949,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 156,
+          "line": 157,
           "column": 45
         }
       ]
@@ -4907,7 +5004,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 282,
+          "line": 284,
           "column": 22
         }
       ]
@@ -4996,7 +5093,7 @@
       "refs": [
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 217,
+          "line": 188,
           "column": 14
         },
         {
@@ -5065,7 +5162,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 283,
+          "line": 285,
           "column": 31
         }
       ]
@@ -5077,7 +5174,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 274,
+          "line": 276,
           "column": 40
         }
       ]
@@ -5371,12 +5468,12 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 165,
+          "line": 167,
           "column": 22
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 171,
+          "line": 173,
           "column": 20
         }
       ]
@@ -5388,7 +5485,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 202,
+          "line": 204,
           "column": 21
         }
       ]
@@ -5438,7 +5535,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 158,
+          "line": 159,
           "column": 7
         }
       ]
@@ -5626,7 +5723,7 @@
       "refs": [
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 149,
+          "line": 120,
           "column": 15
         }
       ]
@@ -5809,7 +5906,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 318,
+          "line": 320,
           "column": 30
         }
       ]
@@ -5950,12 +6047,12 @@
       "refs": [
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 189,
+          "line": 160,
           "column": 24
         },
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 197,
+          "line": 168,
           "column": 24
         }
       ]
@@ -6020,7 +6117,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 76,
+          "line": 77,
           "column": 17
         }
       ]
@@ -6106,7 +6203,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 162,
+          "line": 164,
           "column": 26
         }
       ]
@@ -6204,7 +6301,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 221,
+          "line": 223,
           "column": 16
         }
       ]
@@ -6348,7 +6445,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 249,
+          "line": 251,
           "column": 21
         }
       ]
@@ -6458,7 +6555,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 189,
+          "line": 191,
           "column": 21
         }
       ]
@@ -6615,7 +6712,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 309,
+          "line": 311,
           "column": 38
         }
       ]
@@ -6627,8 +6724,13 @@
       "refs": [
         {
           "file": "features/settings/CommitSettingsCard.tsx",
-          "line": 169,
+          "line": 140,
           "column": 24
+        },
+        {
+          "file": "features/settings/CursorModelSettingsCard.tsx",
+          "line": 43,
+          "column": 153
         },
         {
           "file": "features/settings/ExternalApiSettingsCard.tsx",
@@ -6647,7 +6749,7 @@
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 180,
+          "line": 182,
           "column": 121
         },
         {
@@ -6664,17 +6766,17 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 71,
+          "line": 72,
           "column": 46
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 201,
+          "line": 203,
           "column": 22
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 216,
+          "line": 218,
           "column": 58
         }
       ]

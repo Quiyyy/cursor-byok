@@ -162,6 +162,8 @@ fn is_local_path(path: &str) -> bool {
             | "/aiserver.v1.DashboardService/GetUserPrivacyMode"
             | "/agent.v1.AgentService/UpdateConversationMetadata"
             | "/aiserver.v1.AiService/AvailableModels"
+            | "/aiserver.v1.AiService/GetDefaultModel"
+            | "/aiserver.v1.AiService/GetDefaultModelNudgeData"
             | "/agent.v1.AgentService/GetUsableModels"
             | "/aiserver.v1.AiService/GetUsableModels"
             | "/aiserver.v1.AuthService/GetEmail"
@@ -201,6 +203,8 @@ mod tests {
     fn only_model_and_account_metadata_routes_stay_local() {
         for path in [
             "/aiserver.v1.AiService/AvailableDocs",
+            "/aiserver.v1.AiService/GetDefaultModel",
+            "/aiserver.v1.AiService/GetDefaultModelNudgeData",
             "/aiserver.v1.DashboardService/GetEffectiveUserPlugins",
             "/aiserver.v1.DashboardService/GetUserPrivacyMode",
             "/aiserver.v1.AuthService/GetUserMeta",

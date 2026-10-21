@@ -19,6 +19,26 @@ pub async fn get(State(service): State<ControlService>) -> Result<Json<Observabi
     Ok(Json(service.observability().await?))
 }
 
+#[derive(Deserialize)]
+pub struct CursorDefaultModelInput {
+    model_id: String,
+}
+
+pub async fn get_cursor_model(
+    State(service): State<ControlService>,
+) -> Result<Json<crate::store::CursorModelSettings>> {
+    Ok(Json(service.cursor_model_settings().await?))
+}
+
+pub async fn update_cursor_model(
+    State(service): State<ControlService>,
+    Json(input): Json<CursorDefaultModelInput>,
+) -> Result<Json<crate::store::CursorModelSettings>> {
+    Ok(Json(
+        service.set_cursor_default_model(&input.model_id).await?,
+    ))
+}
+
 pub async fn update(
     State(service): State<ControlService>,
     Json(settings): Json<ObservabilitySettings>,
