@@ -32,6 +32,8 @@ export function PluginSettingsModal({ plugin, initialTab, initialProviderId, onA
   const running = useRef(false);
   const providers = plugin.providers.filter((candidate) => candidate.hasModels);
   const provider = providers.find((candidate) => candidate.id === providerId) ?? providers[0];
+  const canSync = provider && (!provider.resourceType || plugin.resources.some((resource) =>
+    resource.type === provider.resourceType && resource.resources.length > 0));
   const allModels = providers.flatMap((candidate) => candidate.models.map((model) => ({ provider: candidate, model })));
   const pending = allModels.filter(({ model }) => changes[model.id] !== undefined && changes[model.id] !== model.enabled);
   const filtered = (provider?.models ?? []).filter((model) =>
@@ -96,7 +98,7 @@ export function PluginSettingsModal({ plugin, initialTab, initialProviderId, onA
           {providers.length > 1
             ? <Select ariaLabel={t("模型通道")} value={provider.id} options={providers.map((candidate) => ({ value: candidate.id, label: pluginText(candidate.displayName, locale) }))} disabled={busy} onChange={(value) => { setProviderId(value); setQuery(""); setPage(1); }} />
             : <span>{pluginText(provider.displayName, locale)}</span>}
-          <Button size="small" disabled={busy || !provider.configured || pending.length > 0} onClick={() => void run("sync", async () => { await api.syncPluginModels(plugin.id, provider.id); })}>{operation === "sync" ? t("正在同步…") : t("同步模型")}</Button>
+          <Button size="small" disabled={busy || !canSync || pending.length > 0} onClick={() => void run("sync", async () => { await api.syncPluginModels(plugin.id, provider.id); })}>{operation === "sync" ? t("正在同步…") : t("同步模型")}</Button>
         </div>
         <div className={styles.toolbar}>
           <TextInput aria-label={t("搜索模型")} placeholder={t("搜索模型")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} />
@@ -117,7 +119,7 @@ export function PluginSettingsModal({ plugin, initialTab, initialProviderId, onA
           <Checkbox checked={changes[model.id] ?? model.enabled} disabled={busy} label={model.displayName} onChange={(enabled) => setChanges((current) => ({ ...current, [model.id]: enabled }))} />
           <span>{model.modelId}</span>
         </div>)}
-        {!visible.length && <p className={styles.empty}>{query.trim() ? t("没有匹配的模型") : provider?.configured ? t("尚未同步模型") : t("连接账号后可同步模型目录。")}</p>}
+        {!visible.length && <p className={styles.empty}>{query.trim() ? t("没有匹配的模型") : canSync ? t("尚未同步模型") : t("连接账号后可同步模型目录。")}</p>}
         {pageCount > 1 && <div className={styles.pagination}>
           <Button size="small" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>{t("上一页")}</Button>
           <span>{t("第 {page} / {total} 页", { page: currentPage, total: pageCount })}</span>
