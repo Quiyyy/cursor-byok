@@ -4,25 +4,6 @@ import { accountData } from "./resources.ts";
 const LANGUAGE_MODELS_URL = "https://api.x.ai/v1/language-models";
 const MODELS_URL = "https://api.x.ai/v1/models";
 
-/** 免费账号无权调用模型列表接口(403 spending-limit);退回已知模型。 */
-export const FALLBACK_MODELS: ModelDefinition[] = [
-  {
-    id: "grok-4.7",
-    displayName: "Grok 4.7",
-    capabilities: { images: true },
-  },
-  {
-    id: "grok-4.6",
-    displayName: "Grok 4.6",
-    capabilities: { images: true },
-  },
-  {
-    id: "grok-4.5",
-    displayName: "Grok 4.5",
-    capabilities: { images: true },
-  },
-];
-
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -81,21 +62,27 @@ export const grokModels: ModelSupport = {
       accept: "application/json",
       authorization: `Bearer ${data.accessToken}`,
     };
-    // language-models 带模态与上下文元数据;不可用时回退到标准列表。
-    let response = await context.network.fetch(LANGUAGE_MODELS_URL, { method: "GET", headers });
-    if (response.status < 200 || response.status >= 300) {
-      response = await context.network.fetch(MODELS_URL, { method: "GET", headers });
+    const errors: string[] = [];
+    for (const url of [LANGUAGE_MODELS_URL, MODELS_URL]) {
+      try {
+        const response = await context.network.fetch(url, { method: "GET", headers });
+        if (response.status < 200 || response.status >= 300) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        let body: unknown;
+        try {
+          body = JSON.parse(response.body);
+        } catch {
+          throw new Error("invalid JSON");
+        }
+        const models = parseGrokModels(body);
+        if (models.length === 0) throw new Error("no models returned for this account");
+        return models;
+      } catch (error) {
+        if (context.signal.aborted) throw error;
+        errors.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
-    if (response.status < 200 || response.status >= 300) {
-      return FALLBACK_MODELS;
-    }
-    let body: unknown;
-    try {
-      body = JSON.parse(response.body);
-    } catch {
-      throw new Error("Grok model discovery returned invalid JSON");
-    }
-    const models = parseGrokModels(body);
-    return models.length > 0 ? models : FALLBACK_MODELS;
+    throw new Error(`Grok model discovery failed: ${errors.join("; ")}`);
   },
 };
