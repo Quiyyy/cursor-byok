@@ -230,6 +230,67 @@ impl Drop for CancelOnDrop {
     }
 }
 
+// Hosted tools produce provider-owned output items and annotations. Preserve
+// their SSE contract instead of reconstructing them from text/function deltas.
+pub(super) async fn native_responses(
+    mut provider: ProviderStream,
+    cancellation: CancellationToken,
+    stream: bool,
+) -> Response {
+    if stream {
+        let events = async_stream::stream! {
+            let _cancel = CancelOnDrop(cancellation);
+            let mut terminal = false;
+            while let Some(result) = provider.next().await {
+                match result {
+                    Ok(ModelEvent::ResponsesEvent(value)) => {
+                        let name = value["type"].as_str().unwrap_or("error");
+                        terminal |= matches!(name, "response.completed" | "response.incomplete" | "response.failed");
+                        yield Ok::<Event, Infallible>(Event::default().event(name).data(value.to_string()));
+                    }
+                    Err(error) => {
+                        if !terminal { yield Ok(Event::default().event("error").data(json!({"error":{"message":error.to_string()}}).to_string())); }
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+            if !terminal { yield Ok(Event::default().event("error").data(json!({"error":{"message":"native Responses stream ended without completion"}}).to_string())); }
+        };
+        return Sse::new(events)
+            .keep_alive(KeepAlive::default())
+            .into_response();
+    }
+    let _cancel = CancelOnDrop(cancellation);
+    let mut response = None;
+    while let Some(event) = provider.next().await {
+        match event {
+            Ok(ModelEvent::ResponsesEvent(event))
+                if matches!(
+                    event["type"].as_str(),
+                    Some("response.completed" | "response.incomplete")
+                ) =>
+            {
+                response = event
+                    .get("response")
+                    .filter(|value| value.is_object())
+                    .cloned();
+            }
+            Err(error) => return super::api_error(axum::http::StatusCode::BAD_GATEWAY, error),
+            _ => {}
+        }
+    }
+    response.map_or_else(
+        || {
+            super::api_error(
+                axum::http::StatusCode::BAD_GATEWAY,
+                "native Responses stream ended without completion",
+            )
+        },
+        |response| Json(response).into_response(),
+    )
+}
+
 pub(super) fn streamed(
     protocol: Protocol,
     mut provider: ProviderStream,
@@ -502,5 +563,58 @@ fn stream_events(
             }
             _ => Vec::new(),
         },
+    }
+}
+
+#[cfg(test)]
+mod native_response_tests {
+    use super::*;
+    use axum::{body::to_bytes, http::StatusCode};
+
+    #[tokio::test]
+    async fn native_completion_is_required_and_partial_status_is_preserved() {
+        for events in [
+            vec![ModelEvent::Done(FinishReason::Stop)],
+            vec![ModelEvent::ResponsesEvent(
+                json!({"type":"response.failed","response":{"status":"failed"}}),
+            )],
+        ] {
+            let response = native_responses(
+                Box::pin(futures_util::stream::iter(events.into_iter().map(Ok))),
+                CancellationToken::new(),
+                false,
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        }
+        let value = json!({"id":"partial","status":"incomplete","output":[],"incomplete_details":{"reason":"max_output_tokens"}});
+        let event =
+            ModelEvent::ResponsesEvent(json!({"type":"response.incomplete","response":value}));
+        let response = native_responses(
+            Box::pin(futures_util::stream::iter(vec![Ok(event)])),
+            CancellationToken::new(),
+            false,
+        )
+        .await;
+        assert_eq!(
+            serde_json::from_slice::<Value>(&to_bytes(response.into_body(), 65536).await.unwrap())
+                .unwrap(),
+            value
+        );
+    }
+
+    #[tokio::test]
+    async fn dropping_native_stream_cancels_the_provider() {
+        let cancellation = CancellationToken::new();
+        let event = Ok(ModelEvent::ResponsesEvent(
+            json!({"type":"response.created","response":{"id":"pending"}}),
+        ));
+        let provider =
+            futures_util::stream::once(async { event }).chain(futures_util::stream::pending());
+        let response = native_responses(Box::pin(provider), cancellation.clone(), true).await;
+        let mut body = response.into_body().into_data_stream();
+        assert!(body.next().await.is_some());
+        drop(body);
+        assert!(cancellation.is_cancelled());
     }
 }

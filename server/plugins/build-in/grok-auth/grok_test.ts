@@ -83,6 +83,119 @@ function request(): LlmRequest {
   };
 }
 
+Deno.test("native web search uses xAI Responses with the Grok token and preserves search output", async () => {
+  const draft = await credentialDraft({
+    accessToken: jwt({ sub: "search-user" }),
+    refreshToken: null,
+    displayName: null,
+  });
+  for (const type of ["web_search", "web_search_preview"]) {
+    const input = request();
+    input.nativeResponses = {
+      model: "public-name",
+      input: "search query",
+      tools: [{ type }],
+      tool_choice: "required",
+      include: ["web_search_call.action.sources"],
+      reasoning: { effort: "high" },
+    };
+    const before = JSON.stringify(input.nativeResponses);
+    const events: ModelEvent[] = [];
+    const response = {
+      id: "search-1",
+      status: "completed",
+      output: [
+        {
+          type: "web_search_call",
+          status: "completed",
+          action: { type: "search", query: "search query" },
+        },
+        {
+          type: "message",
+          content: [{
+            type: "output_text",
+            text: "Found it",
+            annotations: [{
+              type: "url_citation",
+              url: "https://example.com/grok",
+              title: "Grok source",
+            }],
+          }],
+        },
+      ],
+    };
+    const result = await grokProvider.invoke(
+      {
+        model: { id: "grok-4.6", displayName: "Grok" },
+        resource: snapshot(draft.privateData),
+        request: input,
+      },
+      { emit: (e) => events.push(e) },
+      context({
+        stream: (url, init) => {
+          assertEquals(url, "https://api.x.ai/v1/responses");
+          assertEquals(init?.headers?.authorization, `Bearer ${jwt({ sub: "search-user" })}`);
+          const body = JSON.parse(init?.body ?? "{}");
+          assertEquals(body.model, "grok-4.6");
+          assertEquals(body.input, "search query");
+          assertEquals(body.tools, [{ type: "web_search" }]);
+          assertEquals(body.tool_choice, "required");
+          assertEquals(body.reasoning, { effort: "high" });
+          assertEquals(body.stream, true);
+          return {
+            status: 200,
+            headers: {},
+            lines: sse([`data: ${JSON.stringify({ type: "response.completed", response })}`]),
+          };
+        },
+      }),
+    );
+    assertEquals(result, { status: "completed" });
+    assertEquals(JSON.stringify(input.nativeResponses), before);
+    assertEquals(events.filter((e) => e.type === "responses-event"), [{
+      type: "responses-event",
+      event: { type: "response.completed", response },
+    }]);
+    assertEquals(grokProvider.nativeResponses, true);
+  }
+});
+
+Deno.test("native xAI errors retain authentication and quota handling without falling back to chat", async () => {
+  const draft = await credentialDraft({
+    accessToken: jwt({ sub: "search-user" }),
+    refreshToken: null,
+    displayName: null,
+  });
+  for (
+    const [status, message, expected] of [[401, "unauthorized", "auth-error"], [
+      403,
+      "permission denied",
+      "request-error",
+    ], [429, "quota exceeded", "resource-error"]] as const
+  ) {
+    const input = request();
+    input.nativeResponses = { input: "query", tools: [{ type: "web_search" }] };
+    let calls = 0;
+    const result = await grokProvider.invoke(
+      {
+        model: { id: "grok-4.6", displayName: "Grok" },
+        resource: snapshot(draft.privateData),
+        request: input,
+      },
+      { emit() {} },
+      context({
+        stream: (url) => {
+          calls++;
+          assertEquals(url, "https://api.x.ai/v1/responses");
+          return { status, headers: {}, lines: sse([message]) };
+        },
+      }),
+    );
+    assertEquals(result.status, expected);
+    assertEquals(calls, 1);
+  }
+});
+
 Deno.test("account identity uses the JWT subject and drafts keep tokens private-side", async () => {
   const token = jwt({ sub: "user-1", email: "person@x.ai" });
   assertEquals(await accountIdentity(token), {

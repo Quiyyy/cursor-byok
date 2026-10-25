@@ -20,6 +20,7 @@ pub fn llm_request(invocation: &ModelInvocation) -> Result<serde_json::Value> {
         .collect::<Result<Vec<_>>>()?;
     Ok(serde_json::json!({
         "instructions": request.prompt.instructions,
+        "nativeResponses": request.native_responses,
         "messages": messages,
         "tools": request.prompt.tools.iter().map(|tool| serde_json::json!({
             "name": tool.name,
@@ -142,6 +143,20 @@ pub fn model_event(value: &serde_json::Value) -> Result<ModelEvent> {
             provider_kind: required_str(value, "providerKind")?.to_owned(),
             value: value.get("value").cloned().unwrap_or_default(),
         }),
+        "responses-event" => {
+            let event = value
+                .get("event")
+                .filter(|event| {
+                    event
+                        .get("type")
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|kind| kind.starts_with("response."))
+                })
+                .ok_or_else(|| {
+                    Error::Protocol("plugin Responses event requires a response.* event".into())
+                })?;
+            ModelEvent::ResponsesEvent(event.clone())
+        }
         "usage" => {
             let usage = value
                 .get("usage")
@@ -207,6 +222,7 @@ mod tests {
             conversation_id: "conversation".into(),
             provider_call_index: 0,
             request: ModelRequest {
+                native_responses: None,
                 prompt: PromptSpec {
                     instructions: "be brief".into(),
                     tools: Vec::new(),

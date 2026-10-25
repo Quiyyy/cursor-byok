@@ -6,10 +6,15 @@ import type {
 } from "cursor-byok:provider";
 import type { PluginContext } from "cursor-byok:plugin";
 import { HttpError, streamOpenAiChat } from "cursor-byok:protocol/openai-chat";
+import {
+  HttpError as ResponsesHttpError,
+  streamOpenAiResponses,
+} from "cursor-byok:protocol/openai-responses";
 import { grokModels } from "./models.ts";
 import { type AccountData, accountData, quotaExhaustedPatch, RESOURCE_TYPE } from "./resources.ts";
 
 const CHAT_URL = "https://api.x.ai/v1/chat/completions";
+const RESPONSES_URL = "https://api.x.ai/v1/responses";
 
 /** 流内错误只有文本可用,按积分/额度关键词分类。 */
 export function isQuotaError(error: string): boolean {
@@ -24,7 +29,7 @@ export function isQuotaError(error: string): boolean {
 }
 
 /** HTTP 失败携带结构化状态码,429 一律按额度耗尽处理并冷却账号。 */
-function isQuotaHttpError(error: HttpError): boolean {
+function isQuotaHttpError(error: HttpError | ResponsesHttpError): boolean {
   if (error.status === 429) return true;
   const body = error.body.toLowerCase();
   return body.includes("insufficient_quota") ||
@@ -60,6 +65,32 @@ async function invoke(
     return invalidResult(message, message);
   }
   try {
+    if (input.request.nativeResponses) {
+      const native = input.request.nativeResponses;
+      // Cursor can request OpenAI's preview name; xAI calls this tool web_search.
+      const tools = Array.isArray(native.tools)
+        ? native.tools.map((tool) =>
+          tool !== null && typeof tool === "object" && !Array.isArray(tool) &&
+            tool.type === "web_search_preview"
+            ? { ...tool, type: "web_search" }
+            : tool
+        )
+        : native.tools;
+      await streamOpenAiResponses(
+        {
+          url: RESPONSES_URL,
+          model: input.model.id,
+          request: {
+            ...input.request,
+            nativeResponses: { ...native, ...(tools ? { tools } : {}) },
+          },
+          headers: { authorization: `Bearer ${data.accessToken}` },
+        },
+        output,
+        context,
+      );
+      return { status: "completed" };
+    }
     await streamOpenAiChat(
       {
         url: CHAT_URL,
@@ -88,7 +119,7 @@ async function invoke(
     );
     return { status: "completed" };
   } catch (error) {
-    if (error instanceof HttpError) {
+    if (error instanceof HttpError || error instanceof ResponsesHttpError) {
       if (error.status === 401) {
         return { status: "auth-error", message: "Grok rejected the access token" };
       }
@@ -110,6 +141,7 @@ async function invoke(
 }
 
 export const grokProvider: ProviderSupport = {
+  nativeResponses: true,
   id: "grok",
   displayName: "xAI Grok",
   description: {

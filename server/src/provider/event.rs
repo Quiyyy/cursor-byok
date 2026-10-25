@@ -35,6 +35,7 @@ pub enum ModelEvent {
         index: usize,
     },
     ProviderReplayState(ProviderReplayState),
+    ResponsesEvent(serde_json::Value),
     Usage(Usage),
     Done(FinishReason),
 }

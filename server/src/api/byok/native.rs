@@ -161,7 +161,13 @@ async fn generate(
     if let Err(error) = preserve_selected_effort(&mut body, protocol, &headers, &metadata) {
         return api_error(StatusCode::BAD_REQUEST, error);
     }
-    invoke(state, headers, body, protocol, model, "native-agent").await
+    let search = matches!(protocol, Protocol::Responses) && super::search::prepare(&mut body);
+    let response = invoke(state, headers, body, protocol, model, "native-agent").await;
+    if search {
+        super::search::finish(response).await
+    } else {
+        response
+    }
 }
 
 // Native releases may not serialize effort for newly named models. Carry only an

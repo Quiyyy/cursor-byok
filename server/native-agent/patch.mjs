@@ -4,6 +4,22 @@ import tm from '../../apps/desktop/node_modules/@babel/traverse/lib/index.js';
 import gm from '../../apps/desktop/node_modules/@babel/generator/lib/index.js';
 const traverse = tm.default ?? tm,
   generate = gm.default ?? gm;
+export function patchTaskModels(source, bridgePath) {
+  const factories = [];
+  traverse(parse(source), {
+    FunctionDeclaration(p) {
+      const code = source.slice(p.node.start, p.node.end);
+      if (['parentRequestedModelName:', 'subagentModels:', 'getTaskToolConfig:', 'requireServerSideSubagent:', '.localProvider'].every(marker => code.includes(marker))) factories.push(p.node);
+    }
+  });
+  if (factories.length !== 1) throw Error('Unsupported Cursor: expected one native Task model factory');
+  const factory = factories[0];
+  if (factory.async || factory.generator || factory.params.length !== 1 || factory.params[0].type !== 'Identifier') throw Error('Unsupported Cursor Task model factory signature');
+  const input = factory.params[0].name;
+  const body = source.slice(factory.body.start + 1, factory.body.end - 1);
+  const wrapped = `function ${factory.id.name}(${input}){return require(${JSON.stringify(bridgePath)}).taskModels(${input},(${input})=>{${body}})}`;
+  return source.slice(0, factory.start) + wrapped + source.slice(factory.end);
+}
 export function patchAgentHost(source, bridgePath) {
   const routers = [],
     adapters = [];

@@ -111,6 +111,13 @@ const GROK_AUTH: &[(&str, &str)] = &[
 
 const ANTIGRAVITY_AUTH: &[(&str, &str)] = &[
     (
+        "search.ts",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/plugins/build-in/antigravity-auth/search.ts"
+        )),
+    ),
+    (
         "plugin.json",
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -260,6 +267,34 @@ mod tests {
             .find(|(name, _)| *name == "main.ts")
             .unwrap()
             .1
+    }
+
+    #[test]
+    fn existing_installations_receive_all_search_adapters_and_google_module() {
+        let root = tempfile::tempdir().unwrap();
+        for (name, version) in [
+            ("codex-auth", "0.1.10"),
+            ("grok-auth", "0.1.11"),
+            ("antigravity-auth", "0.1.10"),
+        ] {
+            let directory = root.path().join(name);
+            std::fs::create_dir_all(&directory).unwrap();
+            std::fs::write(
+                directory.join("plugin.json"),
+                serde_json::json!({"version":version}).to_string(),
+            )
+            .unwrap();
+            std::fs::write(directory.join("provider.ts"), "old-provider").unwrap();
+        }
+        install(root.path()).unwrap();
+        for name in ["codex-auth", "grok-auth", "antigravity-auth"] {
+            assert!(
+                std::fs::read_to_string(root.path().join(name).join("provider.ts"))
+                    .unwrap()
+                    .contains("nativeResponses: true")
+            );
+        }
+        assert!(root.path().join("antigravity-auth/search.ts").is_file());
     }
 
     #[test]

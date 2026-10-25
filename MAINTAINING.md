@@ -37,7 +37,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
 node server/native-agent/build.mjs --check
-node --test server/native-agent/native.test.mjs
+node --test server/native-agent/*.test.mjs
 deno test --config server/plugins/build-in/grok-auth/deno.json server/plugins/build-in/grok-auth/
 deno test --config server/plugins/build-in/codex-auth/deno.json server/plugins/build-in/codex-auth/
 deno test --config server/plugins/build-in/antigravity-auth/deno.json server/plugins/build-in/antigravity-auth/

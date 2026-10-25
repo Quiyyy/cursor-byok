@@ -139,6 +139,7 @@ fn build_invocation(
         conversation_id: call_id,
         provider_call_index: 0,
         request: ModelRequest {
+            native_responses: None,
             prompt: PromptSpec {
                 instructions: settings.effective_prompt().to_owned(),
                 tools: Vec::new(),

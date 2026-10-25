@@ -13,6 +13,9 @@ pub struct PromptSpec {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ModelRequest {
+    /// Stateless Responses payload for provider-hosted tools; never projected into functions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_responses: Option<serde_json::Value>,
     pub prompt: PromptSpec,
     pub model: ModelSpec,
     pub history: Vec<ProjectedMessage>,

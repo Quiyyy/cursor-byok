@@ -4,6 +4,7 @@ mod models;
 mod native;
 mod output;
 mod protocol;
+mod search;
 pub use native::router as native_router;
 
 use std::sync::Arc;
@@ -208,6 +209,19 @@ async fn invoke(
     model: models::ListedModel,
     kind: &str,
 ) -> Response {
+    if matches!(protocol, Protocol::Responses) && protocol::requires_native_responses(&body) {
+        match state.store.model(&model.internal_id).await {
+            Ok(Some(config)) if config.provider_type() != crate::model::ProviderType::OpenAiResponses =>
+                return api_error(StatusCode::NOT_IMPLEMENTED, "this model connection does not support native Responses tools; configure a Responses endpoint or a compatible account provider"),
+            Ok(None) => match state.plugins.supports_native_responses(&model.internal_id).await {
+                Ok(true) => {},
+                Ok(false) => return api_error(StatusCode::NOT_IMPLEMENTED, "this account provider does not support native Responses tools"),
+                Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
+            },
+            Err(error) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, error),
+            _ => {}
+        }
+    }
     if let Some(native) = &state.native {
         match state.store.model(&model.internal_id).await {
             Ok(Some(config)) if protocol.provider_type() == config.provider_type() => {
@@ -229,6 +243,7 @@ async fn invoke(
     };
     let id = format!("{kind}:{}", uuid::Uuid::new_v4());
     let mut request = parsed.request;
+    let native_responses = request.native_responses.is_some();
     let custom_tools = request
         .prompt
         .tools
@@ -246,6 +261,9 @@ async fn invoke(
     };
     let cancellation = CancellationToken::new();
     let stream = state.provider.stream(invocation, cancellation.clone());
+    if native_responses {
+        return output::native_responses(stream, cancellation, parsed.stream).await;
+    }
     if parsed.stream {
         output::streamed(
             protocol,

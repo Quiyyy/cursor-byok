@@ -10,6 +10,7 @@ Cursor owns prompts, request context, conversation history, checkpoints, tools, 
 ```text
 server/
 ├── native-agent/route.cjs        Native Host state and real model identity enter LocalAgentClient
+├── native-agent/workbench.mjs    Default model enters only newly created native conversations
 ├── src/local_app/native_agent.rs Installation lifecycle and native model catalog cache
 ├── src/api/byok/                Stateless model HTTP transport and protocol translation
 ├── src/provider/                Provider-specific serialization and request recording
@@ -26,6 +27,7 @@ server/
 - The same-protocol path forwards native payloads; configured defaults must preserve explicitly supplied values. Configured templates must use a stable conversation identifier.
 - Context limits are integer token counts owned by BYOK model settings for both API and account models. At each Run, replace stale per-chat context parameters with the configured count, or remove them when reset to the native default. Preserve other native parameters and all Host state. Never send display units such as `200k` into native parameters parsed with `parseInt`.
 - Cached model catalogs invalidate on metadata or installed-runtime changes. Reuse the native picker and protobuf factories rather than maintaining a second capability table.
+- Default-model initialization covers both startup-created and manually created conversations. Wait for the native catalog when needed. Never apply a configured default to restored conversations, explicit model selections, or subagent state; a consumed global revision is not a new-window policy.
 
 ## Workflow and verification
 
@@ -40,7 +42,7 @@ Cursor UI → original Agent Host → route → native LocalAgentClient
 Check exact history prefixes and stable cache identifiers, not only token estimates. Test native tool input formats, signed Responses replay, system/developer messages, model parameters, route isolation, cancellation, and installation restoration as applicable. Ordinary unit tests do not prove real IDE behavior.
 
 ```sh
-node --test server/native-agent/native.test.mjs
+node --test server/native-agent/*.test.mjs
 node server/native-agent/build.mjs --check
 cargo test -p cursor-server --test external_api
 cargo test --workspace

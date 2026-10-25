@@ -381,6 +381,7 @@ impl ControlService {
             conversation_id: call_id.clone(),
             provider_call_index: 0,
             request: ModelRequest {
+                native_responses: None,
                 prompt: PromptSpec {
                     instructions: String::new(),
                     tools: Vec::new(),

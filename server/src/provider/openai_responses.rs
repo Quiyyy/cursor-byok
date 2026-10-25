@@ -70,7 +70,8 @@ impl Provider for OpenAiResponsesProvider {
         let recorder = self.recorder.clone();
         Box::pin(try_stream! {
             let ModelInvocation { call_id, request, .. } = invocation;
-            let input = responses_input(&request.history)?;
+            let native_responses = request.native_responses.is_some();
+            let input = if native_responses { Vec::new() } else { responses_input(&request.history)? };
             let mut body = json!({
                 "model": request.model.model_id, "input": input, "stream": true,
                 "instructions": request.prompt.instructions,
@@ -83,6 +84,16 @@ impl Provider for OpenAiResponsesProvider {
                 }).collect::<Vec<_>>());
             }
             apply_model(&mut body, &request.model, config.max_output_tokens)?;
+            if let Some(mut native) = request.native_responses.clone() {
+                for field in ["max_output_tokens", "reasoning", "service_tier"] {
+                    if native.get(field).is_none() {
+                        if let Some(default) = body.get(field) { native[field] = default.clone(); }
+                    }
+                }
+                native["model"] = json!(request.model.model_id);
+                native["stream"] = json!(true);
+                body = native;
+            }
             merge_extra_params(&mut body, &request.model.extra_params)?;
             apply_openai_prompt_cache_key(&mut body, &request.model.model_id)?;
             apply_body_allowlist(&mut body, config.allowed_body_fields.as_ref())?;
@@ -134,6 +145,9 @@ impl Provider for OpenAiResponsesProvider {
                     Err(error)?;
                 }
                 let kind = value.get("type").and_then(Value::as_str).unwrap_or(&event.event);
+                if native_responses && kind.starts_with("response.") {
+                    yield ModelEvent::ResponsesEvent(value.clone());
+                }
                 match kind {
                     "response.output_text.delta" => {
                         let text = enter_response_text_item(&value, &mut text_index, &mut texts);

@@ -257,6 +257,13 @@ impl PluginRegistry {
         Ok(PluginInvocationPlan { model, request_url })
     }
 
+    pub async fn supports_native_responses(&self, model_id: &str) -> Result<bool> {
+        let (plugin_id, provider_id, _) = parse_model_id(model_id)
+            .ok_or_else(|| Error::Protocol("invalid plugin model ID".into()))?;
+        let entry = self.find_entry(&self.executable()?, plugin_id).await?;
+        Ok(find_provider(&entry, provider_id)?.native_responses)
+    }
+
     /// 插件模型的统一 Provider 流:选首个可用资源,经 Worker 执行,
     /// 事件与内置 Provider 走同一管道。未来的负载均衡在这里换资源重试。
     pub fn stream_model(
@@ -274,6 +281,9 @@ impl PluginRegistry {
             let executable = registry.executable()?;
             let entry = registry.find_entry(&executable, &plugin_id).await?;
             let provider = find_provider(&entry, &provider_id)?.clone();
+            if invocation.request.native_responses.is_some() && !provider.native_responses {
+                Err(Error::Protocol("this account provider does not support native Responses tools".into()))?;
+            }
             let stored = registry.inner.state.models(&plugin_id, &provider_id).await?
                 .into_iter()
                 .find(|model| model.id == upstream_id)

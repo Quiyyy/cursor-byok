@@ -67,6 +67,18 @@ function replayItems(value: JsonValue): JsonValue[] {
 }
 
 export function buildResponsesBody(call: OpenAiResponsesCall): Record<string, JsonValue> {
+  if (call.request.nativeResponses) {
+    const body: Record<string, JsonValue> = {
+      ...call.request.nativeResponses,
+      model: call.model,
+      stream: true,
+      ...call.extraBody,
+    };
+    body.instructions ??= call.request.instructions;
+    if (call.request.maxOutputTokens === null) delete body.max_output_tokens;
+    if (call.request.cacheKey !== null) body.prompt_cache_key ??= call.request.cacheKey;
+    return body;
+  }
   const input: JsonValue[] = [];
   for (const message of call.request.messages) {
     if (message.role === "assistant") {
@@ -303,6 +315,9 @@ export async function streamOpenAiResponses(
       value = record(JSON.parse(payload)) ?? {};
     } catch {
       throw new Error("OpenAI Responses SSE returned invalid JSON");
+    }
+    if (call.request.nativeResponses && typeof value.type === "string" && value.type.startsWith("response.")) {
+      output.emit({ type: "responses-event", event: value as JsonValue });
     }
     switch (value.type) {
       case "response.output_text.delta": {

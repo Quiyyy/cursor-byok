@@ -26,6 +26,8 @@ pub struct ProviderDefinition {
     #[serde(default)]
     pub resource_type: Option<String>,
     pub has_models: bool,
+    #[serde(default)]
+    pub native_responses: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

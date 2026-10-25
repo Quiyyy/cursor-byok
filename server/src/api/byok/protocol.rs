@@ -33,8 +33,22 @@ pub(super) struct ParsedRequest {
     pub stream: bool,
 }
 
+pub(super) fn requires_native_responses(body: &Value) -> bool {
+    body.get("tools")
+        .and_then(Value::as_array)
+        .is_some_and(|tools| {
+            tools.iter().any(|tool| {
+                tool.get("type")
+                    .and_then(Value::as_str)
+                    .is_some_and(|kind| !matches!(kind, "function" | "custom"))
+            })
+        })
+}
+
 pub(super) fn parse(protocol: Protocol, body: &Value) -> Result<ParsedRequest> {
     let public_model_id = required_string(body, "model")?.to_owned();
+    let native_responses =
+        matches!(protocol, Protocol::Responses) && requires_native_responses(body);
     let stream = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
     let mut prompt = PromptSpec {
         instructions: String::new(),
@@ -57,12 +71,14 @@ pub(super) fn parse(protocol: Protocol, body: &Value) -> Result<ParsedRequest> {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned();
-            match body.get("input") {
-                Some(Value::String(text)) => history.push(text_message(0, Role::User, text)),
-                Some(input) => parse_responses_input(input, &mut prompt, &mut history)?,
-                None => return Err(Error::Protocol("input is required".into())),
+            if !native_responses {
+                match body.get("input") {
+                    Some(Value::String(text)) => history.push(text_message(0, Role::User, text)),
+                    Some(input) => parse_responses_input(input, &mut prompt, &mut history)?,
+                    None => return Err(Error::Protocol("input is required".into())),
+                }
+                parse_tools(body.get("tools"), protocol, &mut prompt)?;
             }
-            parse_tools(body.get("tools"), protocol, &mut prompt)?;
             model.max_output_tokens = body.get("max_output_tokens").and_then(Value::as_u64);
         }
         Protocol::Messages => {
@@ -72,7 +88,7 @@ pub(super) fn parse(protocol: Protocol, body: &Value) -> Result<ParsedRequest> {
             model.max_output_tokens = body.get("max_tokens").and_then(Value::as_u64);
         }
     }
-    if history.is_empty() {
+    if history.is_empty() && !native_responses {
         return Err(Error::Protocol(
             "at least one input message is required".into(),
         ));
@@ -95,6 +111,7 @@ pub(super) fn parse(protocol: Protocol, body: &Value) -> Result<ParsedRequest> {
     Ok(ParsedRequest {
         public_model_id,
         request: ModelRequest {
+            native_responses: native_responses.then(|| body.clone()),
             prompt,
             model,
             history,
