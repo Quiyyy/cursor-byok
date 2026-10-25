@@ -8,6 +8,7 @@ import type { LlmRequest, ModelEvent } from "cursor-byok:provider";
 import type { ResourceSnapshot } from "cursor-byok:resource";
 import { antigravityProvider, isQuotaError } from "./provider.ts";
 import { RESOURCE_TYPE } from "./resources.ts";
+import { parseAntigravityModels } from "./models.ts";
 
 function assert(condition: unknown, message = "assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -78,6 +79,70 @@ function searchInput(): LlmRequest {
     },
   };
 }
+
+Deno.test("Google generation uses each upstream catalog ID without legacy alias rewriting", async () => {
+  for (
+    const id of [
+      "gemini-3.1-pro-high",
+      "gemini-3-flash",
+      "gemini-2.5-flash-lite",
+      "claude-3-7-sonnet",
+      "gpt-4o",
+    ]
+  ) {
+    const [model] = parseAntigravityModels({ models: { [id]: { displayName: id } } });
+    const result = await antigravityProvider.invoke(
+      { model, resource: searchResource(), request: request() },
+      { emit() {} },
+      context({
+        stream: (_url, init) => {
+          assertEquals(JSON.parse(init?.body ?? "{}").model, id);
+          return {
+            status: 200,
+            headers: {},
+            lines: sse([
+              'data: {"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}}',
+            ]),
+          };
+        },
+      }),
+    );
+    assertEquals(result.status, "completed");
+  }
+});
+
+Deno.test("Gemini search uses the exact upstream model ID", async () => {
+  const id = "gemini-3-flash", events: ModelEvent[] = [];
+  const [model] = parseAntigravityModels({ models: { [id]: {} } });
+  const result = await antigravityProvider.invoke(
+    { model, resource: searchResource(), request: searchInput() },
+    {
+      emit: (e) => events.push(e),
+    },
+    context({
+      stream: (_url, init) => {
+        assertEquals(JSON.parse(init?.body ?? "{}").model, id);
+        return {
+          status: 200,
+          headers: {},
+          lines: sse([
+            'data: {"response":{"candidates":[{"content":{"parts":[{"text":"No matches."}]},"groundingMetadata":{"webSearchQueries":["query"]},"finishReason":"STOP"}]}}',
+          ]),
+        };
+      },
+    }),
+  );
+  assertEquals(result.status, "completed");
+  const event = events.find((e) =>
+    e.type === "responses-event" &&
+    (e.event as Record<string, JsonValue>).type === "response.completed"
+  );
+  assert(event?.type === "responses-event");
+  assertEquals(
+    ((event.event as Record<string, JsonValue>).response as Record<string, JsonValue>).model,
+    id,
+  );
+});
 const searchResource = () =>
   snapshot({
     accessToken: "google-fixture",

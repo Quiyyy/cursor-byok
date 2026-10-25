@@ -27,6 +27,6 @@ export type ModelListInput = {
 };
 
 export type ModelSupport = {
-  /** 列举成功后,宿主用返回值整体替换该 Provider 的模型目录。 */
+  /** 成功结果整体替换目录,空数组清空目录;失败须抛出错误,宿主保留上次成功的目录。 */
   list(input: ModelListInput, context: PluginContext): Promise<ModelDefinition[]>;
 };

@@ -63,6 +63,9 @@ export function parseAntigravityModels(payload: unknown): ModelDefinition[] {
     });
   }
 
+  if (models.length === 0 && Object.keys(rawModels).length > 0) {
+    throw new Error("Google model discovery response contains no valid model entries");
+  }
   return models;
 }
 
@@ -104,9 +107,7 @@ export const antigravityModels: ModelSupport = {
           } catch {
             throw new Error("invalid JSON");
           }
-          const models = parseAntigravityModels(body);
-          if (models.length === 0) throw new Error("no models returned for this account");
-          return models;
+          return parseAntigravityModels(body);
         } catch (error) {
           if (context.signal.aborted) throw error;
           const detail = `${endpoint}: ${error instanceof Error ? error.message : String(error)}`;

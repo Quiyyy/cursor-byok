@@ -1227,12 +1227,6 @@ impl PluginRegistry {
                 models.push(model);
             }
         }
-        if models.is_empty() {
-            return Err(Error::Provider(format!(
-                "plugin provider '{}' returned no models",
-                provider.id
-            )));
-        }
         self.inner
             .state
             .replace_models(plugin_id, &provider.id, &models)
@@ -1568,6 +1562,10 @@ fn find_resource<'a>(
 fn should_retry_auth(status: &str, attempt: usize, emitted: bool) -> bool {
     status == "auth-error" && attempt == 0 && !emitted
 }
+
+#[cfg(test)]
+#[path = "catalog_sync_tests.rs"]
+mod catalog_sync_tests;
 
 #[cfg(test)]
 mod auth_retry_tests {

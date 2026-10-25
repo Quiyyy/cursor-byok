@@ -57,68 +57,6 @@ async function readBody(lines: AsyncIterable<string>): Promise<string> {
   return collected.join("\n");
 }
 
-function resolveAntigravityModel(modelId: string): string {
-  const raw = modelId.trim();
-  const lower = raw.toLowerCase();
-
-  // 1. If explicit tier is already specified in the model ID, pass it directly!
-  if (
-    lower.startsWith("gemini-3.8-flash-") ||
-    lower.startsWith("gemini-3.7-flash-") ||
-    lower.startsWith("gemini-3.6-flash-") ||
-    lower.startsWith("gemini-3.1-pro-") ||
-    lower === "gemini-3.8-flash" ||
-    lower === "gemini-3.7-flash" ||
-    lower === "gemini-3.6-flash" ||
-    lower === "gemini-2.5-flash" ||
-    lower === "gemini-2.5-pro" ||
-    lower === "gemini-2.0-flash" ||
-    lower === "claude-sonnet-4-6" ||
-    lower === "claude-sonnet-4-6-thinking" ||
-    lower === "claude-opus-4-6-thinking" ||
-    lower === "gemini-3.1-flash-image" ||
-    lower === "gpt-oss-120b-medium"
-  ) {
-    if (lower === "gemini-3.1-pro-high") return "gemini-pro-agent";
-    return raw;
-  }
-
-  // 2. Canonical Antigravity-Manager mapping for aliases
-  if (
-    lower === "claude-3-7-sonnet" || lower === "claude-3-5-sonnet" || lower === "claude-sonnet-4-5"
-  ) {
-    return "claude-sonnet-4-6";
-  }
-  if (lower === "claude-3-5-haiku" || lower === "claude-haiku-4") {
-    return "claude-sonnet-4-6";
-  }
-  if (
-    lower === "claude-3-7-opus" || lower === "claude-opus-4" || lower === "claude-opus-4.6" ||
-    lower === "claude-opus-4-5-thinking"
-  ) {
-    return "claude-opus-4-6-thinking";
-  }
-  if (
-    lower === "gpt-4" || lower === "gpt-4o" || lower === "gpt-4o-mini" || lower === "gpt-3.5-turbo"
-  ) {
-    return "gemini-2.5-flash";
-  }
-  if (lower === "gemini-2.5-flash-lite") {
-    return "gemini-2.5-flash";
-  }
-  if (lower === "gemini-3-flash" || lower === "gemini-3.5-flash") {
-    return "gemini-3.7-flash";
-  }
-  if (lower === "gemini-3-pro" || lower === "gemini-3.1-pro") {
-    return "gemini-3.1-pro-preview";
-  }
-  if (lower === "gemini-3-pro-high") {
-    return "gemini-pro-agent";
-  }
-
-  return raw;
-}
-
 function randomHex(length = 8): string {
   const array = new Uint8Array(Math.ceil(length / 2));
   crypto.getRandomValues(array);
@@ -308,7 +246,7 @@ async function streamCloudCode(
   output: ProviderOutput,
   context: PluginContext,
 ): Promise<void> {
-  const actualModel = resolveAntigravityModel(modelId);
+  const actualModel = modelId;
   const search = input.request.nativeResponses
     ? new GeminiSearch(input.request.nativeResponses, actualModel)
     : undefined;

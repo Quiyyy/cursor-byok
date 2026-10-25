@@ -98,14 +98,40 @@ Deno.test("Google discovery can use another endpoint after an HTTP failure", asy
 const failures: [string, NetworkResponse, string][] = [
   ["HTTP failure", { status: 403, headers: {}, body: "private upstream response" }, "HTTP 403"],
   ["invalid JSON", { status: 200, headers: {}, body: "not json" }, "invalid JSON"],
+  [
+    "invalid model entries",
+    { status: 200, headers: {}, body: '{"models":{"broken":null}}' },
+    "no valid model entries",
+  ],
   ["missing list", { status: 200, headers: {}, body: "{}" }, "does not contain a model list"],
   [
     "array list",
     { status: 200, headers: {}, body: '{"models":[]}' },
     "does not contain a model list",
   ],
-  ["empty list", { status: 200, headers: {}, body: '{"models":{}}' }, "no models returned"],
 ];
+
+Deno.test("a successful empty Google catalog is authoritative", async () => {
+  let requests = 0;
+  const models = await antigravityModels.list(
+    { resource: resource("project") },
+    context(() => {
+      requests++;
+      return Promise.resolve({ status: 200, headers: {}, body: '{"models":{}}' });
+    }),
+  );
+  assertEquals(models, []);
+  assertEquals(requests, 1);
+});
+
+Deno.test("a discovered Gemini catalog never adds an unreturned older generation", () => {
+  assertEquals(
+    parseAntigravityModels({
+      models: { "gemini-3.8-flash-medium": { displayName: "Current Gemini" } },
+    }).map((model) => model.id),
+    ["gemini-3.8-flash-medium"],
+  );
+});
 
 for (const [label, response, detail] of failures) {
   Deno.test(`Google discovery reports ${label} after all endpoints fail`, async () => {

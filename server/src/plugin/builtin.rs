@@ -274,8 +274,8 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         for (name, version) in [
             ("codex-auth", "0.1.10"),
-            ("grok-auth", "0.1.11"),
-            ("antigravity-auth", "0.1.10"),
+            ("grok-auth", "0.1.12"),
+            ("antigravity-auth", "0.1.11"),
         ] {
             let directory = root.path().join(name);
             std::fs::create_dir_all(&directory).unwrap();
