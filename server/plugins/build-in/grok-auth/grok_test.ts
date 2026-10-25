@@ -7,7 +7,7 @@ import type {
 import type { LlmRequest, ModelEvent } from "cursor-byok:provider";
 import type { ResourceSnapshot } from "cursor-byok:resource";
 import { grokDeviceOAuth } from "./oauth.ts";
-import { FALLBACK_MODELS, grokModels, parseGrokModels } from "./models.ts";
+import { grokModels, parseGrokModels } from "./models.ts";
 import { grokProvider, isQuotaError } from "./provider.ts";
 import {
   accountIdentity,
@@ -281,25 +281,87 @@ Deno.test("model discovery parses both language-models and standard list shapes"
   assertEquals(plainModels[0].displayName, "Grok 4 Fast");
 });
 
-Deno.test("model discovery falls back to known models when the account cannot list", async () => {
-  const token = jwt({ sub: "user-1" });
-  const draft = await credentialDraft({
-    accessToken: token,
-    refreshToken: null,
-    displayName: null,
-  });
+Deno.test("model discovery returns only the authenticated endpoint catalog", async () => {
+  const urls: string[] = [];
   const models = await grokModels.list(
-    { resource: snapshot(draft.privateData) },
+    { resource: snapshot({ accessToken: "account-token" }) },
     context({
-      fetch: () => ({
-        status: 403,
-        headers: {},
-        body: JSON.stringify({ code: "personal-team-blocked:spending-limit" }),
-      }),
+      fetch: (url, init) => {
+        urls.push(url);
+        assertEquals(init?.headers?.authorization, "Bearer account-token");
+        return {
+          status: 200,
+          headers: {},
+          body: JSON.stringify({ models: [{ id: "new-model" }] }),
+        };
+      },
     }),
   );
-  assertEquals(models, FALLBACK_MODELS);
-  assert(models.some((model) => model.id === "grok-4.7"), "fallback discovery lost Grok 4.7");
+  assertEquals(urls, ["https://api.x.ai/v1/language-models"]);
+  assertEquals(models.map((model) => model.id), ["new-model"]);
+});
+
+Deno.test("model discovery can use the standard authenticated endpoint", async () => {
+  const urls: string[] = [];
+  const models = await grokModels.list(
+    { resource: snapshot({ accessToken: "account-token" }) },
+    context({
+      fetch: (url) => {
+        urls.push(url);
+        return url.endsWith("/language-models")
+          ? { status: 403, headers: {}, body: "forbidden" }
+          : { status: 200, headers: {}, body: JSON.stringify({ data: [{ id: "account-model" }] }) };
+      },
+    }),
+  );
+  assertEquals(urls, ["https://api.x.ai/v1/language-models", "https://api.x.ai/v1/models"]);
+  assertEquals(models.map((model) => model.id), ["account-model"]);
+});
+
+for (
+  const [label, response, detail] of [
+    ["HTTP failure", { status: 403, headers: {}, body: "private upstream response" }, "HTTP 403"],
+    ["invalid JSON", { status: 200, headers: {}, body: "not json" }, "invalid JSON"],
+    ["missing list", { status: 200, headers: {}, body: "{}" }, "does not contain a model list"],
+    ["empty list", { status: 200, headers: {}, body: '{"data":[]}' }, "no models returned"],
+  ] as const
+) {
+  Deno.test(`model discovery reports ${label} without inventing models`, async () => {
+    try {
+      await grokModels.list(
+        { resource: snapshot({ accessToken: "account-token" }) },
+        context({ fetch: () => response }),
+      );
+    } catch (error) {
+      assert(error instanceof Error);
+      assert(error.message.includes("Grok model discovery failed"));
+      assert(error.message.includes("/language-models"));
+      assert(error.message.includes("/v1/models"));
+      assert(error.message.includes(detail));
+      assert(!error.message.includes("account-token"));
+      assert(!error.message.includes("private upstream response"));
+      return;
+    }
+    throw new Error("discovery must fail instead of returning a static catalog");
+  });
+}
+
+Deno.test("model discovery reports network failures", async () => {
+  try {
+    await grokModels.list(
+      { resource: snapshot({ accessToken: "account-token" }) },
+      context({
+        fetch: () => {
+          throw new Error("connection refused");
+        },
+      }),
+    );
+  } catch (error) {
+    assert(error instanceof Error && error.message.includes("Grok model discovery failed"));
+    assert(error.message.includes("connection refused"));
+    return;
+  }
+  throw new Error("network failure must not produce a catalog");
 });
 
 Deno.test("device OAuth begins with a host-held session and completes with a resource draft", async () => {
