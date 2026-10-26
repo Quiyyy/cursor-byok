@@ -1,7 +1,41 @@
 // Executed inside Cursor's Agent Host. Cursor owns the entire Agent lifecycle.
 const fs = require('node:fs');
 const path = require('node:path');
-async function route(turn, loadNative, getPrivacyMode, createWebSearch, configPath = path.join(__dirname, 'connection.json')) {
+const {randomUUID} = require('node:crypto');
+
+// The Host owns the action stream; this Run owns its receiver and cancellation scope.
+async function run(turn, loadNative, getPrivacyMode, createWebSearch, createControl, invoke) {
+  const [ctx, cancel] = turn.ctx.withCancel();
+  const manager = turn.conversationActionManager;
+  const stop = () => cancel(manager.signal.reason);
+  const privacy = getPrivacyMode();
+  const controlled = {...turn, ctx, runOptions:{...turn.runOptions, generationUUID:turn.runOptions.generationUUID ?? randomUUID()}};
+  const updates = [];
+  let control;
+  manager.signal.addEventListener('abort', stop, {once:true});
+  try {
+    if (manager.signal.aborted) stop();
+    ctx.signal.throwIfAborted();
+    control = createControl(ctx, cancel, controlled.runOptions.generationUUID, privacy, update => {
+      updates.push(Promise.resolve().then(() => turn.interactionListener.sendUpdate(turn.ctx, update)).catch(error => {
+        console.warn('[Cursor BYOK] Context injection state update failed', error);
+      }));
+    });
+    // Host closes this stream during turn handoff. Do not close it early or await it here.
+    manager.run(ctx, {write:async action => control.push(action)}).catch(error => cancel(error));
+    const routed = await route(controlled, loadNative, () => privacy, createWebSearch, undefined, control.receiver);
+    ctx.signal.throwIfAborted();
+    return await invoke(routed, controlled);
+  } finally {
+    control?.receiver.endRun();
+    manager.signal.removeEventListener('abort', stop);
+    cancel('BYOK run finished');
+    await Promise.all(updates);
+  }
+}
+exports.run = run;
+
+async function route(turn, loadNative, getPrivacyMode, createWebSearch, configPath = path.join(__dirname, 'connection.json'), receiver) {
   const selected = turn.runOptions.requestedModel?.modelId || turn.modelDetails?.modelId;
   if (!selected?.startsWith('byok:')) return;
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -48,6 +82,7 @@ async function route(turn, loadNative, getPrivacyMode, createWebSearch, configPa
     details,
     options,
     client: new Client({
+      __byokConversationActionReceiver: receiver,
       localProvider: {
         kind: 'http',
         endpoints: [endpoint],

@@ -7,6 +7,8 @@
 ```text
 patch.mjs           # 结构定位与最小入口改动
 route.cjs           # 每个 Run 的模型解析、地址与原生参数传递
+control-patch.mjs   # 连接原生动作接收器、注入记录和状态通知
+control.test.mjs    # 取消传播、步骤边界投递与后续 Run 隔离回归
 search.cjs          # 官方搜索优先，失败时调用现有服务商搜索
 search-patch.mjs    # 当前 Host 客户端与原生搜索工厂的绑定
 workbench.mjs       # 原生新窗口与新对话的默认模型初始化
@@ -20,6 +22,14 @@ install.bundle.mjs  # 生成产物，不包含 Cursor bundle
 ```
 
 修改已安装的 `extensions/cursor-agent-host/dist/main.js`、`extensions/cursor-local-agent-runtime/dist/main.js` 和 `out/vs/workbench/workbench.desktop.main.js`。两个扩展入口选择原生客户端、导出已有工厂并绑定搜索回调；Workbench 入口启用 Host，并为新建前台对话读取 BYOK 默认模型。`product.json` 的对应校验和随入口一同备份、更新和恢复。
+
+## 运行中的控制消息
+
+`route.cjs` 在模型查询前建立每个 Run 的取消作用域，连接 Host 动作管理器的停止信号，并启动动作消费。`control-patch.mjs` 复用本机原生 mailbox、`RemoteConversationActionManager`、隐私转换和注入状态消息，把接收器传给 `LocalAgentClient` 的原生执行器。普通原生客户端继续使用其原有接收器。
+
+Stop 取消该 Run 的模型查询、请求和工具上下文；Steer 通过原生注入记录在下一步骤边界消费，保持 Host turn/generation 身份，回传送达状态以避免结束后重复排队。Run 结束时结束注入记录、移除停止监听并取消作用域；Host 继续负责关闭动作流和会话持久化。结构不匹配时安装失败，不维护另一套 Agent 循环或注入算法。
+
+macOS Cursor 3.27.14 的本机验证覆盖原生 UI、已安装 Rust 网关与本地 Responses 夹具：停止关闭上游连接并记录 `cancelled`；故意补发的旧尾段未进入下一轮；原生 Read 完成后的请求在同一 generation 内收到 Steer 一次。该验证临时设置 `cursor.agentHost.updateMode=none` 使用内置 Harness。热更新 Harness 可绕过安装目录中的入口；本补丁不修改已签名的热更新模块，该路径不属于本次通过的验证范围。
 
 ## 搜索后端
 
