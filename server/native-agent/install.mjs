@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url';
 import Module, { createRequire } from 'node:module';
 import { patchAgentHost, exposeNativeClient, patchTaskModels } from './patch.mjs';
 import { catalogEntry } from './catalog.mjs';
-import { patchWorkbench } from './workbench.mjs';
+import { patchWorkbench, patchHostEnablement } from './workbench.mjs';
+import { patchLocalSearch } from './search-patch.mjs';
 const files = ['extensions/cursor-agent-host/dist/main.js', 'extensions/cursor-local-agent-runtime/dist/main.js', 'out/vs/workbench/workbench.desktop.main.js', 'product.json'];
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const read = file => fs.readFileSync(file, 'utf8');
@@ -49,7 +50,7 @@ export function install(appPath, directory, restore = false) {
     };
   }
   const bridge = path.join(directory, 'route.cjs');
-  const generated = [patchAgentHost(originals[0], bridge), patchTaskModels(exposeNativeClient(originals[1]), bridge), patchWorkbench(originals[2])];
+  const generated = [patchAgentHost(originals[0], bridge), patchLocalSearch(patchTaskModels(exposeNativeClient(originals[1]), bridge), path.join(directory, 'search.cjs')), patchHostEnablement(patchWorkbench(originals[2]))];
   const product = JSON.parse(originals[3]);
   if (product.checksums?.['vs/workbench/workbench.desktop.main.js']) {
     product.checksums['vs/workbench/workbench.desktop.main.js'] = crypto.createHash('sha256').update(generated[2]).digest('base64').replace(/=+$/, '');

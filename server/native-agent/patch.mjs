@@ -2,6 +2,7 @@
 import { parse } from '../../apps/desktop/node_modules/@babel/parser/lib/index.js';
 import tm from '../../apps/desktop/node_modules/@babel/traverse/lib/index.js';
 import gm from '../../apps/desktop/node_modules/@babel/generator/lib/index.js';
+import { patchHostSearch } from './search-patch.mjs';
 const traverse = tm.default ?? tm,
   generate = gm.default ?? gm;
 export function patchTaskModels(source, bridgePath) {
@@ -34,11 +35,12 @@ export function patchAgentHost(source, bridgePath) {
   const method = routers[0].body.body.find(m => m.key?.name === 'run');
   if (!method.async || method.params.length !== 1 || method.params[0].type !== 'Identifier') throw Error('Unsupported Cursor Run signature');
   const turn = method.params[0].name;
-  const injection = `const __byok = await require(${JSON.stringify(bridgePath)}).route(${turn}, () => require('../../cursor-local-agent-runtime/dist/main.js'), () => require('vscode').cursor.getPrivacyModeEnum()); if (__byok) return new ${adapters[0].id.name}(__byok.client).run({...${turn},modelDetails:__byok.details,runOptions:__byok.options});`;
+  const injection = `const __byok = await require(${JSON.stringify(bridgePath)}).route(${turn}, () => require('../../cursor-local-agent-runtime/dist/main.js'), () => require('vscode').cursor.getPrivacyModeEnum(), this.__byokCreateWebSearch); if (__byok) return new ${adapters[0].id.name}(__byok.client).run({...${turn},modelDetails:__byok.details,runOptions:__byok.options});`;
   method.body.body.unshift(...parse(`async function inject(){${injection}}`).program.body[0].body.body);
-  return source.slice(0, method.start) + generate(method, {
+  const patched = source.slice(0, method.start) + generate(method, {
     compact: true
   }).code + source.slice(method.end);
+  return patchHostSearch(patched, routers[0].id.name);
 }
 export function exposeNativeClient(source) {
   const modules = [],

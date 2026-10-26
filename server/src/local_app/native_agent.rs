@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 
 const INSTALLER: &str = include_str!("../../native-agent/install.bundle.mjs");
 const BRIDGE: &str = include_str!("../../native-agent/route.cjs");
+const SEARCH: &str = include_str!("../../native-agent/search.cjs");
 const NOTICES: &str = include_str!("../../native-agent/THIRD_PARTY_LICENSES.txt");
 const FILES: [&str; 4] = [
     "extensions/cursor-agent-host/dist/main.js",
@@ -161,6 +162,7 @@ impl NativeAgent {
         let script = self.inner.directory.join("install.mjs");
         write_asset(&script, INSTALLER)?;
         write_asset(self.inner.directory.join("route.cjs"), BRIDGE)?;
+        write_asset(self.inner.directory.join("search.cjs"), SEARCH)?;
         write_asset(
             self.inner.directory.join("THIRD_PARTY_LICENSES.txt"),
             NOTICES,

@@ -99,6 +99,8 @@ server/
 ├── native-agent/                         # 原生模型路由接入
 │   ├── patch.mjs                        # 定位 Host 与 Task 模型工厂
 │   ├── route.cjs                        # 配置 ID 与真实模型 ID 的映射
+│   ├── search.cjs                       # 官方搜索优先与服务商降级
+│   ├── search-patch.mjs                 # 绑定当前 Host 的原生搜索工厂
 │   └── install.mjs                      # 安装、哈希校验与恢复
 ├── src/                                 # 本地服务与插件宿主
 │   ├── api/byok/                        # 模型 HTTP 网关
@@ -116,22 +118,29 @@ server/
         └── search.ts                    # Google grounding 与 Responses 搜索结果转换
 ```
 
-本次结构变化是新增网关的 `search.rs`、Google 插件的 `search.ts` 和对应测试，其余在现有模块内扩展。
+搜索后端选择位于原生接入层。网关的 `search.rs` 和 Google 插件的 `search.ts` 保留为服务商降级路径，不另建搜索服务或 Agent 循环。
 
 ```text
 Cursor 原生 WebSearch
-  → 原生辅助 /responses 请求
-  → BYOK 网关：能力检查；缺省要求执行搜索
-      ├─ 直接 Responses 配置 → 所选服务商
-      ├─ Codex 账号 → Codex Responses 后端
-      ├─ Grok 账号 → xAI /v1/responses → web_search
-      └─ Gemini 账号 → Google Cloud Code → googleSearch
-           ← groundingMetadata + 答案 + 用量
-           → 对应的 Responses 搜索项、答案与引用
-  ← 搜索完成校验；来源链接补入 output_text
+  → Cursor 原生工具审批
+  → 当前 Host 的官方 RunWebSearch（原生认证与传输）
+      ├─ 成功 → 原样返回答案和来源
+      ├─ 取消 → 结束，不降级
+      └─ 不可用、失败或空响应 → 原生辅助 /responses 请求
+          → BYOK 网关：能力检查；缺省要求执行搜索
+              ├─ 直接 Responses 配置 → 所选服务商
+              ├─ Codex 账号 → Codex Responses 后端
+              ├─ Grok 账号 → xAI /v1/responses → web_search
+              └─ Gemini 账号 → Google Cloud Code → googleSearch
+                   ← groundingMetadata + 答案 + 用量
+                   → 对应的 Responses 搜索项、答案与引用
+  ← 服务商降级路径：搜索完成校验；来源链接补入 output_text
   → Cursor 原生工具结果 → 主 Agent 循环
 ```
 
+- 官方搜索回调随每个 Host 路由实例传递，不在进程中保存共享客户端。官方成功时不向模型服务商发送搜索请求；原生 private inference 禁止云端工具时直接使用服务商路径。
+- 接管开启期间使用原生 Agent Host，并保留原生工作区策略。普通官方模型仍按 Host 的原有决策选择执行路径。关闭接管恢复原始安装文件，重启 Cursor 后恢复原始 Host 启用判断。
+- 官方调用失败时仅尝试一次现有服务商搜索；下一次搜索仍优先官方。取消和原生工具审批拒绝不会启动降级，两路均失败时保留两个错误原因。
 - Responses 内置工具请求保留原始请求体、签名输入及 `response.*` 事件，不经过普通函数工具的消息投影。账号插件显式声明 `nativeResponses` 后才进入这条路径。
 - Grok 将 Cursor 的 `web_search_preview` 名称映射为 xAI 的 `web_search`。普通对话继续使用原有 Chat Completions 通道。
 - Gemini 分支限于原生单次文本 WebSearch：将查询交给 `googleSearch`，汇集可能分段返回的 grounding 元数据。只有存在上游搜索证据且正常完成，才产生已完成的搜索项；原始 grounding 元数据、来源与用量均保留。任意 Responses 会话回放、其他内置工具和无法映射的搜索选项会明确报错。

@@ -1,4 +1,5 @@
 const bootstrap = `const AI=fn("aiService");
+class HostEnablement{constructor(gate,privateInference,policy){this._agentHostEnabled=(gate||privateInference)&&policy;}isCursorAgentHostEnabled(){return this._agentHostEnabled;}}globalThis.HostEnablement=HostEnablement;
 function migrateComposerData(stored,context){const promises=[];if(stored.selectedComposerIds.length===0&&stored.allComposers[0])stored.selectedComposerIds=[stored.allComposers[0].composerId];if(stored.selectedComposerIds.length===0){const id='migrated-startup',config=context.modelConfigService.getModelConfig("composer"),data=makeComposer(config,id);promises.push(saveComposer(data,context.storageService));stored.allComposers.push(data);stored.selectedComposerIds=[id];}return [stored,Promise.all(promises)];}
 function createComposerData(storage,reactive,workspace,models,manager,key,glass,flag,log,dirty,metric,ready){
   let state={allComposers:storage.existing,selectedComposerIds:[]};const migrations=[];

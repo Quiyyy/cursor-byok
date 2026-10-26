@@ -1,9 +1,20 @@
-// Only new foreground conversations consult BYOK. Cursor still owns their state.
+// Enable the native Host and initialize new conversations. Cursor owns their state.
 import { parse, parseExpression } from '../../apps/desktop/node_modules/@babel/parser/lib/index.js';
 import tm from '../../apps/desktop/node_modules/@babel/traverse/lib/index.js';
 import gm from '../../apps/desktop/node_modules/@babel/generator/lib/index.js';
 const traverse = tm.default ?? tm, generate = gm.default ?? gm;
 const unsupported = () => {throw Error('Unsupported Cursor new-conversation model boundary');};
+
+// Installed only while takeover is enabled. Keep Cursor's remote-workspace policy;
+// the Host still chooses the original backend route for ordinary official models.
+export function patchHostEnablement(source) {
+  const matches=[...source.matchAll(/this\._agentHostEnabled\s*=\s*([^;,]+)/g)];
+  if(matches.length!==1)throw Error('Unsupported Cursor Agent Host enablement boundary');
+  const match=matches[0], expression=parseExpression(match[1]);
+  if(expression.type!=='LogicalExpression'||expression.operator!=='&&'||expression.left.type!=='LogicalExpression'||expression.left.operator!=='||'||expression.right.type!=='Identifier')throw Error('Unsupported Cursor Agent Host enablement policy');
+  const replacement=`this._agentHostEnabled=/*__byokHostEnabled*/${expression.right.name}`;
+  return source.slice(0,match.index)+replacement+source.slice(match.index+match[0].length);
+}
 
 // Cursor may synchronously create its first empty conversation from a getter.
 // Keep the native object and setters; only its initial model resolution is pending.

@@ -1,12 +1,14 @@
 # 原生 Agent 接入
 
-应用启用接管时，在已初始化的 Cursor Agent Host 中为 `byok:` 模型选择完整的 `LocalAgentClient`。此目录负责入口和模型路由；提示词、工具、循环与状态由 Cursor 持有。
+应用启用接管时启用 Cursor Agent Host，并保留原生工作区策略；为 `byok:` 模型选择完整的 `LocalAgentClient`。此目录负责入口、模型路由和搜索后端选择；提示词、工具审批、循环与状态由 Cursor 持有。
 
 `patch.mjs` 同时定位原生 Task 模型选择工厂，`route.cjs` 让该工厂使用当前网关路径中的配置 ID 创建子会话。子任务保存 `byok:` 身份，每个 Run 再解析真实模型；原生提示词家族、工具执行、会话状态及父子运行标识保持各自所有权。普通原生模型不经过这项转换。
 
 ```text
 patch.mjs           # 结构定位与最小入口改动
 route.cjs           # 每个 Run 的模型解析、地址与原生参数传递
+search.cjs          # 官方搜索优先，失败时调用现有服务商搜索
+search-patch.mjs    # 当前 Host 客户端与原生搜索工厂的绑定
 workbench.mjs       # 原生新窗口与新对话的默认模型初始化
 catalog.mjs         # 原生模型目录的服务商元数据补充
 install.mjs         # 安装、备份、恢复及模型目录序列化
@@ -17,7 +19,13 @@ build.mjs           # 生成嵌入 Rust 的安装器与第三方许可
 install.bundle.mjs  # 生成产物，不包含 Cursor bundle
 ```
 
-修改已安装的 `extensions/cursor-agent-host/dist/main.js`、`extensions/cursor-local-agent-runtime/dist/main.js` 和 `out/vs/workbench/workbench.desktop.main.js`。两个扩展入口分别选择原生客户端、导出已有工厂；Workbench 入口只为新建前台对话读取 BYOK 默认模型。`product.json` 的对应校验和随入口一同备份、更新和恢复。
+修改已安装的 `extensions/cursor-agent-host/dist/main.js`、`extensions/cursor-local-agent-runtime/dist/main.js` 和 `out/vs/workbench/workbench.desktop.main.js`。两个扩展入口选择原生客户端、导出已有工厂并绑定搜索回调；Workbench 入口启用 Host，并为新建前台对话读取 BYOK 默认模型。`product.json` 的对应校验和随入口一同备份、更新和恢复。
+
+## 搜索后端
+
+每个 Host 路由实例使用自己的 `managedAgentToolsClient` 和原生 WebSearch 工厂。`route.cjs` 在每个 BYOK Run 中按真实模型 ID 创建官方搜索回调，通过当前 LocalAgentClient 的提供商配置传入原生工具工厂，不复制认证信息或会话状态。
+
+工具获得原生审批后先调用官方搜索。成功的答案和来源直接交回原生工具循环；官方不可用、调用失败或响应为空时，才调用原有 `/responses` 搜索路径，由现有 Codex、Grok、Gemini 适配处理。下一次调用仍优先官方，不永久切换后端。取消不触发降级；两路失败保留各自原因。原生 private inference 配置存在时不绑定官方搜索，继续遵守其禁止向 Cursor 后端发送内容的边界。
 
 新窗口首个对话和手动新建对话都直接读取 `GetDefaultModel`，不依赖已消费的更新时间。同步 getter 提前创建的空白对话保留原生对象，默认模型加载后通过原生 setter 应用；加载期间用户已修改的选择不覆盖，该新对话的提交等待初始化结束。原生启动加载找到已有对话时不应用默认值，显式模型、历史恢复、子任务和后台 Agent 保留原生行为。目录尚未包含配置模型时等待原生刷新；仍不可用则报错并阻止该新对话误发 Auto 请求。会话创建、模型参数与记录持久化继续由 Cursor 负责。
 
