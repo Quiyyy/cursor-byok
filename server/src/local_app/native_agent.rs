@@ -1,4 +1,4 @@
-//! Installs a narrow native routing hook; never owns Agent state or tool execution.
+//! Installs native routing and new-conversation defaults; never owns Agent state or tools.
 use crate::{Error, Result};
 use serde_json::json;
 use std::{
@@ -10,10 +10,13 @@ use tokio::sync::Mutex;
 
 const INSTALLER: &str = include_str!("../../native-agent/install.bundle.mjs");
 const BRIDGE: &str = include_str!("../../native-agent/route.cjs");
+const SEARCH: &str = include_str!("../../native-agent/search.cjs");
 const NOTICES: &str = include_str!("../../native-agent/THIRD_PARTY_LICENSES.txt");
-const FILES: [&str; 2] = [
+const FILES: [&str; 4] = [
     "extensions/cursor-agent-host/dist/main.js",
     "extensions/cursor-local-agent-runtime/dist/main.js",
+    "out/vs/workbench/workbench.desktop.main.js",
+    "product.json",
 ];
 type Fingerprint = Vec<(SystemTime, u64)>;
 #[derive(Clone, Default)]
@@ -159,6 +162,7 @@ impl NativeAgent {
         let script = self.inner.directory.join("install.mjs");
         write_asset(&script, INSTALLER)?;
         write_asset(self.inner.directory.join("route.cjs"), BRIDGE)?;
+        write_asset(self.inner.directory.join("search.cjs"), SEARCH)?;
         write_asset(
             self.inner.directory.join("THIRD_PARTY_LICENSES.txt"),
             NOTICES,

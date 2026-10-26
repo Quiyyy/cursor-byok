@@ -448,6 +448,81 @@ async fn streaming_chat_returns_incremental_sse_and_tool_calls() {
 }
 
 #[tokio::test]
+async fn responses_search_preserves_native_payload_events_and_citations() {
+    let (router, provider, store, _directory) = setup().await;
+    store
+        .set_external_api_settings(ExternalApiSettings {
+            enabled: true,
+            api_key: "secret".into(),
+        })
+        .await
+        .unwrap();
+    let mut model = model_input();
+    model.openai_endpoint = OPENAI_RESPONSES_ENDPOINT.into();
+    model.group_name = Some("search".into());
+    store.create_model(&model).await.unwrap();
+    let response = json!({"id":"upstream","status":"completed","output":[
+        {"id":"ws_1","type":"web_search_call","status":"completed","action":{"type":"search","query":"test"}},
+        {"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"Found it.","annotations":[{"type":"url_citation","url":"https://example.com/source","title":"Source"}]}]}
+    ]});
+    for stream in [false, true] {
+        let event = json!({"type":"response.completed","response":response});
+        provider.push(vec![
+            ModelEvent::ResponsesEvent(event.clone()),
+            ModelEvent::Done(FinishReason::Stop),
+        ]);
+        let mut request = json!({"model":"search/qwen/model","stream":stream,"input":"test","tools":[{"type":"web_search","filters":{"allowed_domains":["example.com"]}}],"tool_choice":"required","include":["web_search_call.action.sources"]});
+        if stream {
+            request["input"] = json!([
+                {"type":"reasoning","encrypted_content":"signed-opaque","summary":[]},
+                {"type":"web_search_call","id":"previous-search","status":"completed"},
+                {"role":"user","content":"query"},
+                {"role":"developer","content":"native message order must remain intact"}
+            ]);
+        }
+        let (status, body) = send(
+            router.clone(),
+            "POST",
+            "/byok/v1/responses",
+            Some("secret"),
+            request.clone(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        if stream {
+            let values = body
+                .lines()
+                .filter_map(|l| l.strip_prefix("data: "))
+                .map(|l| serde_json::from_str::<Value>(l).unwrap())
+                .collect::<Vec<_>>();
+            assert_eq!(values, vec![event]);
+        } else {
+            assert_eq!(serde_json::from_str::<Value>(&body).unwrap(), response);
+        }
+        assert_eq!(
+            provider
+                .requests()
+                .last()
+                .unwrap()
+                .native_responses
+                .as_ref(),
+            Some(&request)
+        );
+    }
+    let (status, body) = send(
+        router,
+        "POST",
+        "/byok/v1/responses",
+        Some("secret"),
+        json!({"model":"work/qwen/model","input":"test","tools":[{"type":"web_search_preview"}]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{body}");
+    assert!(body.contains("Responses"));
+    assert_eq!(provider.requests().len(), 2);
+}
+
+#[tokio::test]
 async fn responses_keep_native_custom_tool_input_and_signed_reasoning() {
     let (router, provider, store, _directory) = setup().await;
     store

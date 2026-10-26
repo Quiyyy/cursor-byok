@@ -1,7 +1,7 @@
 // Executed inside Cursor's Agent Host. Cursor owns the entire Agent lifecycle.
 const fs = require('node:fs');
 const path = require('node:path');
-async function route(turn, loadNative, getPrivacyMode, configPath = path.join(__dirname, 'connection.json')) {
+async function route(turn, loadNative, getPrivacyMode, createWebSearch, configPath = path.join(__dirname, 'connection.json')) {
   const selected = turn.runOptions.requestedModel?.modelId || turn.modelDetails?.modelId;
   if (!selected?.startsWith('byok:')) return;
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -50,7 +50,8 @@ async function route(turn, loadNative, getPrivacyMode, configPath = path.join(__
     client: new Client({
       localProvider: {
         kind: 'http',
-        endpoints: [endpoint]
+        endpoints: [endpoint],
+        __byokWebSearch: createWebSearch?.(model.modelId)
       },
       defaultModel: details,
       availableModels: () => [details],
@@ -70,3 +71,23 @@ async function route(turn, loadNative, getPrivacyMode, configPath = path.join(__
   };
 }
 exports.route = route;
+
+// Only the Task model selection uses the configuration identity. Cursor still
+// builds prompts and provider requests from the real model ID in route().
+function taskModels(options, nativeFactory) {
+  const endpoint = options.localProvider?.kind === 'http' ? options.localProvider.endpoints?.[0]?.baseUrl : undefined;
+  const match = endpoint && new URL(endpoint).pathname.match(/^\/__byok-native__\/models\/([^/]+)\/v1\/?$/);
+  const routeId = match && decodeURIComponent(match[1]);
+  const original = nativeFactory(options);
+  if (!routeId?.startsWith('byok:')) return original;
+  const routed = nativeFactory({
+    ...options,
+    modelId: routeId,
+    availableModels: options.availableModels?.map(model => model.modelId === options.modelId ? {...model, modelId: routeId} : model),
+  });
+  return {
+    ...routed,
+    getTaskToolConfig: modelId => original.getTaskToolConfig(modelId === routeId ? options.modelId : modelId),
+  };
+}
+exports.taskModels = taskModels;

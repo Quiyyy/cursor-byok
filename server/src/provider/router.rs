@@ -80,6 +80,9 @@ impl Provider for ProviderRouter {
                     let mut routed = invocation.clone();
                     let model = store.model(&selected).await?.ok_or_else(|| Error::Provider(format!("unknown model: {selected}")))?;
                     let provider_type = model.provider_type();
+                    if invocation.request.native_responses.is_some() && provider_type != ProviderType::OpenAiResponses {
+                        Err(Error::Protocol("this model connection does not support native Responses tools".into()))?;
+                    }
                     let request_url = model.request_url()?;
                     model.configure(&mut routed.request.model);
                     routed.request.model.extra_params =
@@ -189,6 +192,7 @@ fn event_name(event: &super::ModelEvent) -> &'static str {
         super::ModelEvent::ToolCallEnd { .. } => "ToolCallEnd",
         super::ModelEvent::ToolCallRawInput { .. } => "ToolCallRawInput",
         super::ModelEvent::ProviderReplayState(_) => "ReplayState",
+        super::ModelEvent::ResponsesEvent(_) => "ResponsesEvent",
         super::ModelEvent::Usage(_) => "Usage",
         super::ModelEvent::Done(_) => "Done",
     }
@@ -219,8 +223,23 @@ async fn start_recorder(
             display_name: display_name.into(),
             reasoning_effort: invocation.request.model.reasoning.effort.clone(),
             fast: invocation.request.model.latency == ModelLatency::Fast,
-            message_count: invocation.request.history.len(),
-            tool_count: invocation.request.prompt.tools.len(),
+            message_count: invocation
+                .request
+                .native_responses
+                .as_ref()
+                .and_then(|body| body.get("input"))
+                .map_or(invocation.request.history.len(), |input| {
+                    input
+                        .as_array()
+                        .map_or(usize::from(input.is_string()), Vec::len)
+                }),
+            tool_count: invocation
+                .request
+                .native_responses
+                .as_ref()
+                .and_then(|body| body.get("tools"))
+                .and_then(serde_json::Value::as_array)
+                .map_or(invocation.request.prompt.tools.len(), Vec::len),
             detailed: false,
         },
     )

@@ -111,7 +111,10 @@ async function invoke(
   } catch (error) {
     if (error instanceof HttpError) {
       if (error.status === 401) {
-        return { status: "auth-error", message: "ChatGPT authorization rejected; refresh required" };
+        return {
+          status: "auth-error",
+          message: "ChatGPT authorization rejected; refresh required",
+        };
       }
       if (isQuotaHttpError(error)) {
         return {
@@ -131,6 +134,7 @@ async function invoke(
 }
 
 export const codexProvider: ProviderSupport = {
+  nativeResponses: true,
   id: "codex",
   displayName: "OpenAI Codex",
   description: {

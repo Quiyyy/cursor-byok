@@ -34,6 +34,9 @@ struct ModelNudgeResponse {
     should_default_switch_on_new_chat: bool,
 }
 
+#[derive(Clone, PartialEq, Message)]
+struct NoNewChatNudge {}
+
 pub(crate) async fn validate(
     store: &Store,
     plugins: Option<&PluginRegistry>,
@@ -61,6 +64,15 @@ pub async fn get_default_model(
 ) -> Result<Response<Body>> {
     let settings = services.store().cursor_model_settings().await?;
     if settings.model_id.is_empty() {
+        // The creation hook only needs the locally configured override. An
+        // unconfigured override must not make new chats depend on an upstream RPC.
+        if request
+            .headers()
+            .get("x-cursor-byok-default-only")
+            .is_some_and(|v| v == "1")
+        {
+            return respond(request, DefaultModelResponse::default()).await;
+        }
         return proxy::forward(Extension(proxy), request).await;
     }
     validate(services.store(), services.plugins(), &settings.model_id).await?;
@@ -101,6 +113,25 @@ pub async fn get_model_nudge(
         },
     )
     .await
+}
+
+/// The parameterized picker has a separate new-chat promotion RPC. Its result
+/// must not replace a configured default after native conversation creation.
+pub async fn get_new_chat_nudge(
+    State(services): State<CursorServices>,
+    Extension(proxy): Extension<CursorProxy>,
+    request: Request<Body>,
+) -> Result<Response<Body>> {
+    if services
+        .store()
+        .cursor_model_settings()
+        .await?
+        .model_id
+        .is_empty()
+    {
+        return proxy::forward(Extension(proxy), request).await;
+    }
+    respond(request, NoNewChatNudge {}).await
 }
 
 async fn respond(request: Request<Body>, message: impl Message) -> Result<Response<Body>> {

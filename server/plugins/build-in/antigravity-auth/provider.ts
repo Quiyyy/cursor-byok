@@ -9,18 +9,14 @@ import type {
 } from "cursor-byok:provider";
 import type { PluginContext } from "cursor-byok:plugin";
 import { HttpError } from "cursor-byok:protocol/openai-chat";
+import { GeminiSearch } from "./search.ts";
 import {
   ANTIGRAVITY_CLIENT_HEADERS,
   ANTIGRAVITY_ENDPOINTS,
   ANTIGRAVITY_USER_AGENT,
   antigravityModels,
 } from "./models.ts";
-import {
-  type AccountData,
-  accountData,
-  quotaExhaustedPatch,
-  RESOURCE_TYPE,
-} from "./resources.ts";
+import { type AccountData, accountData, quotaExhaustedPatch, RESOURCE_TYPE } from "./resources.ts";
 
 export function isQuotaError(error: string): boolean {
   const message = error.toLowerCase();
@@ -59,68 +55,6 @@ async function readBody(lines: AsyncIterable<string>): Promise<string> {
   const collected: string[] = [];
   for await (const line of lines) collected.push(line);
   return collected.join("\n");
-}
-
-function resolveAntigravityModel(modelId: string): string {
-  const raw = modelId.trim();
-  const lower = raw.toLowerCase();
-
-  // 1. If explicit tier is already specified in the model ID, pass it directly!
-  if (
-    lower.startsWith("gemini-3.8-flash-") ||
-    lower.startsWith("gemini-3.7-flash-") ||
-    lower.startsWith("gemini-3.6-flash-") ||
-    lower.startsWith("gemini-3.1-pro-") ||
-    lower === "gemini-3.8-flash" ||
-    lower === "gemini-3.7-flash" ||
-    lower === "gemini-3.6-flash" ||
-    lower === "gemini-2.5-flash" ||
-    lower === "gemini-2.5-pro" ||
-    lower === "gemini-2.0-flash" ||
-    lower === "claude-sonnet-4-6" ||
-    lower === "claude-sonnet-4-6-thinking" ||
-    lower === "claude-opus-4-6-thinking" ||
-    lower === "gemini-3.1-flash-image" ||
-    lower === "gpt-oss-120b-medium"
-  ) {
-    if (lower === "gemini-3.1-pro-high") return "gemini-pro-agent";
-    return raw;
-  }
-
-  // 2. Canonical Antigravity-Manager mapping for aliases
-  if (
-    lower === "claude-3-7-sonnet" || lower === "claude-3-5-sonnet" || lower === "claude-sonnet-4-5"
-  ) {
-    return "claude-sonnet-4-6";
-  }
-  if (lower === "claude-3-5-haiku" || lower === "claude-haiku-4") {
-    return "claude-sonnet-4-6";
-  }
-  if (
-    lower === "claude-3-7-opus" || lower === "claude-opus-4" || lower === "claude-opus-4.6" ||
-    lower === "claude-opus-4-5-thinking"
-  ) {
-    return "claude-opus-4-6-thinking";
-  }
-  if (
-    lower === "gpt-4" || lower === "gpt-4o" || lower === "gpt-4o-mini" || lower === "gpt-3.5-turbo"
-  ) {
-    return "gemini-2.5-flash";
-  }
-  if (lower === "gemini-2.5-flash-lite") {
-    return "gemini-2.5-flash";
-  }
-  if (lower === "gemini-3-flash" || lower === "gemini-3.5-flash") {
-    return "gemini-3.7-flash";
-  }
-  if (lower === "gemini-3-pro" || lower === "gemini-3.1-pro") {
-    return "gemini-3.1-pro-preview";
-  }
-  if (lower === "gemini-3-pro-high") {
-    return "gemini-pro-agent";
-  }
-
-  return raw;
 }
 
 function randomHex(length = 8): string {
@@ -312,13 +246,20 @@ async function streamCloudCode(
   output: ProviderOutput,
   context: PluginContext,
 ): Promise<void> {
-  const actualModel = resolveAntigravityModel(modelId);
+  const actualModel = modelId;
+  const search = input.request.nativeResponses
+    ? new GeminiSearch(input.request.nativeResponses, actualModel)
+    : undefined;
   const { contents, systemInstruction } = convertToCloudCodeContents(
-    input.request.instructions,
-    input.request.messages,
+    search ? search.instructions : input.request.instructions,
+    search
+      ? [{ role: "user", content: [{ type: "text", text: search.query }] }]
+      : input.request.messages,
   );
 
-  const tools = input.request.tools && input.request.tools.length > 0
+  const tools = search
+    ? [{ googleSearch: {} }]
+    : input.request.tools && input.request.tools.length > 0
     ? [
       {
         functionDeclarations: input.request.tools.map((t) => ({
@@ -330,7 +271,7 @@ async function streamCloudCode(
     ]
     : undefined;
 
-  const toolConfig = tools
+  const toolConfig = tools && !search
     ? {
       functionCallingConfig: { mode: "AUTO" },
     }
@@ -349,7 +290,7 @@ async function streamCloudCode(
       ...(tools ? { tools } : {}),
       ...(toolConfig ? { toolConfig } : {}),
       generationConfig: {
-        maxOutputTokens: 65536,
+        maxOutputTokens: search?.maxOutputTokens ?? 65536,
       },
     },
   };
@@ -373,6 +314,7 @@ async function streamCloudCode(
     if (hasEmittedAnyChunk) break;
 
     try {
+      context.signal.throwIfAborted();
       const response = await context.network.stream(
         `${endpoint}/v1internal:streamGenerateContent?alt=sse`,
         {
@@ -408,19 +350,30 @@ async function streamCloudCode(
       } | null = null;
 
       for await (const line of response.lines) {
+        context.signal.throwIfAborted();
         if (!line.startsWith("data:")) continue;
         const raw = line.slice(5).trim();
+        if (!raw && search) continue;
         if (!raw || raw === "[DONE]") break;
 
         let json: Record<string, unknown>;
         try {
           json = JSON.parse(raw) as Record<string, unknown>;
         } catch {
+          if (search) {
+            hasEmittedAnyChunk = true;
+            throw new Error("Gemini search stream returned invalid JSON");
+          }
           continue;
         }
 
         const resp = (json.response as Record<string, unknown> | undefined) ?? json;
         if (!resp) continue;
+        if (search) {
+          hasEmittedAnyChunk = true;
+          if (json.error) search.observe(json);
+          search.observe(resp);
+        }
 
         const usage = resp.usageMetadata as Record<string, number> | undefined;
         if (usage) {
@@ -517,6 +470,8 @@ async function streamCloudCode(
           ? candidate.finishReason
           : null;
         if (finishReason) {
+          // Grounding metadata may follow the finishReason in a later chunk.
+          if (search) continue;
           if (thinkingStarted) {
             thinkingStarted = false;
             output.emit({ type: "thinking-end" });
@@ -585,6 +540,10 @@ async function streamCloudCode(
         });
       }
       if (!doneEmitted) {
+        if (search) {
+          context.signal.throwIfAborted();
+          search.complete(output);
+        }
         output.emit({
           type: "done",
           reason: hasTools ? "tool-use" : "stop",
@@ -593,7 +552,10 @@ async function streamCloudCode(
       return;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      if (hasEmittedAnyChunk) {
+      if (
+        hasEmittedAnyChunk || context.signal.aborted ||
+        (lastError instanceof HttpError && ![404, 502, 503, 504].includes(lastError.status))
+      ) {
         throw lastError;
       }
     }
@@ -649,6 +611,7 @@ async function invoke(
 }
 
 export const antigravityProvider: ProviderSupport = {
+  nativeResponses: true,
   id: "antigravity",
   displayName: {
     "en-US": "Google Antigravity",

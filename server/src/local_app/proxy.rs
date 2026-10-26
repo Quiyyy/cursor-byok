@@ -164,6 +164,7 @@ fn is_local_path(path: &str) -> bool {
             | "/aiserver.v1.AiService/AvailableModels"
             | "/aiserver.v1.AiService/GetDefaultModel"
             | "/aiserver.v1.AiService/GetDefaultModelNudgeData"
+            | "/agent.v1.AgentService/GetNewChatNudgeParameterizedModelPicker"
             | "/agent.v1.AgentService/GetUsableModels"
             | "/aiserver.v1.AiService/GetUsableModels"
             | "/aiserver.v1.AuthService/GetEmail"
@@ -205,6 +206,7 @@ mod tests {
             "/aiserver.v1.AiService/AvailableDocs",
             "/aiserver.v1.AiService/GetDefaultModel",
             "/aiserver.v1.AiService/GetDefaultModelNudgeData",
+            "/agent.v1.AgentService/GetNewChatNudgeParameterizedModelPicker",
             "/aiserver.v1.DashboardService/GetEffectiveUserPlugins",
             "/aiserver.v1.DashboardService/GetUserPrivacyMode",
             "/aiserver.v1.AuthService/GetUserMeta",

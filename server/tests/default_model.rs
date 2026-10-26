@@ -100,6 +100,25 @@ async fn configured_default_reaches_cursor_and_disables_auto_nudges() {
     );
     let settings_path = "/__byok-api__/api/settings/cursor-model";
 
+    let response = router
+        .clone()
+        .oneshot(
+            Request::post("/aiserver.v1.AiService/GetDefaultModel")
+                .header("content-type", "application/proto")
+                .header("x-cursor-byok-default-only", "1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let unconfigured =
+        DefaultModel::decode(to_bytes(response.into_body(), 1024).await.unwrap()).unwrap();
+    assert!(
+        unconfigured.model.is_empty(),
+        "An unconfigured creation override must keep native selection without contacting upstream"
+    );
+
     let (status, _) = request(
         router.clone(),
         "PUT",
@@ -150,6 +169,18 @@ async fn configured_default_reaches_cursor_and_disables_auto_nudges() {
     let nudge = ModelNudge::decode(body).unwrap();
     assert_eq!(nudge.nudge_date, "0");
     assert!(!nudge.should_default_switch_on_new_chat);
+    let (status, body) = request(
+        router.clone(),
+        "POST",
+        "/agent.v1.AgentService/GetNewChatNudgeParameterizedModelPicker",
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.is_empty(),
+        "No new-chat promotion may replace the configured model"
+    );
 
     let (_, body) = request(
         router.clone(),

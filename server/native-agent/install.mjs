@@ -1,12 +1,14 @@
-// Install/restore only the two native entry patches. No Cursor code is distributed.
+// Install/restore native routing and new-conversation entry points. No Cursor code is distributed.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import Module, { createRequire } from 'node:module';
-import { patchAgentHost, exposeNativeClient } from './patch.mjs';
+import { patchAgentHost, exposeNativeClient, patchTaskModels } from './patch.mjs';
 import { catalogEntry } from './catalog.mjs';
-const files = ['extensions/cursor-agent-host/dist/main.js', 'extensions/cursor-local-agent-runtime/dist/main.js'];
+import { patchWorkbench, patchHostEnablement } from './workbench.mjs';
+import { patchLocalSearch } from './search-patch.mjs';
+const files = ['extensions/cursor-agent-host/dist/main.js', 'extensions/cursor-local-agent-runtime/dist/main.js', 'out/vs/workbench/workbench.desktop.main.js', 'product.json'];
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const read = file => fs.readFileSync(file, 'utf8');
 function write(file, bytes) {
@@ -29,7 +31,7 @@ export function install(appPath, directory, restore = false) {
   });
   const originals = current.map((source, i) => {
     if (previous?.files[i]?.patched !== hash(source)) {
-      if (source.includes('__byokLocalAgentClient') || source.includes('__byok.client')) throw Error('Cursor already has an unrecognized BYOK patch; restore its original installation backup first');
+      if (source.includes('__byokLocalAgentClient') || source.includes('__byok.client') || source.includes('__byokNewComposerDefault')) throw Error('Cursor already has an unrecognized BYOK patch; restore its original installation backup first');
       return source;
     }
     const original = read(path.join(base, `original-${i}.js`));
@@ -48,8 +50,12 @@ export function install(appPath, directory, restore = false) {
     };
   }
   const bridge = path.join(directory, 'route.cjs');
-  const generated = [patchAgentHost(originals[0], bridge), exposeNativeClient(originals[1])];
-  const product = JSON.parse(read(path.join(app, 'product.json')));
+  const generated = [patchAgentHost(originals[0], bridge), patchLocalSearch(patchTaskModels(exposeNativeClient(originals[1]), bridge), path.join(directory, 'search.cjs')), patchHostEnablement(patchWorkbench(originals[2]))];
+  const product = JSON.parse(originals[3]);
+  if (product.checksums?.['vs/workbench/workbench.desktop.main.js']) {
+    product.checksums['vs/workbench/workbench.desktop.main.js'] = crypto.createHash('sha256').update(generated[2]).digest('base64').replace(/=+$/, '');
+  }
+  generated.push(JSON.stringify(product, null, 2));
   const manifest = {
     version: product.version,
     commit: product.commit,
@@ -59,7 +65,7 @@ export function install(appPath, directory, restore = false) {
       patched: hash(generated[i])
     }))
   };
-  // Prepare both transformations and durable backups before altering either runtime.
+  // Prepare every transformation and durable backup before altering the installation.
   originals.forEach((source, i) => write(path.join(base, `original-${i}.js`), source));
   write(manifestPath, JSON.stringify(manifest));
   try {

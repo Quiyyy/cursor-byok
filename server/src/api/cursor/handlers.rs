@@ -39,6 +39,10 @@ fn router_with_proxy(registry: CursorServices, proxy: CursorProxy) -> Router {
             post(default_model::get_model_nudge),
         )
         .route(
+            "/agent.v1.AgentService/GetNewChatNudgeParameterizedModelPicker",
+            post(default_model::get_new_chat_nudge),
+        )
+        .route(
             "/aiserver.v1.AiService/AvailableDocs",
             post(compatibility::available_docs),
         )

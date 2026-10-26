@@ -52,6 +52,8 @@ export type LlmTool = {
 };
 
 export type LlmRequest = {
+  /** 原始 Responses 请求;存在时不再投影 messages/tools,由声明 nativeResponses 的 Provider 处理。 */
+  nativeResponses?: Record<string, JsonValue> | null;
   /** 系统指令;空字符串表示没有。 */
   instructions: string;
   messages: LlmMessage[];
@@ -78,6 +80,7 @@ export type ModelUsage = {
  * 回放状态在流结束前发出一次,宿主存入 assistant 消息供下一轮回放。
  */
 export type ModelEvent =
+  | { type: "responses-event"; event: JsonValue }
   | { type: "text-start" }
   | { type: "text-delta"; text: string }
   | { type: "text-end" }
@@ -114,6 +117,8 @@ export type ProviderResult =
   | { status: "request-error"; message: string; patch?: ResourcePatch };
 
 export type ProviderSupport = {
+  /** 支持原样传输 Responses 请求与 response.* 事件,包括服务端内置工具。 */
+  nativeResponses?: boolean;
   id: string;
   displayName: LocalizedText;
   description?: LocalizedText;

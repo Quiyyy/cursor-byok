@@ -454,6 +454,89 @@ Deno.test("reasoning replay projects response items to valid input items", () =>
   }]);
 });
 
+Deno.test("native Responses preserves hosted tools, signed input, citations and terminal events", async () => {
+  const token = jwt({ "https://api.openai.com/auth": { chatgpt_account_id: "acct-1" } });
+  const draft = await credentialDraft({
+    accessToken: token,
+    refreshToken: null,
+    displayName: null,
+  });
+  const input = request();
+  input.nativeResponses = {
+    model: "public-alias",
+    stream: false,
+    max_output_tokens: 100,
+    input: [{ type: "reasoning", encrypted_content: "signed-opaque", summary: [] }, {
+      role: "user",
+      content: "query",
+    }],
+    tools: [{ type: "web_search", filters: { allowed_domains: ["example.com"] } }],
+    tool_choice: "required",
+    include: ["web_search_call.action.sources"],
+  };
+  const before = JSON.stringify(input.nativeResponses);
+  const response = {
+    id: "response-native",
+    status: "completed",
+    output: [
+      { type: "web_search_call", status: "completed", action: { type: "search", query: "query" } },
+      {
+        type: "message",
+        content: [{
+          type: "output_text",
+          text: "Found it",
+          annotations: [{
+            type: "url_citation",
+            title: "Source",
+            url: "https://example.com/source",
+          }],
+        }],
+      },
+    ],
+    usage: { input_tokens: 10, output_tokens: 4 },
+  };
+  const rawEvents = [
+    { type: "response.created", response: { id: response.id, status: "in_progress" } },
+    { type: "response.web_search_call.completed", output_index: 0, item_id: "ws_1" },
+    { type: "response.completed", response },
+  ];
+  const events: ModelEvent[] = [];
+  let sent: Record<string, unknown> = {};
+  const result = await codexProvider.invoke(
+    {
+      model: { id: "gpt-test", displayName: "Test" },
+      resource: snapshot(draft.privateData),
+      request: input,
+    },
+    { emit: (event) => events.push(event) },
+    context({
+      stream: (_url, init) => {
+        sent = JSON.parse(init?.body ?? "{}");
+        return {
+          status: 200,
+          headers: {},
+          lines: sse(rawEvents.map((event) => `data: ${JSON.stringify(event)}`)),
+        };
+      },
+    }),
+  );
+  assertEquals(result, { status: "completed" });
+  assertEquals(sent.input, input.nativeResponses.input);
+  assertEquals(sent.tools, input.nativeResponses.tools);
+  assertEquals(sent.include, input.nativeResponses.include);
+  assertEquals(sent.tool_choice, "required");
+  assertEquals(sent.model, "gpt-test");
+  assertEquals(sent.stream, true);
+  assertEquals(sent.store, false);
+  assert(!("max_output_tokens" in sent));
+  assertEquals(JSON.stringify(input.nativeResponses), before);
+  assertEquals(
+    events.filter((event) => event.type === "responses-event"),
+    rawEvents.map((event) => ({ type: "responses-event", event })),
+  );
+  assertEquals(codexProvider.nativeResponses, true);
+});
+
 Deno.test("invoke streams incremental tool calls and replays reasoning items", async () => {
   const token = jwt({ "https://api.openai.com/auth": { chatgpt_account_id: "acct-1" } });
   const draft = await credentialDraft({
