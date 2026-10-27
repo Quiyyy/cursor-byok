@@ -23,3 +23,10 @@ incremental = false
 
 [profile.test.package."*"]
 debug = 0
+
+# Preflight streams a large LZMA installer, including in debug desktop builds.
+[profile.dev.package.lzma-rust2]
+opt-level = 3
+
+[profile.test.package.lzma-rust2]
+opt-level = 3

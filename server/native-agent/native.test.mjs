@@ -7,7 +7,7 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { patchAgentHost } from './patch.mjs';
-import { install } from './install.mjs';
+import { install, check } from './install.mjs';
 import { install as installBundled } from './install.bundle.mjs';
 import { catalogEntry } from './catalog.mjs';
 import { workbench } from './workbench.fixture.mjs';
@@ -22,12 +22,12 @@ const cache={};function __webpack_require__(id){if(!cache[id]){const out={};modu
 __webpack_require__.d=(out,entries)=>{for(const [key,get]of Object.entries(entries))Object.defineProperty(out,key,{get})};
 function createRouter(network,privateInference){const create=()=>{const options={runtimeCapabilities:network.runtimeCapabilities,privateInference};return new Router(network.agentClient,options)};return create()};globalThis.createRouter=createRouter;
 function unrelated(){class Router{}return new Router}`;
-const runtime = `(()=>{class Model{constructor(p){Object.assign(this,p)}static fromBinary(p){return p}}class Client{};
+const runtime = `(()=>{class Model{constructor(p){Object.assign(this,p)}static fromBinary(p){return p}toBinary(){return new Uint8Array([1])}}class Client{run(){}};
 function taskModels(o){const provider=o.localProvider;return {parentRequestedModelName:o.modelId,subagentModels:[],requireServerSideSubagent:false,getTaskToolConfig:id=>({id,provider})}}
 function providerSearch(config){return async(ctx,args)=>({answer:await request({path:"/responses",input:args.searchTerm}),documents:[]})}
 function tools(options){return {webSearch:providerSearch({modelId:options.modelId})}}
 const modules={12(e,t,r){r.d(t,{LocalAgentClient:()=>Client,buildBottlerocketPickerModels:()=>null,fetchLocalProviderModels:()=>null});}};
-function __webpack_require__(id){return id===12?{LocalAgentClient:Client}:{Type:Model}}
+function __webpack_require__(id){return id===12?{LocalAgentClient:Client,buildBottlerocketPickerModels:models=>models.map(p=>new Model(p)),fetchLocalProviderModels:async()=>({allModelIds:['grok-4.7']})}:{Type:Model}}
 const __webpack_exports__={};(()=>{const p=__webpack_require__(34);function decode(input){return p.Type.fromBinary(input.defaultModel)}})();
 const __webpack_export_target__=exports;Object.assign(__webpack_export_target__,__webpack_exports__);})();`;
 function temp(t) {
@@ -195,6 +195,12 @@ for (const [name, installer] of [['source', install], ['bundle', installBundled]
     checksums: {'vs/workbench/workbench.desktop.main.js':'original-checksum'}
   }));
   const originalProduct = fs.readFileSync(path.join(app, 'product.json'), 'utf8');
+  const candidateBefore = [...files,'product.json'].map(file=>fs.readFileSync(path.join(app,file)));
+  const checked = await check(app,data);
+  assert.equal(checked.version,'test');
+  assert.equal(checked.files.length,4);
+  assert.equal(fs.existsSync(data),false,'preflight does not install or create backups');
+  for(const [i,file] of [...files,'product.json'].entries()) assert.deepEqual(fs.readFileSync(path.join(app,file)),candidateBefore[i]);
   assert.equal(installer(app, data).changed, true);
   const context = {fn:()=>Symbol('aiService')};
   vm.runInNewContext(fs.readFileSync(path.join(app, files[2]), 'utf8'), context);

@@ -140,6 +140,11 @@ impl App {
     pub async fn serve_on(self, listener: TcpListener, shutdown: CancellationToken) -> Result<()> {
         let address = listener.local_addr()?;
         self.harness.set_backend_addr(address);
+        if let Err(error) = self.harness.restore().await {
+            // Keep management available so the user can inspect and retry takeover.
+            tracing::warn!(%error, "failed to restore Cursor takeover during startup");
+        }
+        self.harness.start_cursor_update_check_if_managed().await;
         tracing::info!(%address, "cursor server listening");
         let harness = self.harness;
         let graceful = shutdown.clone();

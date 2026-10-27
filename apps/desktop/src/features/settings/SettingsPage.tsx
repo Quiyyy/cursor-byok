@@ -3,6 +3,7 @@ import { api, type ProxySettings, type ProxySettingsInput, type StatisticsStorag
 import { PageContent } from "../../shell/layout/PageContent";
 import { LegacyModelImport } from "../models/LegacyModelImport";
 import { AppLifecycleSettingsCard } from "./AppLifecycleSettingsCard";
+import { CursorUpdateSettingsCard } from "./CursorUpdateSettingsCard";
 import { CommitSettingsCard } from "./CommitSettingsCard";
 import { ExternalApiSettingsCard } from "./ExternalApiSettingsCard";
 import { PricingSettingsCard } from "./PricingSettingsCard";
@@ -231,6 +232,7 @@ export function SettingsPage() {
       <CommitSettingsCard />
       <PricingSettingsCard />
       <AppLifecycleSettingsCard />
+      <CursorUpdateSettingsCard />
       <LegacyModelImport>{({ busy, previewing, open }) => <TitledCard title={t("导入")}>
         <div className={styles.importRow}>
           <div>

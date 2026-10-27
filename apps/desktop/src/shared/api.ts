@@ -95,6 +95,21 @@ export interface ModelConnectivityResult {
 }
 
 export type CaState = "missing" | "untrusted" | "ready" | "invalid";
+export type CursorUpdatePhase = "idle" | "checking" | "downloading" | "verifying" | "extracting" | "validating" | "ready" | "closing" | "installing" | "patching" | "starting" | "complete" | "failed";
+export interface CursorUpdateStatus {
+  supported: boolean;
+  unsupported_reason: string | null;
+  enabled: boolean;
+  current_version: string | null;
+  phase: CursorUpdatePhase;
+  busy: boolean;
+  can_cancel: boolean;
+  downloaded_bytes: number;
+  total_bytes: number | null;
+  candidate: { id: string; version: string; commit: string } | null;
+  error: string | null;
+  recovery_required: boolean;
+}
 export type IntegrationState = "disabled" | "enabled" | "degraded";
 export interface CursorHarnessStatus {
   platform: string;
@@ -488,6 +503,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  cursorUpdateStatus: () => request<CursorUpdateStatus>("/cursor-update"),
+  configureCursorUpdates: (enabled: boolean) => request<CursorUpdateStatus>("/cursor-update", { method: "PUT", body: JSON.stringify({ enabled }) }),
+  checkCursorUpdate: () => request<CursorUpdateStatus>("/cursor-update/check", { method: "POST" }),
+  installCursorUpdate: (candidate_id: string) => request<CursorUpdateStatus>("/cursor-update/install", { method: "POST", body: JSON.stringify({ candidate_id }) }),
+  cancelCursorUpdateCheck: () => request<CursorUpdateStatus>("/cursor-update/cancel", { method: "POST" }),
+  recoverCursorUpdate: () => request<CursorUpdateStatus>("/cursor-update/recover", { method: "POST" }),
   models: () => request<Model[]>("/models"),
   createModels: (models: ModelInput[]) => request<Model[]>("/models", { method: "POST", body: JSON.stringify({ models }) }),
   reorderModels: (modelHashes: string[]) => request<Model[]>("/models/order", { method: "PUT", body: JSON.stringify({ model_hashes: modelHashes }) }),

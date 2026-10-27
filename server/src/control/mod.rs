@@ -1,5 +1,6 @@
 //! Exposes the local control API.
 mod calls;
+mod cursor_update;
 mod harness;
 mod models;
 mod overview;
@@ -229,6 +230,11 @@ pub fn api_router(service: ControlService) -> Router {
             "/__byok-api__/api/harness/cursor/enabled",
             put(harness::set_enabled),
         )
+        .route("/__byok-api__/api/cursor-update", get(cursor_update::status).put(cursor_update::configure))
+        .route("/__byok-api__/api/cursor-update/check", post(cursor_update::check))
+        .route("/__byok-api__/api/cursor-update/install", post(cursor_update::install))
+        .route("/__byok-api__/api/cursor-update/cancel", post(cursor_update::cancel))
+        .route("/__byok-api__/api/cursor-update/recover", post(cursor_update::recover))
         .with_state(service)
         .layer(desktop_cors())
 }

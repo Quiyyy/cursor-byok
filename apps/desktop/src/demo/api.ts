@@ -188,6 +188,7 @@ export function installDemoApi() {
     if (path === "/overview") return json(createOverview(url.searchParams));
     if (path === "/llm-calls") return json(calls);
     if (path.startsWith("/llm-calls/")) return json(createCallDetail(path.slice("/llm-calls/".length)));
+    if (path === "/cursor-update") return json({ supported: true, unsupported_reason: null, enabled: false, current_version: "3.26.16", phase: "ready", busy: false, can_cancel: false, downloaded_bytes: 0, total_bytes: null, candidate: { id: "demo", version: "3.27.14", commit: "demo" }, error: null, recovery_required: false });
     if (path === "/harness/cursor/status") return json(harnessStatus);
     if (path === "/harness/cursor/ca/initialize") return json(harnessStatus);
     if (path === "/harness/cursor/enabled") {

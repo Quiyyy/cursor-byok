@@ -16,6 +16,54 @@ function write(file, bytes) {
   fs.writeFileSync(temporary, bytes);
   fs.renameSync(temporary, file);
 }
+function prepare(originals, directory) {
+  const bridge = path.join(directory, 'route.cjs');
+  const generated = [patchAgentHost(originals[0], bridge), patchLocalSearch(patchTaskModels(exposeNativeClient(originals[1]), bridge), path.join(directory, 'search.cjs')), patchHostEnablement(patchWorkbench(originals[2]))];
+  const product = JSON.parse(originals[3]);
+  if (product.checksums?.['vs/workbench/workbench.desktop.main.js']) {
+    product.checksums['vs/workbench/workbench.desktop.main.js'] = crypto.createHash('sha256').update(generated[2]).digest('base64').replace(/=+$/, '');
+  }
+  generated.push(JSON.stringify(product, null, 2));
+  return {generated, product};
+}
+
+// Prepare the exact production transformations in memory and exercise the native
+// factories with fixture metadata. Never install, write settings, or call a provider.
+export async function check(appPath, directory) {
+  const app = fs.realpathSync(appPath);
+  const originals = files.map(file => read(path.join(app, file)));
+  const {generated, product} = prepare(originals, directory);
+  const filename = path.join(app, files[1]);
+  const library = new Module(filename);
+  library.filename = filename;
+  library.paths = Module._nodeModulePaths(path.dirname(filename));
+  const load = Module._load;
+  try {
+    Module._load = function(id, ...args) { return id === 'vscode' ? {} : load.call(this, id, ...args); };
+    library._compile(generated[1], filename);
+    const native = library.exports;
+    const model = {id:'grok-4.7',displayName:'BYOK check',contextLength:500000,supportsVision:true,extendedCapabilitiesDetected:true};
+    const metadata = await native.__byokRefreshModels({baseUrl:'http://127.0.0.1:1/v1',apiKey:'fixture',fetchImpl:async()=>Response.json({data:[{...model,object:'model',api_types:['openai_chat'],capabilities:{context_length:500000,supports_tool_use:true,supports_streaming:true}}]})});
+    if (!metadata.allModelIds.includes(model.id)) throw Error('Native model metadata check failed');
+    const [entry] = native.__byokModelCatalog([model]);
+    const details = native.__byokCreateModelDetails(model.id);
+    if (!entry?.toBinary().length || !details.toBinary().length) throw Error('Native model serialization check failed');
+    const Client = native.__byokLocalAgentClient();
+    const client = new Client({localProvider:{kind:'http',endpoints:[{baseUrl:'http://127.0.0.1:1/v1',apiKey:'fixture'}]},defaultModel:details,availableModels:()=>[details],privacyMode:2,customHeaders:{},maxRetries:10,enableSmartModeClassifier:true});
+    if (typeof client.run !== 'function') throw Error('Native client Run entry is unavailable');
+  } finally { Module._load = load; }
+  return {version:product.version,commit:product.commit,files:files.map((file,i)=>({file,sha256:hash(originals[i])}))};
+}
+export function verify(appPath, directory) {
+  const app=fs.realpathSync(appPath);
+  const base=path.join(directory,'installations',hash(app));
+  const manifest=JSON.parse(read(path.join(base,'manifest.json')));
+  for(const [i,file] of files.entries()) {
+    const entry=manifest.files[i];
+    if(entry?.file!==file || hash(read(path.join(app,file)))!==entry.patched || hash(read(path.join(base,`original-${i}.js`)))!==entry.original) throw Error(`Cursor BYOK installed file verification failed: ${file}`);
+  }
+  return {version:manifest.version,commit:manifest.commit,files:manifest.files.map(entry=>({file:entry.file,sha256:entry.original}))};
+}
 export function install(appPath, directory, restore = false) {
   const app = fs.realpathSync(appPath);
   const base = path.join(directory, 'installations', hash(app));
@@ -49,13 +97,7 @@ export function install(appPath, directory, restore = false) {
       restored: true
     };
   }
-  const bridge = path.join(directory, 'route.cjs');
-  const generated = [patchAgentHost(originals[0], bridge), patchLocalSearch(patchTaskModels(exposeNativeClient(originals[1]), bridge), path.join(directory, 'search.cjs')), patchHostEnablement(patchWorkbench(originals[2]))];
-  const product = JSON.parse(originals[3]);
-  if (product.checksums?.['vs/workbench/workbench.desktop.main.js']) {
-    product.checksums['vs/workbench/workbench.desktop.main.js'] = crypto.createHash('sha256').update(generated[2]).digest('base64').replace(/=+$/, '');
-  }
-  generated.push(JSON.stringify(product, null, 2));
+  const {generated, product} = prepare(originals, directory);
   const manifest = {
     version: product.version,
     commit: product.commit,
@@ -86,7 +128,11 @@ export function install(appPath, directory, restore = false) {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    if (process.argv[4] === 'catalog') {
+    if (process.argv[4] === 'verify') {
+      console.log(JSON.stringify(verify(process.argv[2],process.argv[3])));
+    } else if (process.argv[4] === 'check') {
+      console.log(JSON.stringify(await check(process.argv[2], process.argv[3])));
+    } else if (process.argv[4] === 'catalog') {
       // The exported native picker factory owns effort choices and model-family defaults.
       const models = JSON.parse(fs.readFileSync(0, 'utf8'));
       const original = Module._load;

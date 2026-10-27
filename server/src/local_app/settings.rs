@@ -33,7 +33,7 @@ fn path() -> Result<PathBuf> {
     }
 }
 
-fn read() -> Result<BTreeMap<String, Value>> {
+pub(super) fn read() -> Result<BTreeMap<String, Value>> {
     let path = path()?;
     let data = match fs::read_to_string(path) {
         Ok(data) => data,
@@ -47,7 +47,7 @@ fn read() -> Result<BTreeMap<String, Value>> {
         .map_err(|error| Error::Config(format!("parse Cursor settings JSONC: {error}")))
 }
 
-fn write(settings: &BTreeMap<String, Value>) -> Result<()> {
+pub(super) fn write(settings: &BTreeMap<String, Value>) -> Result<()> {
     let path = path()?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -57,6 +57,48 @@ fn write(settings: &BTreeMap<String, Value>) -> Result<()> {
     fs::write(&temp, [data.as_slice(), b"\n"].concat())?;
     fs::rename(temp, path)?;
     Ok(())
+}
+
+pub(super) fn update_management_patch(
+    current: &BTreeMap<String, Value>,
+) -> BTreeMap<String, Value> {
+    let mut patch = BTreeMap::from([
+        ("update.mode".into(), Value::String("none".into())),
+        (
+            "update.enableWindowsBackgroundUpdates".into(),
+            Value::Bool(false),
+        ),
+    ]);
+    // Disabling desktop updates must not silently disable the independent Agent
+    // updater when its default previously followed an enabled desktop updater.
+    let agent = current
+        .get("cursor.agentHost.updateMode")
+        .and_then(Value::as_str);
+    if current.get("update.mode").and_then(Value::as_str) != Some("none")
+        && matches!(agent, None | Some("default"))
+    {
+        patch.insert(
+            "cursor.agentHost.updateMode".into(),
+            Value::String("on".into()),
+        );
+    }
+    patch
+}
+
+pub(super) fn restore_update_patch(
+    current: &mut BTreeMap<String, Value>,
+    saved: &crate::store::CursorUpdateSettings,
+) {
+    for (key, applied) in &saved.applied {
+        if current.get(key) != Some(applied) {
+            continue;
+        }
+        if let Some(original) = saved.original.get(key) {
+            current.insert(key.clone(), original.clone());
+        } else {
+            current.remove(key);
+        }
+    }
 }
 
 pub fn write_proxy_settings(proxy_url: &str) -> Result<()> {
@@ -108,4 +150,36 @@ pub fn clear_stale_managed_settings() -> Result<()> {
         clear_proxy_settings()?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::*;
+    #[test]
+    fn update_management_preserves_agent_policy_and_later_user_edits() {
+        let original = BTreeMap::from([("unrelated".into(), Value::Bool(true))]);
+        let applied = update_management_patch(&original);
+        assert_eq!(applied["cursor.agentHost.updateMode"], "on");
+        let mut current = original.clone();
+        current.extend(applied.clone());
+        current.insert("update.mode".into(), Value::String("manual".into()));
+        let saved = crate::store::CursorUpdateSettings {
+            original: BTreeMap::new(),
+            applied,
+            ..Default::default()
+        };
+        restore_update_patch(&mut current, &saved);
+        assert_eq!(current["update.mode"], "manual");
+        assert!(!current.contains_key("cursor.agentHost.updateMode"));
+        assert_eq!(current["unrelated"], true);
+        for mode in ["on", "none"] {
+            let settings = BTreeMap::from([(
+                "cursor.agentHost.updateMode".into(),
+                Value::String(mode.into()),
+            )]);
+            assert!(!update_management_patch(&settings).contains_key("cursor.agentHost.updateMode"));
+        }
+        let off = BTreeMap::from([("update.mode".into(), Value::String("none".into()))]);
+        assert!(!update_management_patch(&off).contains_key("cursor.agentHost.updateMode"));
+    }
 }

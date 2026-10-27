@@ -149,6 +149,11 @@ pub struct ObservabilitySettings {
 }
 
 impl ControlService {
+    #[cfg(test)]
+    pub(crate) fn with_test_harness(mut self, harness: CursorHarness) -> Self {
+        self.cursor_harness = harness;
+        self
+    }
     pub fn new(
         store: Store,
         provider: Arc<dyn Provider>,

@@ -26,6 +26,8 @@ use super::CaState;
 #[derive(Clone)]
 pub struct CaManager {
     dir: PathBuf,
+    #[cfg(test)]
+    trusted_fixture: bool,
 }
 
 pub struct LoadedCa {
@@ -36,7 +38,21 @@ impl CaManager {
     pub fn managed() -> Result<Self> {
         Ok(Self {
             dir: managed_data_dir()?.join("ca"),
+            #[cfg(test)]
+            trusted_fixture: false,
         })
+    }
+    #[cfg(test)]
+    pub(in crate::local_app) fn fixture(dir: PathBuf, ready: bool) -> Result<Self> {
+        let manager = Self {
+            dir,
+            trusted_fixture: ready,
+        };
+        if ready {
+            std::fs::create_dir_all(&manager.dir)?;
+            manager.generate()?;
+        }
+        Ok(manager)
     }
 
     fn cert_path(&self) -> PathBuf {
@@ -59,6 +75,10 @@ impl CaManager {
             (Ok(cert), Ok(key)) => {
                 if parse_issuer(&cert, &key).is_err() {
                     return Ok(CaState::Invalid);
+                }
+                #[cfg(test)]
+                if self.trusted_fixture {
+                    return Ok(CaState::Ready);
                 }
                 Ok(if is_installed(&cert)? {
                     CaState::Ready

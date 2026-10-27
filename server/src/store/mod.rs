@@ -2,6 +2,7 @@
 mod cas;
 mod cursor_model;
 mod cursor_traces;
+mod cursor_update;
 mod legacy_config;
 mod llm_calls;
 mod migrations;
@@ -16,6 +17,7 @@ mod writer;
 pub use cas::*;
 pub use cursor_model::CursorModelSettings;
 pub(crate) use cursor_traces::BufferedCursorTraceChunk;
+pub use cursor_update::CursorUpdateSettings;
 pub(crate) use llm_calls::BufferedLlmChunk;
 pub use model_settings::ModelSettings;
 pub use settings::*;

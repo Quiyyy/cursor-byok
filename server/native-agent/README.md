@@ -11,7 +11,8 @@ search.cjs          # 官方搜索优先，失败时调用现有服务商搜索
 search-patch.mjs    # 当前 Host 客户端与原生搜索工厂的绑定
 workbench.mjs       # 原生新窗口与新对话的默认模型初始化
 catalog.mjs         # 原生模型目录的服务商元数据补充
-install.mjs         # 安装、备份、恢复及模型目录序列化
+install.mjs         # 只读预检、安装、备份、恢复及模型目录序列化
+check.test.mjs      # 不支持的候选版本在预检中保持文件不变
 native.test.mjs     # 安装边界、路由与状态所有权回归
 workbench.test.mjs  # 新对话默认值、目录等待与已有对话隔离回归
 workbench.fixture.mjs # 新窗口和对话创建的合成测试夹具
@@ -59,6 +60,12 @@ CI 可移植测试不需要安装 Cursor；真实客户端验证使用独立安�
 `native-agent/installations/` 保存按安装位置区分的清单和原始文件。恢复时只处理哈希仍等于本应用补丁的文件，不覆盖 Cursor 更新产生的新文件。`native-agent/connection.json` 包含本地网关凭据，应保留在用户数据目录。
 
 关闭接管首先禁用路由，再恢复文件与代理设置；正常退出也执行恢复。意外退出后的清单用于下一次启动恢复或重新接管。入口改动需要重启对应 Cursor 进程。
+
+服务启动时直接恢复已保存的接管设置，包括不打开主窗口的静默启动；恢复失败保留管理服务用于查看状态和重试。读取模型目录前，使用安装锁核对本次已安装文件的指纹；文件被更新替换、缺失或接管已关闭时清除目录缓存，提示重新开启接管并重新打开 Cursor，不在目录请求中重新安装。自动关闭 Cursor 失败会返回明确错误，并保留待关闭标记，后续重试不会因为补丁已经写入就误报成功。
+
+Windows 子进程使用当前安装内的 `resources/helpers/node.exe` 执行入口脚本，避免为检查或安装启动 Cursor 编辑器。`check` 在内存中准备补丁并验证原生模型目录、消息序列化和客户端工厂，只返回版本及原始文件哈希；不写入候选安装。`verify` 核对安装清单、补丁和原始备份。两者复用正式安装逻辑，由 `server/src/local_app/update/` 在官方更新前后调用。
+
+Windows 更新验收入口为默认忽略的 `local_app::update::e2e::windows_user_update_acceptance`。只允许在临时 `ByokProof_*` 标准账户运行，安装目录必须在仓库 `target/cursor-update-acceptance/` 下；输入由 `CURSOR_UPDATE_E2E_INPUT` 指向官方签名的旧版安装包，工作目录由 `CURSOR_UPDATE_E2E_ROOT` 指定。测试通过实际 HTTP 管理接口执行取消、升级、补丁验证与中断恢复；证书信任由测试夹具提供，不修改 Windows 证书库，不调用真实模型。
 
 ## 验证范围
 

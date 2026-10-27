@@ -148,7 +148,7 @@ export function AppLifecycleSettingsCard() {
     </div>}
     <div className={styles.row}>
       <div>
-        <strong>{t("软件更新")}</strong>
+        <strong>{t("BYOK 更新")}</strong>
         <small>{availableVersion
           ? t("版本 {version} 可以安装", { version: availableVersion })
           : t("当前版本 {version}", { version })}</small>

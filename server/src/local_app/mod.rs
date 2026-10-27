@@ -5,9 +5,19 @@ mod native_agent;
 mod process;
 mod proxy;
 mod settings;
+#[cfg(test)]
+mod tests;
+pub mod update;
 pub use native_agent::NativeAgent;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    future::Future,
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -83,6 +93,9 @@ struct Inner {
     backend_addr: RwLock<Option<SocketAddr>>,
     tab_mode: Arc<RwLock<TabMode>>,
     proxy: Mutex<ProxyRuntime>,
+    restart_required: AtomicBool,
+    operation: Arc<Mutex<()>>,
+    update: update::Runtime,
 }
 
 impl CursorHarness {
@@ -96,6 +109,11 @@ impl CursorHarness {
                 backend_addr: RwLock::new(None),
                 tab_mode: Arc::new(RwLock::new(TabMode::default())),
                 proxy: Mutex::new(ProxyRuntime::default()),
+                restart_required: AtomicBool::new(false),
+                operation: Arc::new(Mutex::new(())),
+                update: update::Runtime::new(
+                    crate::config::managed_data_dir()?.join("cursor-update"),
+                ),
             }),
         })
     }
@@ -116,17 +134,24 @@ impl CursorHarness {
         settings::clear_stale_managed_settings()
     }
 
+    pub async fn restore(&self) -> Result<()> {
+        let _operation = self.inner.operation.lock().await;
+        self.restore_cursor_update_settings().await?;
+        if self.inner.update.pending() {
+            if let Err(error) = self.recover_cursor_update_locked().await {
+                self.inner.update.failed(&error);
+                return Err(error);
+            }
+        }
+        restore_saved_takeover(&self.inner.store, self.enable()).await
+    }
+
     pub async fn status(&self) -> Result<CursorHarnessStatus> {
         let models = self.inner.store.models().await?;
         let configured_models = models.len();
         let enabled_models = configured_models;
         let ca = self.inner.ca.state()?;
-        if self.inner.store.cursor_takeover_enabled().await?
-            && matches!(ca, CaState::Ready)
-            && self.inner.backend_addr.read().is_some()
-        {
-            self.enable().await?;
-        }
+        let native_ready = self.inner.native.is_installed().await;
         let proxy = self.inner.proxy.lock().await;
         let proxy_url = proxy.url();
         let settings_applied = proxy_url
@@ -136,7 +161,7 @@ impl CursorHarness {
             .unwrap_or(false);
         let integration = match (proxy.running(), settings_applied) {
             (false, false) => IntegrationState::Disabled,
-            (true, true) => IntegrationState::Enabled,
+            (true, true) if native_ready => IntegrationState::Enabled,
             _ => IntegrationState::Degraded,
         };
         Ok(CursorHarnessStatus {
@@ -161,21 +186,32 @@ impl CursorHarness {
     }
 
     pub async fn set_enabled(&self, enabled: bool) -> Result<CursorHarnessStatus> {
+        let _operation = self
+            .inner
+            .operation
+            .try_lock()
+            .map_err(|_| Error::Busy("Cursor takeover or update is in progress".into()))?;
+        self.inner.update.ensure_accepting()?;
+        if enabled && self.inner.update.pending() {
+            return Err(Error::Busy(
+                "Recover the interrupted Cursor update first".into(),
+            ));
+        }
         if enabled {
             if let Err(error) = self.enable().await {
                 let _ = self.inner.store.set_cursor_takeover_enabled(false).await;
-                if let Err(cleanup) = self.disable().await {
+                if let Err(cleanup) = self.disable_locked().await {
                     tracing::warn!(%cleanup, "failed to clean up unsuccessful Cursor takeover");
                 }
                 return Err(error);
             }
             if let Err(error) = self.inner.store.set_cursor_takeover_enabled(true).await {
-                let _ = self.disable().await;
+                let _ = self.disable_locked().await;
                 return Err(error);
             }
         } else {
             self.inner.store.set_cursor_takeover_enabled(false).await?;
-            self.disable().await?;
+            self.disable_locked().await?;
         }
         self.status().await
     }
@@ -197,7 +233,7 @@ impl CursorHarness {
             .backend_addr
             .read()
             .ok_or_else(|| Error::Config("desktop management server is not ready".into()))?;
-        let mut proxy = self.inner.proxy.lock().await;
+        let proxy = self.inner.proxy.lock().await;
         let native_changed = self.inner.native.enable(backend_addr).await?;
         let settings_applied = proxy
             .url()
@@ -205,13 +241,18 @@ impl CursorHarness {
             .map(settings::settings_match)
             .transpose()?
             .unwrap_or(false);
-        if !settings_applied || native_changed {
-            // Terminating Cursor only makes the freshly written http.proxy take effect
-            // sooner; it is optional, so a failed probe or kill must not block takeover.
-            if let Err(error) = process::terminate_cursor().await {
-                tracing::warn!(%error, "could not terminate Cursor before applying proxy settings");
-            }
-        }
+        close_cursor_if_needed(
+            &self.inner.restart_required,
+            !settings_applied || native_changed,
+            process::terminate_cursor(),
+        )
+        .await?;
+        drop(proxy);
+        self.enable_transport(backend_addr).await
+    }
+
+    async fn enable_transport(&self, backend_addr: SocketAddr) -> Result<()> {
+        let mut proxy = self.inner.proxy.lock().await;
         if proxy.running() {
             if let Some(url) = proxy.url() {
                 apply_cursor_configuration(&url).await?;
@@ -241,12 +282,51 @@ impl CursorHarness {
     }
 
     pub async fn disable(&self) -> Result<()> {
-        let native = self.inner.native.disable().await;
+        self.inner.update.stop();
+        let _operation = self.inner.operation.lock().await;
+        self.inner.update.cancel_check();
+        self.disable_locked().await
+    }
+    async fn disable_locked(&self) -> Result<()> {
+        let native = if self.inner.update.pending() {
+            self.inner.native.deactivate().await
+        } else {
+            self.inner.native.disable().await
+        };
         let settings = settings::clear_proxy_settings();
         self.inner.proxy.lock().await.stop().await;
         native?;
         settings
     }
+}
+
+async fn restore_saved_takeover(
+    store: &Store,
+    restore: impl Future<Output = Result<()>>,
+) -> Result<()> {
+    if store.cursor_takeover_enabled().await? {
+        restore.await?;
+    }
+    Ok(())
+}
+
+async fn close_cursor_if_needed(
+    pending: &AtomicBool,
+    changed: bool,
+    terminate: impl Future<Output = Result<()>>,
+) -> Result<()> {
+    if changed {
+        pending.store(true, Ordering::Relaxed);
+    }
+    if pending.load(Ordering::Relaxed) {
+        terminate.await.map_err(|error| {
+            Error::Config(format!(
+                "无法自动关闭 Cursor 以应用接管，请完全退出 Cursor 后重试开启接管：{error}"
+            ))
+        })?;
+        pending.store(false, Ordering::Relaxed);
+    }
+    Ok(())
 }
 
 async fn apply_cursor_configuration(proxy_url: &str) -> Result<()> {

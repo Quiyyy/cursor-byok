@@ -1,0 +1,9 @@
+@use "../../styles/typography" as type;
+.content { display: flex; flex-direction: column; gap: 16px; margin: 16px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.description { display: flex; flex-direction: column; gap: 5px; flex: 1 1 220px; }
+.content small { font-size: type.$font-size-xs; color: var(--vscode-descriptionForeground); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.download { display: flex; align-items: center; gap: 12px; }
+.download progress { flex: 1; min-width: 0; accent-color: var(--vscode-focusBorder); }
+.content .error { color: var(--vscode-errorForeground); overflow-wrap: anywhere; }

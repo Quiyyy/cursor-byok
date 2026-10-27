@@ -184,6 +184,26 @@ Cursor 原生 WebSearch
 
 目录补充由 `native-agent/catalog.mjs` 完成：上游声明的思考档位、默认档位和上下文容量进入原生消息，variant 的路由字段保持 BYOK 模型身份，避免被 Workbench 误当作 Auto。原生客户端每轮刷新自己的模型元数据缓存；当新型号的原生传输层省略已选思考档位时，网关只补齐上游明确支持且请求中缺失的值。上下文占用量仍来自原生会话 Token 状态，不在 BYOK 重建估算器。
 
+## Cursor 更新管理
+
+更新由 `local_app/update/` 管理，首版范围为 Windows x64 稳定渠道用户安装版。BYOK 自身的更新仍由桌面壳 `apps/desktop/src-tauri/src/update/` 负责。
+
+```text
+local_app/update/
+├── mod.rs          # 设置、状态、任务互斥及持久化更新记录
+├── prepare.rs      # 官方新版查询、缓存与只读接管预检
+├── package.rs      # 安装包下载、哈希、Inno 只读解析和安全解包
+├── install.rs      # 正常退出 → 官方安装 → 补丁验证 → 启动，以及中断恢复
+├── windows.rs      # Windows 平台命令和安装器参数
+└── windows.ps1     # 签名及当前用户进程检查、正常关闭请求
+```
+
+`control/cursor_update.rs` 通过既有 HTTP 管理边界接入设置卡片。管理开关、官方更新查询的分组标识及原 Cursor 更新配置复用 `service_settings`；安装包和最新操作记录保存在数据目录的 `cursor-update/`。未增加数据库迁移或常驻文件监视器。
+
+检查在启动或显式请求时执行。候选包必须来自官方 Windows 用户安装渠道，通过签名和内容校验，再用包内 Node 运行时执行现有原生补丁的内存预检；预检不执行安装器、不修改当前安装。检查结果绑定包哈希和补丁版本。
+
+接管启停和更新共用安装操作锁，状态查询只读；安装期间模型目录缓存失效。用户确认后正常关闭 Cursor，官方安装器禁用 `runcode` 自动启动任务，补丁和原生模型目录验证通过后才启动 Cursor。拒绝关闭不进入安装，安装器超时不被强杀，中断记录用于下次恢复；明确关闭接管时不会因恢复流程重新开启它。
+
 ## 已移除的实现
 
 已删除 `server/src/run/`，以及 `cursor/` 下的 `compile/`、`prompting/`、`tools/`、`checkpoint/`、`conversation/`、`transport/`、`native/`。旧 Node 工具 worker、Agent 提示模板、固定工具快照、协议提取器和整套 Agent protobuf 也已删除。

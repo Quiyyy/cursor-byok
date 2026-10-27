@@ -37,6 +37,7 @@ struct DesktopRuntime {
     server: Mutex<Option<JoinHandle<Result<()>>>>,
     exiting: AtomicBool,
     server_addr: std::net::SocketAddr,
+    harness: cursor_server::local_app::CursorHarness,
 }
 
 #[tauri::command]
@@ -243,6 +244,7 @@ pub fn run() -> ExitCode {
                 .set_dock_visibility(desktop_settings.show_dock_icon)?;
             let shutdown = CancellationToken::new();
             let server_shutdown = shutdown.clone();
+            let harness = server.harness();
             let app_handle = app.handle().clone();
             let task = tauri::async_runtime::spawn(async move {
                 let result = server.serve_on(listener, server_shutdown).await;
@@ -257,6 +259,7 @@ pub fn run() -> ExitCode {
                 server: Mutex::new(Some(task)),
                 exiting: AtomicBool::new(false),
                 server_addr: address,
+                harness,
             });
             if desktop_settings.silent_start && started_by_autostart {
                 tracing::info!("silent autostart enabled; starting without the main window");
@@ -285,10 +288,14 @@ pub fn run() -> ExitCode {
                 let runtime = app.state::<DesktopRuntime>();
                 if !runtime.exiting.swap(true, Ordering::AcqRel) {
                     api.prevent_exit();
-                    runtime.shutdown.cancel();
+                    let shutdown = runtime.shutdown.clone();
+                    let harness = runtime.harness.clone();
                     let server = runtime.server.lock().expect("server lock poisoned").take();
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
+                        // Finishing the installer + patch sequence precedes normal shutdown cleanup.
+                        harness.wait_for_cursor_update().await;
+                        shutdown.cancel();
                         if let Some(server) = server {
                             match tokio::time::timeout(Duration::from_secs(11), server).await {
                                 Ok(Ok(Ok(()))) => {}
