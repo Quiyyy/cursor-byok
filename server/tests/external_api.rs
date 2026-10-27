@@ -125,22 +125,20 @@ async fn raw_and_translated_requests_share_configuration_and_keep_explicit_optio
     for (path, mut request) in [
         (
             "/byok/v1/chat/completions",
-            json!({"messages":[{"role":"user","content":"hello"}],"max_tokens":100,"reasoning_effort":"low"}),
+            json!({"messages":[{"role":"user","content":"hello"}],"max_tokens":100,"reasoning_effort":"low","stop":["{{SessionId}}"],"prompt_cache_key":"caller-cache"}),
         ),
         (
             "/byok/v1/responses",
-            json!({"input":"hello","max_output_tokens":100,"reasoning":{"effort":"low"}}),
+            json!({"input":"hello","max_output_tokens":100,"reasoning":{"effort":"low"},"prompt_cache_key":"caller-cache"}),
         ),
         (
             "/byok/v1/messages",
-            json!({"messages":[{"role":"user","content":"hello"}],"max_tokens":100,"output_config":{"effort":"low"}}),
+            json!({"messages":[{"role":"user","content":"hello"}],"max_tokens":100,"output_config":{"effort":"low"},"stop_sequences":["{{SessionId}}"]}),
         ),
     ] {
         request["model"] = json!("work/gpt-test");
         request["stream"] = json!(true);
         request["temperature"] = json!(0.2);
-        request["stop"] = json!(["{{SessionId}}"]);
-        request["prompt_cache_key"] = json!("caller-cache");
         let (status, response) = send(router.clone(), "POST", path, Some("secret"), request).await;
         assert_eq!(status, StatusCode::OK, "{path}: {response}");
         let forwarded = receiver.recv().await.unwrap();
@@ -157,8 +155,19 @@ async fn raw_and_translated_requests_share_configuration_and_keep_explicit_optio
             100
         );
         assert_eq!(forwarded["temperature"], 0.2);
-        assert_eq!(forwarded["stop"], json!(["{{SessionId}}"]));
-        assert_eq!(forwarded["prompt_cache_key"], "caller-cache");
+        if path.ends_with("/responses") {
+            assert!(forwarded.get("stop").is_none());
+        } else {
+            assert_eq!(forwarded["stop"], json!(["{{SessionId}}"]));
+        }
+        if path.ends_with("/messages") {
+            assert!(forwarded["prompt_cache_key"]
+                .as_str()
+                .unwrap()
+                .starts_with("external-api:"));
+        } else {
+            assert_eq!(forwarded["prompt_cache_key"], "caller-cache");
+        }
     }
     for (path, mut request) in [
         (
@@ -241,6 +250,199 @@ async fn raw_and_translated_requests_share_configuration_and_keep_explicit_optio
         assert_eq!(call["source"], source);
         assert!(call.get("provider_call_index").is_none());
         assert!(call.get("call_kind").is_none());
+    }
+    server.abort();
+}
+
+#[tokio::test]
+async fn translated_options_use_the_target_protocol_without_changing_raw_forwarding() {
+    let (directory, store) = fixtures::temp_store().await;
+    let (sender, mut received) = tokio::sync::mpsc::unbounded_channel();
+    let upstream = Router::new().route("/{protocol}", post(move |axum::extract::Path(protocol): axum::extract::Path<String>, Json(body): Json<Value>| {
+        let sender = sender.clone();
+        async move {
+            sender.send(body.clone()).unwrap();
+            let forbidden: &[&str] = match protocol.as_str() {
+                "messages" => &["stop", "seed", "prompt_cache_key"],
+                "responses" => &["stop", "stop_sequences", "seed"],
+                _ => &["stop_sequences"],
+            };
+            if forbidden.iter().any(|field| body.get(*field).is_some()) {
+                return (StatusCode::BAD_REQUEST, Json(json!({"error":{"message":"unexpected protocol parameter"}}))).into_response();
+            }
+            let events = match protocol.as_str() {
+                "messages" => vec![
+                    json!({"type":"message_start","message":{"id":"msg-fixture","type":"message","role":"assistant","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}),
+                    json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}),
+                    json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}),
+                    json!({"type":"content_block_stop","index":0}),
+                    json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}),
+                    json!({"type":"message_stop"}),
+                ],
+                "responses" => vec![
+                    json!({"type":"response.output_text.delta","delta":"ok"}),
+                    json!({"type":"response.completed","response":{"status":"completed","output":[]}}),
+                ],
+                _ => vec![json!({"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]})],
+            };
+            let response = events.iter().map(|event| format!("data: {event}\n\n")).collect::<String>();
+            ([("content-type","text/event-stream")], response).into_response()
+        }
+    }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+    for (id, kind, endpoint) in [
+        ("chat", ModelType::OpenAi, OPENAI_CHAT_ENDPOINT),
+        ("responses", ModelType::OpenAi, OPENAI_RESPONSES_ENDPOINT),
+        ("messages", ModelType::Anthropic, ""),
+    ] {
+        let mut input = model_input();
+        input.model_id = id.into();
+        input.model_type = kind;
+        input.openai_endpoint = endpoint.into();
+        input.base_url = format!("http://{address}/{id}");
+        input.use_full_url = true;
+        input.anthropic_extra_params_enabled = true;
+        input.anthropic_extra_params = json!({"stop_sequences":["configured-stop"]});
+        store.create_model(&input).await.unwrap();
+    }
+    store
+        .set_external_api_settings(ExternalApiSettings {
+            enabled: true,
+            api_key: "secret".into(),
+        })
+        .await
+        .unwrap();
+    let clients = NetworkClients::new(store.clone());
+    let plugins = PluginRegistry::in_directory(
+        clients.clone(),
+        PluginRuntime::in_directory(directory.path().join("runtime")).unwrap(),
+        "test".into(),
+        directory.path().join("plugins"),
+    )
+    .unwrap();
+    let provider = Arc::new(ProviderRouter::new(
+        store.clone(),
+        plugins.clone(),
+        clients.clone(),
+        Duration::from_secs(10),
+        Duration::from_secs(10),
+    ));
+    let router = byok::router(
+        store.clone(),
+        plugins,
+        provider,
+        Some(byok::NativeForwarder::new(
+            store,
+            clients,
+            Duration::from_secs(10),
+            Duration::from_secs(10),
+        )),
+    );
+
+    for (entry, target, options, expected) in [
+        (
+            "chat/completions",
+            "messages",
+            json!({"stop":"END","temperature":0.2}),
+            json!({"stop_sequences":["END"],"temperature":0.2}),
+        ),
+        (
+            "chat/completions",
+            "messages",
+            json!({"stop":["A","B"]}),
+            json!({"stop_sequences":["A","B"]}),
+        ),
+        (
+            "chat/completions",
+            "messages",
+            json!({"stop":null}),
+            json!({"stop_sequences":[]}),
+        ),
+        (
+            "chat/completions",
+            "messages",
+            json!({}),
+            json!({"stop_sequences":["configured-stop"]}),
+        ),
+        (
+            "messages",
+            "chat",
+            json!({"stop_sequences":["END"]}),
+            json!({"stop":["END"]}),
+        ),
+        (
+            "chat/completions",
+            "chat",
+            json!({"stop":"END","seed":7,"prompt_cache_key":"caller-key"}),
+            json!({"stop":"END","seed":7,"prompt_cache_key":"caller-key"}),
+        ),
+        (
+            "messages",
+            "messages",
+            json!({"stop_sequences":["END"]}),
+            json!({"stop_sequences":["END"]}),
+        ),
+        (
+            "chat/completions",
+            "responses",
+            json!({"stop":null,"seed":null,"prompt_cache_key":"caller-key"}),
+            json!({"prompt_cache_key":"caller-key"}),
+        ),
+    ] {
+        let mut request = json!({"model":format!("work/{target}"),"messages":[{"role":"user","content":"hello"}],"max_tokens":8192,"stream":true});
+        request
+            .as_object_mut()
+            .unwrap()
+            .extend(options.as_object().unwrap().clone());
+        let (status, response) = send(
+            router.clone(),
+            "POST",
+            &format!("/byok/v1/{entry}"),
+            Some("secret"),
+            request,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{entry} -> {target}: {response}");
+        assert!(response.contains("ok"), "{entry} -> {target}: {response}");
+        let forwarded = received.recv().await.unwrap();
+        for (key, value) in expected.as_object().unwrap() {
+            assert_eq!(&forwarded[key], value, "{entry} -> {target}: {forwarded}");
+        }
+    }
+    for (target, options, field) in [
+        ("messages", json!({"seed":7}), "seed"),
+        (
+            "messages",
+            json!({"prompt_cache_key":"key"}),
+            "prompt_cache_key",
+        ),
+        ("responses", json!({"stop":["END"]}), "stop"),
+        ("responses", json!({"seed":7}), "seed"),
+    ] {
+        let mut request = json!({"model":format!("work/{target}"),"messages":[{"role":"user","content":"hello"}]});
+        request
+            .as_object_mut()
+            .unwrap()
+            .extend(options.as_object().unwrap().clone());
+        let (status, response) = send(
+            router.clone(),
+            "POST",
+            "/byok/v1/chat/completions",
+            Some("secret"),
+            request,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{target}: {response}");
+        assert!(
+            response.contains(field) && response.contains("not supported"),
+            "{response}"
+        );
+        assert!(
+            received.try_recv().is_err(),
+            "unsupported options must fail before upstream HTTP"
+        );
     }
     server.abort();
 }

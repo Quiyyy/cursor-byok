@@ -108,10 +108,18 @@ pub(super) fn parse(protocol: Protocol, body: &Value) -> Result<ParsedRequest> {
             body.pointer("/thinking/type").and_then(Value::as_str),
             Some("enabled" | "adaptive")
         );
-    for field in ["temperature", "top_p", "seed", "stop", "prompt_cache_key"] {
+    for field in ["temperature", "top_p", "seed", "prompt_cache_key"] {
         if let Some(value) = body.get(field) {
             model.extra_params[field] = value.clone();
         }
+    }
+    let stop_field = if matches!(protocol, Protocol::Messages) {
+        "stop_sequences"
+    } else {
+        "stop"
+    };
+    if let Some(value) = body.get(stop_field) {
+        model.extra_params["stop"] = value.clone();
     }
     Ok(ParsedRequest {
         public_model_id,

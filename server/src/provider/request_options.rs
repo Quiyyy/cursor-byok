@@ -5,6 +5,52 @@ use crate::{
 };
 use serde_json::{json, Value};
 
+/// Project caller options before merging target-specific saved configuration.
+pub(crate) fn project_request_options(protocol: ProviderType, options: &mut Value) -> Result<()> {
+    validate_extra_params(options)?;
+    let options = options.as_object_mut().expect("validated request options");
+    if let Some(stop) = options.get("stop") {
+        if !(stop.is_null()
+            || stop.is_string()
+            || stop
+                .as_array()
+                .is_some_and(|values| values.iter().all(Value::is_string)))
+        {
+            return Err(Error::Protocol(
+                "stop must be a string, an array of strings, or null".into(),
+            ));
+        }
+    }
+    if protocol == ProviderType::Anthropic {
+        if let Some(stop) = options.remove("stop") {
+            let sequences = match stop {
+                Value::String(text) => json!([text]),
+                Value::Null => json!([]),
+                sequences => sequences,
+            };
+            options.insert("stop_sequences".into(), sequences);
+        }
+    }
+    let unsupported: &[&str] = match protocol {
+        ProviderType::Anthropic => &["seed", "prompt_cache_key"],
+        ProviderType::OpenAiResponses => &["seed", "stop"],
+        _ => &[],
+    };
+    for field in unsupported {
+        if let Some(value) = options.remove(*field) {
+            if !value.is_null()
+                && !(*field == "stop" && value.as_array().is_some_and(Vec::is_empty))
+            {
+                return Err(Error::Protocol(format!(
+                    "request parameter '{field}' is not supported by {}",
+                    protocol.as_str()
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Merge one lower-priority layer without replacing explicit values or token-limit aliases.
 pub(crate) fn merge_extra_params(body: &mut Value, extra: &Value) -> Result<()> {
     validate_extra_params(extra)?;

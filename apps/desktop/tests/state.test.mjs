@@ -95,3 +95,48 @@ test("takeover has an accessible retry after an initial status failure", async (
     await server.close();
   }
 });
+
+test("settings refresh recovers model choices without querying takeover", async () => {
+  const originals = Object.fromEntries(["fetch","localStorage","window","document","t"].map(key=>[key,globalThis[key]]));
+  const timers = new Set();
+  globalThis.localStorage = {getItem:()=>null};
+  globalThis.window = {location:{protocol:"http:",hostname:"127.0.0.1"},setTimeout:(callback,delay)=>{const timer=setTimeout(callback,delay);timers.add(timer);return timer;},clearTimeout};
+  globalThis.document = {documentElement:{dataset:{}},currentScript:null};
+  globalThis.t = text=>text;
+  const requests = [];
+  const model = {model_hash:"saved-model",model_id:"model",display_name:"Saved model"};
+  const plugin = {id:"saved-plugin",providers:[]};
+  let failing = true;
+  globalThis.fetch = async (url, options = {}) => {
+    const path = new URL(String(url),"http://127.0.0.1").pathname.replace("/__byok-api__/api","");
+    requests.push({path,method:options.method??"GET"});
+    if (failing && ["/models","/plugins"].includes(path)) return Response.json({message:"Temporary catalog failure"},{status:503});
+    const body = path === "/models" ? [model] : path === "/plugins" ? [plugin]
+      : path === "/plugins/runtime" ? {state:"ready"}
+      : path === "/settings/cursor-model" ? {model_id:"",updated_at_ms:0}
+      : path === "/harness/cursor/status" ? {ca:"ready",integration:"disabled"} : {};
+    return Response.json(body);
+  };
+  const server = await createServer({root:fileURLToPath(new URL("../",import.meta.url)),configFile:false,server:{middlewareMode:true,watch:null},appType:"custom"});
+  try {
+    const {initializeApp,refreshPage} = await server.ssrLoadModule("/src/shell/refresh.ts");
+    const {modelsStore} = await server.ssrLoadModule("/src/features/models/state.ts");
+    const {pluginsStore} = await server.ssrLoadModule("/src/features/plugins/state.ts");
+    await initializeApp();
+    assert.equal(modelsStore.getSnapshot().models.length,0);
+    assert.equal(pluginsStore.getSnapshot().plugins.length,0);
+    failing = false;
+    requests.length = 0;
+    await refreshPage("/settings");
+    assert.deepEqual(modelsStore.getSnapshot().models,[model]);
+    assert.deepEqual(pluginsStore.getSnapshot().plugins,[plugin]);
+    assert.equal(modelsStore.getSnapshot().error,null);
+    assert.equal(pluginsStore.getSnapshot().error,null);
+    assert(requests.some(request=>request.path==="/settings/ports"));
+    assert(requests.every(request=>request.method==="GET" && !request.path.startsWith("/harness/")));
+  } finally {
+    timers.forEach(clearTimeout);
+    Object.assign(globalThis,originals);
+    await server.close();
+  }
+});

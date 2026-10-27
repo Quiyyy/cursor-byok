@@ -18,7 +18,7 @@ export async function refreshPage(path: string) {
       await callsStore.refreshCalls();
       break;
     case "/settings":
-      await settingsStore.refresh();
+      await Promise.allSettled([settingsStore.refresh(), modelsStore.refresh(), pluginsStore.refresh()]);
       break;
   }
 }

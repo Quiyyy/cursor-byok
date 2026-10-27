@@ -86,6 +86,7 @@ impl Provider for ProviderRouter {
                     let request_url = model.request_url()?;
                     routed.request.model.display_name = Some(model.display_name.clone());
                     routed.request.model.context_window_tokens = routed.request.model.context_window_tokens.or(model.context_window_tokens);
+                    super::request_options::project_request_options(provider_type, &mut routed.request.model.extra_params)?;
                     super::request_options::merge_extra_params(&mut routed.request.model.extra_params, &super::request_options::configured_options(&model, &invocation.conversation_id)?)?;
                     routed.request.model.model_id = model.model_id.clone();
                     let recorder = start_recorder(&store, &invocation, &model.model_hash, &model.display_name, provider_type, &request_url, &model.model_id).await?;
