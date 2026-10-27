@@ -4,6 +4,12 @@
 
 先阅读 [AGENTS.md](./AGENTS.md)。产品使用见[使用指南](./docs/GETTING_STARTED.md)，模块职责见[架构说明](./docs/ARCHITECTURE.md)，修复范围见[维护状态](./docs/MAINTENANCE_STATUS.md)。
 
+## Agent 维护规范
+
+`AGENTS.md` 是架构与通用约束入口，按任务路由到[审查](./.agents/review/AGENTS.md)、[测试](./.agents/testing/AGENTS.md)、[桌面前端](./apps/desktop/AGENTS.md)、[Tauri 宿主](./apps/desktop/src-tauri/AGENTS.md)、[Server](./server/AGENTS.md)和[原生接入](./server/native-agent/AGENTS.md)。目录规范约束对应子树；审查与测试规范需要 agent 按任务主动读取，不假定工具会自动加载目录外的文件。
+
+审查结论必须说明真实入口、用户影响、证据范围和新旧问题归因。人工时序探针不能单独证明常见产品故障，验证结论也不能超过实际覆盖范围。新增规范或迁移模块时同步维护顶层路由，专项步骤复用 `.agents/skills/` 中已有技能。
+
 ## 环境与启动
 
 - Rust stable、Cargo、rustfmt 和 Clippy。

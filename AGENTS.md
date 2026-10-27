@@ -1,25 +1,95 @@
-# AGENTS.md
-- **The directory structure is the architecture.** Simple, clear directory and module naming >= module dependency relationships > concrete implementation details; communicate with the user using directory trees.
-- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
-- Choose the simplest implementation that fully meets the current requirements. Avoid speculative abstractions, configuration, and indirection.
-- Grow the system in layers. Start from the smallest version that works end to end, and add each new capability on top of a product that already works. Never trade a working product for unfinished complexity.
-- Keep components modular and concerns clearly separated.
-- Prefer established, well-maintained libraries when they reduce overall complexity or improve reliability. Do not reimplement common functionality without a clear reason.
-- Lean on the dependencies already in the project before writing your own implementation or adding packages. Do not assume a library lacks a capability without checking its documentation and types.
-- Make architectural decisions for the long term. Do not accept a stopgap that only works for now and is meant to be replaced later.
+# Agent 维护入口
 
-## Communication
+本文件适用于整个仓库。目标是维护可工作的 Cursor BYOK，以当前用户需求和真实产品行为决定改动范围。
 
-- Lead with the conclusion. Keep responses direct and omit filler, repeated context, generic explanations, and narration of obvious steps.
-- Match the level requested by the user: discuss architecture as architecture, behavior as behavior, and code details only when they materially support the answer.
-- For architecture, refactoring, and module-boundary discussions, communicate primarily with annotated directory trees and ASCII architecture/data-flow diagrams instead of long prose.
-- In directory trees, annotate every relevant directory and file with its single responsibility. When discussing code size, include line counts in the comments:
-  - use measured line counts for existing code;
-  - use clearly marked approximate targets such as `≈300 lines` for proposed code;
-  - state whether tests, generated code, and blank lines are excluded.
-- Show the complete main execution path, including inputs, ownership boundaries, runtime loops, persistence, outputs, and extension points. Make the direction of data and control flow explicit.
-- Clearly separate the current structure from the proposed structure. Explicitly list modules that move, merge, split, or are deleted.
-- Use the user's vocabulary consistently. Do not introduce new domain terms when existing plain-language terms are sufficient; when an implementation name must be mentioned, distinguish it from the architecture concept.
-- For stateful or concurrent behavior, show timing, ownership, state boundaries, and before/during/after behavior explicitly. Distinguish continuation within the same lifecycle from creation of a new lifecycle.
-- Prefer compact trees, flow diagrams, state matrices, and mappings when they communicate the structure more clearly than paragraphs.
-- Tie recommendations to the actual repository structure and code. Do not present a speculative target architecture as if it already exists.
+## 先确定适用规范
+
+1. 读本文件，确认当前分支、工作区改动和任务范围。不要覆盖他人改动，也不要把其他分支的实现当成当前事实。
+2. 按下表读取任务规范；涉及多个组件时合并读取。目录中的 `AGENTS.md` 约束该目录及其后代，更深的文件补充组件约束。
+3. `.agents/review/` 和 `.agents/testing/` 是跨目录的任务规范，**不依赖工具自动发现**：审查代码必须主动读取前者，修改行为或设计验证必须主动读取后者。
+4. `AGENTS.md` 定义维护约束，已有 `SKILL.md` 提供专项实施细节。只加载本次需要的技能。若实际代码、文档或指令不一致，查明原因，不自行把缺陷写成设计承诺；用户的明确要求优先。
+
+| 任务 / 范围 | 必读入口 |
+| --- | --- |
+| 代码审查、回归审计、缺陷归因 | [审查规范](.agents/review/AGENTS.md) |
+| 行为修改、测试设计、复现与验收 | [测试规范](.agents/testing/AGENTS.md) |
+| 桌面前端、页面状态、管理界面 | [桌面与前端规范](apps/desktop/AGENTS.md) |
+| Tauri、托盘、启动退出、桌面更新 | [桌面宿主规范](apps/desktop/src-tauri/AGENTS.md)，同时读桌面规范 |
+| Rust 服务、网关、Provider、插件、存储 | [Server 规范](server/AGENTS.md) |
+| Cursor 原生入口、路由、Stop / Steer、安装恢复 | [原生接入规范](server/native-agent/AGENTS.md)，同时读 Server 规范 |
+| 发布、标签、更新资产 | [发布技能](.agents/skills/release/SKILL.md)；仅在任务涉及发布时加载 |
+| 纯文档修改 | 检查链接、路径、事实和规范一致性；触及组件规范时也读该组件入口 |
+
+## 项目是什么
+
+Cursor BYOK 是桌面管理器和模型网关。**Cursor 拥有 Agent 执行循环；BYOK 拥有模型连接与传输。** 完整架构说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，以下是维护时的导航图，不是待实现的重构方案。
+
+```text
+apps/desktop/                   # 桌面产品
+├── src/                        # React 管理界面
+│   ├── features/               # 模型、账号、调用记录、统计与设置
+│   ├── shell/                  # 页面组合、导航和窗口布局
+│   └── shared/                 # HTTP 客户端与通用界面能力
+└── src-tauri/                  # 窗口、托盘、进程生命周期与更新
+server/                         # 本地服务与模型连接
+├── src/app.rs                  # 依赖和 HTTP 路由装配
+├── src/control/                # 桌面管理 API
+├── src/local_app/              # 接管、代理、CA 与 Cursor 本地配置
+├── src/api/byok/               # 原生网关和独立 External API
+├── src/cursor/                 # Cursor 服务协议、目录、TAB 与 Commit
+├── src/provider/               # 模型协议适配、响应流与调用记录
+├── src/plugin/                 # 账号插件宿主、资源生命周期和 SDK
+├── src/store/                  # SQLite 配置与诊断持久化
+├── plugins/build-in/           # 服务商账号连接的扩展点
+└── native-agent/               # 安装在 Cursor 中的原生入口与模型路由
+crates/semble-core/              # 独立搜索研究库，不属于当前 Agent 主链
+support/benchmarks/semble/       # 搜索研究基准，不参与产品运行
+```
+
+```text
+用户配置 → React → /__byok-api__/api/* → control → 配置持久化
+用户启停接管 → local_app → Cursor 入口 / 代理设置的安装与恢复
+
+用户对话 → Cursor 原生 Host / LocalAgentClient
+             └─ 原生循环：上下文、工具审批与执行、MCP、checkpoint
+                  ├─ 模型 HTTP → /__byok-native__/models/* → 模型连接
+                  │                ├─ 同协议 API 配置 → 原始请求转发
+                  │                ├─ 跨协议 API 配置 → 协议投影 → Provider
+                  │                └─ 账号模型 → Deno 插件 → 服务商
+                  │              ← 响应流 ←────────────────────┘
+                  └─ 工具结果 → 原生循环继续 → Cursor 保存会话与展示结果
+
+外部客户端 → /byok/v1/* → 模型连接（独立开关和密钥）
+TAB / Commit → 各自的 Cursor 服务入口（不拥有 Agent 循环）
+调用摘要、用量与诊断 → BYOK 存储 → 桌面展示
+```
+
+模型配置、设置和诊断主要保存在 SQLite；插件账号资源与目录使用插件数据存储；安装备份保存在 BYOK 数据目录。Agent 会话与 checkpoint 由 Cursor 保存。诊断记录不是第二套会话状态，也不能替代原生运行标识。
+
+## 通用维护约束
+
+- **目录结构就是架构。** 优先清晰的目录与模块命名，其次依赖关系，最后实现细节。一个组件应有明确职责和状态所有者。
+- 采用满足当前需求的最简单实现，在可工作的产品上逐层演进；不为假设需求增加配置、抽象、间接层或新运行循环。
+- 不保留已淘汰实现的兼容路径、回退分支或过渡迁移。删除前确认调用入口、运行时注册、构建引用和持久化用途；旧数据、已发布数据库迁移和发布资产不等同于未使用代码。
+- 优先使用项目已有依赖；新增依赖前核对现有库的能力、类型和文档。选择长期可维护的方案，不引入计划以后替换的临时架构。
+- 重构默认保持当前有效行为。发现独立旧 bug 时记录归因与影响，不顺手扩大修复；审查任务默认不修改正式实现，已有明确修复授权的范围继续完成。
+- 先从真实调用入口判断问题，再决定测试与实现。异常可构造、辅助函数测试失败、缺少防御分支，均不能单独证明用户功能故障；具体证据规则见审查规范。
+- 测试与调试默认隔离数据、安装和进程。不能把例行验证变成真实账号调用、证书安装或用户环境修改；已有明确授权无需重复询问。
+- 保持分支范围明确。常规新任务从 `main` 建立 `codex/` 分支；用户指定基线或继续未合并工作时遵从任务上下文，并说明基线。不要未经要求切换、重置或丢弃正在进行的工作。
+- GitHub issue、PR、评论和 review 使用本机已登录的 `gh` CLI。发布前先准备中英文草稿征求用户意见，实际发布优先英文；`gh` 不可用时先说明，不自动改用连接器。发布授权与本地文件修改、提交是不同事项。
+
+## 沟通与完成标准
+
+- 默认中文，结论先行；代码、命令、路径保持原样。按用户所问的层次回答，不用实现细节掩盖行为或架构结论。
+- 架构和模块边界优先使用带单一职责注释的目录树与数据流图。明确当前与拟议结构，以及移动、合并、拆分、删除的模块。
+- 涉及状态与并发时，说明所有者、输入、前中后状态和释放责任；区分同一生命周期继续与新建生命周期。主链说明应包含持久化、输出和扩展点。
+- 讨论代码体量时使用测量行数，并注明是否计入测试、生成代码和空行；目标行数标注为估算。
+- 交付说明包含：实际改动、为何需要、验证了什么、没有验证什么。问题来源以 Git 历史核对；测试结论不得超过测试覆盖的入口、协议、平台和时序。
+- 不把“测试通过”表述为“核心功能完全正常”；不把人工时序探针直接描述为常见用户故障。允许审查无发现，也允许明确记录证据不足。
+
+## 规范本身如何维护
+
+- 通用约束留在本文件，组件细节下沉到最近的 `AGENTS.md`，专项步骤链接到技能；不复制多套容易漂移的完整规则。
+- 新增子规范时同时补充上游路由、适用范围和相对链接。目录外的任务规范必须说明主动读取条件。
+- 代码迁移涉及职责、入口或验证命令时，同步更新相关导航。先检查当前分支确实存在这些路径和脚本。
+- 文档是维护约定，不能保证所有 agent 工具会自动执行；可自动检查的约束由现有构建、测试与 CI 承担。使用与环境说明见 [MAINTAINING.md](MAINTAINING.md)。
