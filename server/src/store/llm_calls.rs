@@ -72,7 +72,7 @@ impl Store {
         .bind(&call.call_id)
         .bind(&call.run_id)
         .bind(&call.conversation_id)
-        .bind(call.provider_call_index)
+        .bind(0_i64)
         .bind(&call.model_hash)
         .bind(call.provider_type.as_str())
         .bind(&call.provider_url)
@@ -328,7 +328,6 @@ fn summary_from_row(row: sqlx::sqlite::SqliteRow) -> Result<LlmCallSummary> {
         call_id: row.try_get("call_id")?,
         run_id: row.try_get("run_id")?,
         conversation_id: row.try_get("conversation_id")?,
-        provider_call_index: row.try_get("provider_call_index")?,
         model_hash: row.try_get("model_hash")?,
         provider_type: row.try_get("provider_type")?,
         provider_url: row.try_get("provider_url")?,
@@ -394,7 +393,6 @@ mod tests {
                 call_id: "plugin-call".into(),
                 run_id: "run".into(),
                 conversation_id: "conversation".into(),
-                provider_call_index: 0,
                 model_hash: plugin_model.into(),
                 provider_type: ProviderType::Plugin,
                 provider_url: "plugin://dev.example/codex".into(),

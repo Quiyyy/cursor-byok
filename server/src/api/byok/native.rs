@@ -50,49 +50,21 @@ async fn lookup(state: &ApiState, id: &str) -> Result<(ListedModel, Value)> {
     let internal = id
         .strip_prefix("byok:")
         .ok_or_else(|| Error::Protocol("expected a BYOK model identifier".into()))?;
-    let (model_id, name, apis, context, output, images, efforts) =
-        if let Some(model) = state.store.model(internal).await? {
-            let api = match model.provider_type() {
-                crate::model::ProviderType::Anthropic => "anthropic_messages",
-                crate::model::ProviderType::OpenAiResponses => "openai_responses",
-                _ => "openai_chat",
-            };
-            let output = model.max_completion_tokens.or(model.anthropic_max_tokens);
-            let context = crate::model::effective_context_window(
-                &model.model_id,
-                model.context_window_tokens,
-                None,
-            );
-            (
-                model.model_id,
-                model.display_name,
-                vec![api],
-                context,
-                output,
-                true,
-                Vec::new(),
-            )
-        } else {
-            let model = state.plugins.model_descriptor(internal).await?;
-            let context = crate::model::effective_context_window(
-                &model.model_id,
-                state
-                    .store
-                    .model_settings(internal)
-                    .await?
-                    .context_window_tokens,
-                model.context_window_tokens,
-            );
-            (
-                model.model_id,
-                model.display_name,
-                vec!["openai_chat", "openai_responses"],
-                context,
-                model.max_output_tokens,
-                model.images,
-                model.reasoning_efforts,
-            )
-        };
+    let model = crate::configured_models::resolve(&state.store, &state.plugins, internal).await?;
+    let apis = match model.protocol {
+        crate::model::ProviderType::Anthropic => vec!["anthropic_messages"],
+        crate::model::ProviderType::OpenAiResponses => vec!["openai_responses"],
+        crate::model::ProviderType::OpenAiChat => vec!["openai_chat"],
+        crate::model::ProviderType::Plugin => vec!["openai_chat", "openai_responses"],
+    };
+    let (model_id, name, context, output, images, efforts) = (
+        model.model_id,
+        model.display_name,
+        model.context,
+        model.max_output_tokens,
+        model.images,
+        model.reasoning_efforts,
+    );
     let mut capabilities = json!({"supports_tool_use":true,"supports_streaming":true,"supports_vision":images,"output_modalities":["text"],"context_length":context});
     if !efforts.is_empty() {
         capabilities["supports_reasoning"] = json!(true);

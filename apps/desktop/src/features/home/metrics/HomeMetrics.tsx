@@ -1,5 +1,5 @@
 import { formatCompactInteger, formatInteger } from "../../../shared/utils/numberFormat";
-import { useAppStore } from "../../../shared/store/appStore";
+import { useSettingsStore } from "../../settings/state";
 import { Icon } from "../../../shared/ui/Icon";
 import { useTooltip, type TooltipAnchor } from "../../../shared/ui/Tooltip";
 import { informationOutlineIcon } from "../../../shared/ui/icons";
@@ -59,7 +59,7 @@ function InfoTooltip({ content }: { content: string }) {
 }
 
 export function HomeMetrics({ data }: { data: HomeMetricsData }) {
-  const { pricing } = useAppStore();
+  const { pricing } = useSettingsStore();
   const inputTokens = Math.max(0, data.promptTokens - data.cacheReadTokens - data.cacheWriteTokens);
   const outputTokens = Math.max(0, data.tokenUsage - data.promptTokens);
   const defaultCacheHitRate = calculateRate(data.cacheReadTokens, data.cacheReadTokens + inputTokens);

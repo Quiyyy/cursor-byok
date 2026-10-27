@@ -2,6 +2,7 @@
 pub mod api;
 pub mod app;
 pub mod config;
+pub mod configured_models;
 pub mod control;
 pub mod cursor;
 pub mod error;

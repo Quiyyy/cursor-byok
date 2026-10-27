@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     attempt::{send_once, Attempt},
-    map_sse_error, merge_extra_params, provider_event_error,
+    map_sse_error, provider_event_error,
     recorder::recorded_headers,
     CallRecorder, FinishReason, ModelEvent, Provider, ProviderStream,
 };
@@ -52,7 +52,7 @@ impl Provider for AnthropicProvider {
         let config = self.config.clone();
         let recorder = self.recorder.clone();
         let stream = Box::pin(try_stream! {
-            let ModelInvocation { call_id, request, .. } = invocation;
+            let ModelInvocation { call_id, conversation_id, request, .. } = invocation;
             let mut messages = anthropic_messages(&request.history)?;
             mark_cache_breakpoint(&mut messages);
             let system = if request.prompt.instructions.is_empty() {
@@ -82,8 +82,7 @@ impl Provider for AnthropicProvider {
                     value
                 }).collect::<Vec<_>>());
             }
-            apply_model(&mut body, &request.model)?;
-            merge_extra_params(&mut body, &request.model.extra_params)?;
+            super::request_options::apply(crate::model::ProviderType::Anthropic, &mut body, &request.model, config.max_output_tokens, &conversation_id)?;
             let request_headers = recorded_headers(
                 &config,
                 &[("content-type", "application/json"), ("anthropic-version", "2023-06-01")],
@@ -291,22 +290,6 @@ fn close_anthropic_block(
         "tool_use" => vec![ModelEvent::ToolCallEnd { index }],
         _ => Vec::new(),
     }
-}
-
-fn apply_model(body: &mut Value, model: &crate::model::ModelSpec) -> Result<()> {
-    let object = body
-        .as_object_mut()
-        .ok_or_else(|| Error::Provider("Anthropic request body is not an object".into()))?;
-    if model.reasoning.enabled {
-        object.insert(
-            "thinking".into(),
-            json!({"type":"adaptive", "display":"summarized"}),
-        );
-    }
-    if let Some(effort) = &model.reasoning.effort {
-        object.insert("output_config".into(), json!({"effort":effort}));
-    }
-    Ok(())
 }
 
 fn merge_usage(total: &mut Usage, update: Usage) {

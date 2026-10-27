@@ -32,12 +32,12 @@ impl App {
                 .set_port(store.port_settings().await?.service_port);
         }
         let plugin_runtime = PluginRuntime::managed()?;
+        let clients = crate::network::NetworkClients::new(store.clone());
         let plugins = PluginRegistry::managed(
-            store.clone(),
+            clients.clone(),
             plugin_runtime.clone(),
             config.app_version.clone(),
         )?;
-        let clients = crate::network::NetworkClients::new(store.clone());
         let provider = std::sync::Arc::new(ProviderRouter::new(
             store.clone(),
             plugins.clone(),
@@ -57,14 +57,15 @@ impl App {
             )),
         );
         let services = CursorServices::new(store.clone(), provider.clone(), Some(plugins.clone()));
-        let control = control::ControlService::new(
+        let harness = CursorHarness::new(store.clone())?;
+        let control = control::ControlState::new(
             store.clone(),
             provider.clone(),
             plugin_runtime,
             plugins.clone(),
             clients.clone(),
-        )?;
-        let harness = control.cursor_harness().clone();
+            harness.clone(),
+        );
         let native = api::byok::native_router(
             store.clone(),
             plugins,
@@ -77,9 +78,10 @@ impl App {
             ),
             harness.native_agent(),
         );
-        let mut router = api::router(services.with_native(harness.native_agent()), clients)?
-            .merge(byok)
-            .merge(native);
+        let mut router =
+            api::cursor::router(services.with_native(harness.native_agent()), clients)?
+                .merge(byok)
+                .merge(native);
         router = match &config.console {
             Some(ConsoleSource::Directory(directory)) => {
                 router.merge(control::web_router(control.clone(), directory))
@@ -140,6 +142,10 @@ impl App {
     pub async fn serve_on(self, listener: TcpListener, shutdown: CancellationToken) -> Result<()> {
         let address = listener.local_addr()?;
         self.harness.set_backend_addr(address);
+        self.harness.cleanup_stale_settings().await?;
+        if let Err(error) = self.harness.restore_on_start().await {
+            tracing::warn!(%error, "could not restore Cursor takeover; management service remains available");
+        }
         tracing::info!(%address, "cursor server listening");
         let harness = self.harness;
         let graceful = shutdown.clone();

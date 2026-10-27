@@ -75,32 +75,6 @@ impl Store {
         Ok(saved)
     }
 
-    pub(super) async fn create_models_if_missing(
-        &self,
-        inputs: &[ModelConfigInput],
-    ) -> Result<usize> {
-        let mut normalized = Vec::with_capacity(inputs.len());
-        let mut hashes = HashSet::with_capacity(inputs.len());
-        for input in inputs {
-            let input = normalize_model_input(input)?;
-            let hash = model_hash(&input)?;
-            if hashes.insert(hash.clone()) {
-                normalized.push((hash, input));
-            }
-        }
-        let now = now_ms();
-        let _write = self.writes.lock().await;
-        let mut transaction = self.pool.begin().await?;
-        let mut inserted = 0;
-        for (hash, input) in &normalized {
-            inserted += usize::from(
-                insert_model_with_conflict(&mut transaction, hash, input, now, true).await?,
-            );
-        }
-        transaction.commit().await?;
-        Ok(inserted)
-    }
-
     pub async fn update_model(
         &self,
         current_hash: &str,
@@ -230,18 +204,7 @@ async fn insert_model(
     input: &ModelConfigInput,
     now: i64,
 ) -> Result<()> {
-    insert_model_with_conflict(transaction, hash, input, now, false).await?;
-    Ok(())
-}
-
-async fn insert_model_with_conflict(
-    transaction: &mut Transaction<'_, Sqlite>,
-    hash: &str,
-    input: &ModelConfigInput,
-    now: i64,
-    ignore_existing: bool,
-) -> Result<bool> {
-    let mut statement = String::from(
+    let statement = String::from(
         r#"INSERT INTO model_configs(
             model_hash, sort_order, display_name, group_name, model_type, base_url, use_full_url, api_key, tooltip_data,
             model_id, reasoning_effort, openai_endpoint, openai_extra_params_enabled,
@@ -251,10 +214,7 @@ async fn insert_model_with_conflict(
             thinking_budget_tokens, created_at_ms, updated_at_ms
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     );
-    if ignore_existing {
-        statement.push_str(" ON CONFLICT(model_hash) DO NOTHING");
-    }
-    let result = sqlx::query(&statement)
+    sqlx::query(&statement)
         .bind(hash)
         .bind(input.sort_order)
         .bind(&input.display_name)
@@ -282,7 +242,7 @@ async fn insert_model_with_conflict(
         .bind(now)
         .execute(&mut **transaction)
         .await?;
-    Ok(result.rows_affected() == 1)
+    Ok(())
 }
 
 fn model_from_row(row: sqlx::sqlite::SqliteRow) -> Result<ModelConfig> {

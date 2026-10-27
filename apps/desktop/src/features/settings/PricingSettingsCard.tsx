@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { TokenPricingSettings } from "../../shared/api";
-import { appStore, DEFAULT_TOKEN_PRICING, useAppStore } from "../../shared/store/appStore";
+import { settingsStore, DEFAULT_TOKEN_PRICING, useSettingsStore } from "./state";
 import { Button } from "../../shared/ui/Button";
 import { FormField, TextInput } from "../../shared/ui/FormControls";
 import { TitledCard } from "../../shared/ui/TitledCard";
@@ -45,7 +45,7 @@ function toSettings(draft: PricingDraft): TokenPricingSettings {
 }
 
 export function PricingSettingsCard() {
-  const { pricing } = useAppStore();
+  const { pricing } = useSettingsStore();
   const message = useMessage();
   const [draft, setDraft] = useState<PricingDraft>(() => toDraft(pricing));
   const [editing, setEditing] = useState(false);
@@ -69,7 +69,7 @@ export function PricingSettingsCard() {
     try {
       setSaving(true);
       const next = toSettings(draft);
-      if (await appStore.updatePricingSettings(next)) {
+      if (await settingsStore.updatePricingSettings(next)) {
         setEditing(false);
         message(t("定价设置已保存"));
       }

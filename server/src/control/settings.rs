@@ -13,9 +13,9 @@ use crate::store::{
     TokenPricingSettings,
 };
 
-use super::{ControlService, ObservabilitySettings};
+use super::ControlState;
 
-pub async fn get(State(service): State<ControlService>) -> Result<Json<ObservabilitySettings>> {
+pub async fn get(State(service): State<ControlState>) -> Result<Json<ObservabilitySettings>> {
     Ok(Json(service.observability().await?))
 }
 
@@ -25,13 +25,13 @@ pub struct CursorDefaultModelInput {
 }
 
 pub async fn get_cursor_model(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
 ) -> Result<Json<crate::store::CursorModelSettings>> {
-    Ok(Json(service.cursor_model_settings().await?))
+    Ok(Json(service.store.cursor_model_settings().await?))
 }
 
 pub async fn update_cursor_model(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(input): Json<CursorDefaultModelInput>,
 ) -> Result<Json<crate::store::CursorModelSettings>> {
     Ok(Json(
@@ -40,48 +40,50 @@ pub async fn update_cursor_model(
 }
 
 pub async fn update(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(settings): Json<ObservabilitySettings>,
 ) -> Result<Json<ObservabilitySettings>> {
     Ok(Json(service.set_observability(settings).await?))
 }
 
-pub async fn get_ports(State(service): State<ControlService>) -> Result<Json<PortSettings>> {
-    Ok(Json(service.ports().await?))
+pub async fn get_ports(State(service): State<ControlState>) -> Result<Json<PortSettings>> {
+    Ok(Json(service.store.port_settings().await?))
 }
 
 pub async fn update_ports(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(settings): Json<PortSettings>,
 ) -> Result<Json<PortSettings>> {
     Ok(Json(service.set_ports(settings).await?))
 }
 
 pub async fn get_external_api(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
 ) -> Result<Json<ExternalApiSettings>> {
-    Ok(Json(service.external_api_settings().await?))
+    Ok(Json(service.store.external_api_settings().await?))
 }
 
 pub async fn update_external_api(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(settings): Json<ExternalApiSettings>,
 ) -> Result<Json<ExternalApiSettings>> {
-    Ok(Json(service.set_external_api_settings(settings).await?))
+    Ok(Json(
+        service.store.set_external_api_settings(settings).await?,
+    ))
 }
 
-pub async fn get_storage(State(service): State<ControlService>) -> Result<Json<StatisticsStorage>> {
-    Ok(Json(service.statistics_storage().await?))
+pub async fn get_storage(State(service): State<ControlState>) -> Result<Json<StatisticsStorage>> {
+    Ok(Json(service.store.statistics_storage().await?))
 }
 
 pub async fn clear_storage(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     input: Option<Json<ClearStorageInput>>,
 ) -> Result<Json<StatisticsStorage>> {
     let scope = input.map(|Json(input)| input.scope).unwrap_or_default();
     let storage = match scope {
-        StatisticsStorageScope::Details => service.clear_statistics_storage().await?,
-        StatisticsStorageScope::All => service.clear_all_statistics_storage().await?,
+        StatisticsStorageScope::Details => service.store.clear_statistics_storage().await?,
+        StatisticsStorageScope::All => service.store.clear_all_statistics_storage().await?,
     };
     Ok(Json(storage))
 }
@@ -92,37 +94,37 @@ pub struct ClearStorageInput {
     pub scope: StatisticsStorageScope,
 }
 
-pub async fn get_proxy(State(service): State<ControlService>) -> Result<Json<ProxySettings>> {
-    Ok(Json(service.proxy_settings().await?))
+pub async fn get_proxy(State(service): State<ControlState>) -> Result<Json<ProxySettings>> {
+    Ok(Json(service.store.proxy_settings().await?))
 }
 
 pub async fn update_proxy(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(settings): Json<ProxySettingsInput>,
 ) -> Result<Json<ProxySettings>> {
     Ok(Json(service.set_proxy_settings(settings).await?))
 }
 
-pub async fn get_tab(State(service): State<ControlService>) -> Result<Json<TabSettings>> {
-    Ok(Json(service.tab_settings().await?))
+pub async fn get_tab(State(service): State<ControlState>) -> Result<Json<TabSettings>> {
+    Ok(Json(service.store.tab_settings().await?))
 }
 
 pub async fn update_tab(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(settings): Json<TabSettings>,
 ) -> Result<Json<TabSettings>> {
-    Ok(Json(service.set_tab_settings(settings).await?))
+    Ok(Json(service.harness.set_tab_settings(settings).await?))
 }
 
-pub async fn get_desktop(State(service): State<ControlService>) -> Result<Json<DesktopSettings>> {
-    Ok(Json(service.desktop_settings().await?))
+pub async fn get_desktop(State(service): State<ControlState>) -> Result<Json<DesktopSettings>> {
+    Ok(Json(service.store.desktop_settings().await?))
 }
 
 pub async fn update_desktop(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(settings): Json<DesktopSettings>,
 ) -> Result<Json<DesktopSettings>> {
-    service.set_desktop_settings(settings).await?;
+    service.store.set_desktop_settings(settings).await?;
     get_desktop(State(service)).await
 }
 
@@ -149,10 +151,10 @@ impl CommitSettingsView {
 }
 
 pub async fn get_commit(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     headers: HeaderMap,
 ) -> Result<Json<CommitSettingsView>> {
-    let settings = service.commit_settings().await?;
+    let settings = service.store.commit_settings().await?;
     Ok(Json(CommitSettingsView::new(
         settings,
         requested_commit_locale(&headers),
@@ -160,25 +162,25 @@ pub async fn get_commit(
 }
 
 pub async fn update_commit(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(settings): Json<CommitSettings>,
 ) -> Result<Json<CommitSettingsView>> {
-    let saved = service.set_commit_settings(settings).await?;
+    let saved = service.store.set_commit_settings(settings).await?;
     let default_locale = saved.prompt_locale;
     Ok(Json(CommitSettingsView::new(saved, default_locale)))
 }
 
 pub async fn get_pricing_settings(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
 ) -> Result<Json<TokenPricingSettings>> {
-    Ok(Json(service.pricing_settings().await?))
+    Ok(Json(service.store.pricing_settings().await?))
 }
 
 pub async fn update_pricing_settings(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(settings): Json<TokenPricingSettings>,
 ) -> Result<Json<TokenPricingSettings>> {
-    Ok(Json(service.set_pricing_settings(settings).await?))
+    Ok(Json(service.store.set_pricing_settings(settings).await?))
 }
 
 fn requested_commit_locale(headers: &HeaderMap) -> CommitPromptLocale {
@@ -204,5 +206,57 @@ mod tests {
 
         headers.insert(header::ACCEPT_LANGUAGE, "pt-BR".parse().unwrap());
         assert_eq!(requested_commit_locale(&headers), CommitPromptLocale::EnUs);
+    }
+}
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub struct ObservabilitySettings {
+    pub detailed: bool,
+}
+
+impl ControlState {
+    pub async fn observability(&self) -> Result<ObservabilitySettings> {
+        Ok(ObservabilitySettings {
+            detailed: self.store.detailed_logging().await?,
+        })
+    }
+
+    pub async fn set_observability(
+        &self,
+        settings: ObservabilitySettings,
+    ) -> Result<ObservabilitySettings> {
+        self.store.set_detailed_logging(settings.detailed).await?;
+        Ok(settings)
+    }
+
+    pub async fn set_ports(&self, settings: PortSettings) -> Result<PortSettings> {
+        self.store.set_port_settings(settings).await?;
+        Ok(settings)
+    }
+
+    pub async fn set_proxy_settings(&self, settings: ProxySettingsInput) -> Result<ProxySettings> {
+        if settings.mode.is_custom() {
+            let local_proxy_port = match self.harness.proxy_port().await {
+                Some(port) => port,
+                None => self.store.port_settings().await?.proxy_port,
+            };
+            crate::network::reject_self_proxy(&settings.address, local_proxy_port)?;
+        }
+        let settings = self.store.set_proxy_settings(settings).await?;
+        self.clients.invalidate().await;
+        Ok(settings)
+    }
+
+    pub async fn set_cursor_default_model(
+        &self,
+        model_id: &str,
+    ) -> Result<crate::store::CursorModelSettings> {
+        let model_id = model_id.trim();
+        crate::cursor::services::default_model::validate(
+            &self.store,
+            Some(&self.plugins),
+            model_id,
+        )
+        .await?;
+        self.store.set_cursor_default_model(model_id).await
     }
 }

@@ -75,7 +75,7 @@ async fn configured_default_reaches_cursor_and_disables_auto_nudges() {
     let model = store.create_model(&input).await.unwrap();
     let runtime = PluginRuntime::in_directory(directory.path().join("runtime")).unwrap();
     let plugins = PluginRegistry::in_directory(
-        store.clone(),
+        cursor_server::network::NetworkClients::new(store.clone()),
         runtime.clone(),
         "1.1.1".into(),
         directory.path().join("plugins"),
@@ -83,16 +83,16 @@ async fn configured_default_reaches_cursor_and_disables_auto_nudges() {
     .unwrap();
     let provider = Arc::new(fake_provider::FakeProvider::default());
     let clients = NetworkClients::new(store.clone());
-    let control = control::ControlService::new(
+    let control = control::ControlState::new(
         store.clone(),
         provider.clone(),
         runtime,
         plugins.clone(),
         clients.clone(),
-    )
-    .unwrap();
+        cursor_server::local_app::CursorHarness::new(store.clone()).unwrap(),
+    );
     let router = control::api_router(control).merge(
-        cursor_server::api::router(
+        cursor_server::api::cursor::router(
             CursorServices::new(store.clone(), provider, Some(plugins)),
             clients,
         )

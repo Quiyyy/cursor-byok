@@ -4,7 +4,7 @@ import type { TokenUsageGranularity } from "../../../shared/api";
 import { formatCompactInteger } from "../../../shared/utils/numberFormat";
 import { EChart } from "./EChart";
 import styles from "./DailyTokenUsageChart.module.scss";
-import { useAppStore } from "../../../shared/store/appStore";
+import { useSettingsStore } from "../../settings/state";
 
 export type DailyTokenUsage = {
   bucketStartMs: number;
@@ -72,7 +72,7 @@ export function DailyTokenUsageChart({
   granularity: TokenUsageGranularity;
 }) {
   const [hovered, setHovered] = useState(false);
-  const { theme } = useAppStore();
+  const { theme } = useSettingsStore();
   const axisColor = theme === "default-light" ? "#637183" : "#a3b0c0";
   const maximumTotal = data.reduce((maximum, day) => Math.max(maximum, totalTokens(day)), 0);
   const axisMaximum = Math.max(1, maximumTotal * 1.12);

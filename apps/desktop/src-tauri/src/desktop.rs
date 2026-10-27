@@ -234,7 +234,6 @@ pub fn run() -> ExitCode {
             let server = server.merge_router(frontend::router(app.handle().clone()));
             let listener = tauri::async_runtime::block_on(server.bind())?;
             let address = listener.local_addr()?;
-            tauri::async_runtime::block_on(server.harness().cleanup_stale_settings())?;
             let desktop_settings =
                 tauri::async_runtime::block_on(server.store().desktop_settings())
                     .unwrap_or_default();

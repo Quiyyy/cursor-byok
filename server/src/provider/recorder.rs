@@ -424,7 +424,6 @@ mod tests {
                 call_id: "cancel-on-drop".into(),
                 run_id: "run".into(),
                 conversation_id: "conversation".into(),
-                provider_call_index: 0,
                 model_hash: model.model_hash,
                 provider_type: ProviderType::OpenAiChat,
                 provider_url: "https://example.com".into(),

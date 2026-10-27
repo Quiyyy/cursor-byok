@@ -28,29 +28,12 @@ struct UsableModelsAddition {
 }
 
 async fn configured_models(services: &CursorServices) -> Result<Vec<serde_json::Value>> {
-    let mut models = Vec::new();
-    for model in services.store().models().await? {
-        let source = model.group_name.clone().unwrap_or_else(|| {
-            reqwest::Url::parse(&model.base_url)
-                .ok()
-                .and_then(|url| url.host_str().map(str::to_owned))
-                .unwrap_or_default()
-        });
-        models.push(json!({"cursorId":format!("byok:{}",model.model_hash),"id":model.model_id,"displayName":model.display_name,
-            "source":source,"contextLength":crate::model::effective_context_window(&model.model_id,model.context_window_tokens,None),"maxOutputTokens":model.max_completion_tokens.or(model.anthropic_max_tokens),"supportsVision":true,"extendedCapabilitiesDetected":true}));
-    }
-    if let Some(plugins) = services.plugins() {
-        for model in plugins.configured_models().await {
-            let context = services
-                .store()
-                .model_settings(&model.id)
-                .await?
-                .context_window_tokens;
-            models.push(json!({"cursorId":format!("byok:{}",model.id),"id":model.model_id,"displayName":model.display_name,
-                "source":model.plugin_name,"contextLength":crate::model::effective_context_window(&model.model_id,context,model.context_window_tokens),"maxOutputTokens":model.max_output_tokens,"supportsVision":model.images,"extendedCapabilitiesDetected":true,
-                "reasoningEfforts":model.reasoning_efforts,"defaultReasoningEffort":model.default_reasoning_effort}));
-        }
-    }
+    let mut models: Vec<_> = crate::configured_models::list(services.store(), services.plugins()).await?.into_iter().map(|model| {
+        json!({"cursorId":format!("byok:{}",model.id),"id":model.model_id,"displayName":model.display_name,
+            "source":model.source,"contextLength":model.context,"maxOutputTokens":model.max_output_tokens,
+            "supportsVision":model.images,"extendedCapabilitiesDetected":true,
+            "reasoningEfforts":model.reasoning_efforts,"defaultReasoningEffort":model.default_reasoning_effort})
+    }).collect();
     // Native optional fields use undefined, not null, for absent metadata.
     for model in &mut models {
         model

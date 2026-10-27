@@ -6,23 +6,21 @@ use crate::{
     Result,
 };
 
-use super::ControlService;
+use super::ControlState;
 
-pub async fn status(State(service): State<ControlService>) -> Result<Json<CursorHarnessStatus>> {
-    Ok(Json(service.cursor_harness().status().await?))
+pub async fn status(State(service): State<ControlState>) -> Result<Json<CursorHarnessStatus>> {
+    Ok(Json(service.harness.status().await?))
 }
 
 pub async fn initialize_ca(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
 ) -> Result<Json<CursorHarnessStatus>> {
-    Ok(Json(service.cursor_harness().initialize_ca().await?))
+    Ok(Json(service.harness.initialize_ca().await?))
 }
 
 pub async fn set_enabled(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(input): Json<SetEnabled>,
 ) -> Result<Json<CursorHarnessStatus>> {
-    Ok(Json(
-        service.cursor_harness().set_enabled(input.enabled).await?,
-    ))
+    Ok(Json(service.harness.set_enabled(input.enabled).await?))
 }

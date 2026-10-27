@@ -109,6 +109,18 @@ impl NativeAgent {
             })
             .collect()
     }
+    pub async fn is_current(&self) -> bool {
+        self.inner
+            .installed
+            .lock()
+            .await
+            .as_ref()
+            .is_some_and(|installed| {
+                self.fingerprint()
+                    .is_ok_and(|current| *installed == current)
+            })
+    }
+
     pub async fn enable(&self, address: std::net::SocketAddr) -> Result<bool> {
         let mut installed = self.inner.installed.lock().await;
         self.write_connection(true, Some(address))?;
@@ -271,7 +283,7 @@ mod tests {
         let runtime =
             crate::plugin::PluginRuntime::in_directory(directory.path().join("runtime")).unwrap();
         let plugins = crate::plugin::PluginRegistry::in_directory(
-            store.clone(),
+            crate::network::NetworkClients::new(store.clone()),
             runtime,
             "test".into(),
             directory.path().join("plugins"),
@@ -408,5 +420,58 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+    use crate::local_app::{
+        ca::CaManager, proxy::ProxyRuntime, CaState, CursorHarness, IntegrationState,
+    };
+    use parking_lot::RwLock;
+
+    #[tokio::test]
+    async fn reading_ready_status_never_installs_or_writes_connection() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = crate::store::Store::connect(&format!(
+            "sqlite://{}",
+            directory.path().join("test.db").display()
+        ))
+        .await
+        .unwrap();
+        assert!(
+            !store.cursor_takeover_enabled().await.unwrap(),
+            "fresh installations require explicit takeover"
+        );
+        store.set_cursor_takeover_enabled(true).await.unwrap();
+        let native_dir = directory.path().join("native");
+        let native = NativeAgent {
+            inner: Arc::new(Inner {
+                app: directory.path().join("missing-installation"),
+                directory: native_dir.clone(),
+                key: "test-key".into(),
+                installed: Mutex::new(None),
+                catalog: Mutex::new(None),
+            }),
+        };
+        let harness = CursorHarness {
+            inner: Arc::new(crate::local_app::Inner {
+                native,
+                store: store.clone(),
+                ca: CaManager::in_directory(directory.path().join("ca")),
+                ca_initialization: Mutex::new(()),
+                lifecycle: Mutex::new(()),
+                backend_addr: RwLock::new(Some("127.0.0.1:1".parse().unwrap())),
+                tab_mode: Arc::new(RwLock::new(Default::default())),
+                proxy: Mutex::new(ProxyRuntime::default()),
+            }),
+        };
+        for _ in 0..2 {
+            let status = harness.status_with_ca(CaState::Ready).await.unwrap();
+            assert!(matches!(status.integration, IntegrationState::Degraded));
+            assert!(!native_dir.exists());
+            assert!(store.cursor_takeover_enabled().await.unwrap());
+        }
     }
 }

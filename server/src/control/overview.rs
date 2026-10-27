@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use crate::{model::Overview, Result};
 
-use super::ControlService;
+use super::ControlState;
 
 #[derive(Debug, Default, Deserialize)]
 pub struct OverviewRange {
@@ -20,7 +20,7 @@ pub struct OverviewRange {
 }
 
 pub async fn get(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Query(range): Query<OverviewRange>,
 ) -> Result<Json<Overview>> {
     Ok(Json(
@@ -33,4 +33,18 @@ pub async fn get(
             )
             .await?,
     ))
+}
+
+impl ControlState {
+    pub async fn overview(
+        &self,
+        start_ms: Option<i64>,
+        end_ms: Option<i64>,
+        model_hashes: Option<&str>,
+        bucket_ms: Option<i64>,
+    ) -> Result<Overview> {
+        self.store
+            .overview(start_ms, end_ms, model_hashes, bucket_ms)
+            .await
+    }
 }

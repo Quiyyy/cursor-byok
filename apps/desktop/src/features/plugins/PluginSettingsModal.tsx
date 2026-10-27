@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { api, pluginText, type PluginDescriptor } from "../../shared/api";
-import { appStore } from "../../shared/store/appStore";
+import { pluginsStore } from "./state";
 import { useI18n } from "../../i18n/store";
 import { Button } from "../../shared/ui/Button";
 import { Checkbox } from "../../shared/ui/Checkbox";
@@ -57,7 +57,7 @@ export function PluginSettingsModal({ plugin, initialTab, initialProviderId, onA
       return false;
     } finally {
       // Refresh even on partial failure; remaining unsaved choices stay available for retry.
-      await appStore.refreshPlugins();
+      await pluginsStore.refreshPlugins();
       running.current = false;
       setOperation(null);
     }

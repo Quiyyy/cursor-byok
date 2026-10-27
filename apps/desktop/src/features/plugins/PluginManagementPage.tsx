@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, pluginText, type PluginDescriptor, type PluginImportFile, type PluginRuntimePhase, type PluginRuntimeStatus } from "../../shared/api";
 import { useI18n } from "../../i18n/store";
 import { PageContent } from "../../shell/layout/PageContent";
-import { appStore, useAppStore } from "../../shared/store/appStore";
+import { useSettingsStore } from "../settings/state";
+import { pluginsStore, usePluginsStore } from "./state";
 import { ActionMenu, type ActionMenuItem } from "../../shared/ui/ActionMenu";
 import { Button } from "../../shared/ui/Button";
 import { Card } from "../../shared/ui/Card";
@@ -17,7 +18,7 @@ import { Select } from "../../shared/ui/Select";
 import styles from "./PluginManagementPage.module.scss";
 
 export function PluginManagementPage() {
-  const { pluginRuntime, plugins } = useAppStore();
+  const { pluginRuntime, plugins } = usePluginsStore();
   const { locale } = useI18n();
   const message = useMessage();
   const [progressOpen, setProgressOpen] = useState(false);
@@ -46,7 +47,7 @@ export function PluginManagementPage() {
     if (syncError) message(t("账号已保存，但同步模型失败：{error}", { error: syncError }), { duration: 5000 });
     setSelected((current) => {
       if (!current) return null;
-      const plugin = appStore.getSnapshot().plugins.find((candidate) => candidate.id === current.pluginId);
+      const plugin = pluginsStore.getSnapshot().plugins.find((candidate) => candidate.id === current.pluginId);
       return { ...current, mode: plugin?.providers.some((provider) => provider.hasModels) ? "models" : "accounts" };
     });
   }, [message]);
@@ -56,13 +57,13 @@ export function PluginManagementPage() {
   };
 
   useEffect(() => {
-    if (!pluginRuntime) void appStore.refreshPluginRuntime();
+    if (!pluginRuntime) void pluginsStore.refreshPluginRuntime();
   }, [pluginRuntime]);
 
   useEffect(() => {
     if (pluginRuntime?.state !== "initializing") return;
     if (!cancelRequested.current) setProgressOpen(true);
-    const timer = window.setInterval(() => void appStore.refreshPluginRuntime(), 300);
+    const timer = window.setInterval(() => void pluginsStore.refreshPluginRuntime(), 300);
     return () => window.clearInterval(timer);
   }, [pluginRuntime?.state]);
 
@@ -71,12 +72,12 @@ export function PluginManagementPage() {
     cancelRequested.current = false;
     setStarting(true);
     setProgressOpen(true);
-    const status = await appStore.initializePluginRuntime();
+    const status = await pluginsStore.initializePluginRuntime();
     setStarting(false);
     if (!status) {
       setProgressOpen(false);
     } else if (cancelRequested.current && status.state === "initializing") {
-      void appStore.cancelPluginRuntimeInitialization();
+      void pluginsStore.cancelPluginRuntimeInitialization();
     }
   };
 
@@ -84,7 +85,7 @@ export function PluginManagementPage() {
     setProgressOpen(false);
     cancelRequested.current = true;
     if (pluginRuntime?.state === "initializing") {
-      void appStore.cancelPluginRuntimeInitialization();
+      void pluginsStore.cancelPluginRuntimeInitialization();
     }
   };
 
@@ -173,7 +174,7 @@ function PluginCard({ plugin, onOpen }: {
   onOpen: (pluginId: string, mode: "add" | PluginSettingsTab) => void;
 }) {
   const { locale } = useI18n();
-  const { ports } = useAppStore();
+  const { ports } = useSettingsStore();
   const message = useMessage();
   const importInput = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
@@ -200,7 +201,7 @@ function PluginCard({ plugin, onOpen }: {
         [...files].map(async (file) => ({ name: file.name, content: await file.text() })),
       );
       const result = await api.importPluginResources(plugin.id, importResource.type, entries);
-      await appStore.refreshPlugins();
+      await pluginsStore.refreshPlugins();
       const summary = t("导入完成：新增 {added}，更新 {updated}", { added: result.added, updated: result.updated });
       if (result.modelSyncError) {
         message(t("账号已保存，但同步模型失败：{error}", { error: result.modelSyncError }), { duration: 5000 });

@@ -22,7 +22,7 @@ apps/desktop/src/
 server/src/
 ├── cursor/services/commit_message.rs # Validates built-in/plugin IDs and creates Commit invocation
 ├── provider/router.rs                # Routes stable IDs to built-in or plugin providers
-└── plugin/registry.rs                # Resolves plugin model IDs and executes plugin streams
+└── plugin/registry/                  # Resolves model IDs and executes plugin streams in separate modules
 ```
 
 ## Component boundary

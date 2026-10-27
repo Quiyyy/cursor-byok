@@ -137,7 +137,6 @@ fn build_invocation(
         call_id: call_id.clone(),
         run_id: call_id.clone(),
         conversation_id: call_id,
-        provider_call_index: 0,
         request: ModelRequest {
             native_responses: None,
             prompt: PromptSpec {
@@ -149,7 +148,6 @@ fn build_invocation(
                 ..ModelSpec::new(model_id.to_owned())
             },
             history: vec![ProjectedMessage {
-                message_id: "commit-message".into(),
                 role: Role::User,
                 content: ProjectedContent::Parts(vec![ContentPart::Text { text: user_content }]),
             }],

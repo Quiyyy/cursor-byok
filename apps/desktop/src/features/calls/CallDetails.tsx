@@ -8,16 +8,14 @@ const show = (value: string | number | null) => value ?? "-";
 const timing = (value: number | null) => value == null ? "-" : `${value} ms`;
 
 export function CallDetails({ detail }: { detail: CallDetail }) {
-  const { call, request, response_chunks: chunks, cursor_trace: cursorTrace } = detail;
+  const { call, request, response_chunks: chunks } = detail;
   const responseBody = chunks.map((chunk) => chunk.data).join("");
   const responseBytes = chunks.reduce((total, chunk) => total + chunk.byte_count, 0);
   const fields: Array<[string, string | number]> = [
     ["Call ID", call.call_id],
-    [t("调用类型"), call.call_kind === "cursor_official" ? t("Cursor 官方") : "LLM"],
-    [t("路由"), call.route === "cursor_official" ? t("Cursor 官方") : "BYOK"],
+    [t("调用来源"), ({ native_agent: "Cursor Agent", external_api: "External API", commit: "Commit", model_test: t("模型测试") })[call.source]],
     ["Run ID", call.run_id],
     ["Conversation ID", call.conversation_id],
-    [t("上游调用序号"), call.provider_call_index],
     ["Model Hash", show(call.model_hash)],
     [t("上游类型"), call.provider_type],
     [t("上游地址"), call.provider_url],
@@ -66,18 +64,6 @@ export function CallDetails({ detail }: { detail: CallDetail }) {
       </> : <div className={styles.empty}>{t("未记录响应内容，请开启详细记录后重试。")}</div>}
     </section> },
   ];
-
-  if (cursorTrace) tabs.push({ value: "cursor-trace", label: t("Cursor 追踪"), content: <section>
-      <div className={styles.meta}>
-        Request ID：{cursorTrace.trace.request_id} · {t("工件数")}：{cursorTrace.artifacts.length}
-      </div>
-      <JsonEditor
-        ariaLabel={t("Cursor 追踪")}
-        value={JSON.stringify({ trace: cursorTrace.trace, artifacts: cursorTrace.artifacts })}
-        readOnly
-        detail
-      />
-    </section> });
 
   return <div className={styles.root}><Tabs items={tabs} /></div>;
 }

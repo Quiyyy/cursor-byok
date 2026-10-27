@@ -256,7 +256,6 @@ async fn invoke(
         call_id: id.clone(),
         run_id: native_identity(kind, &headers, "x-byok-generation-id", &id),
         conversation_id: native_identity(kind, &headers, "x-byok-conversation-id", &id),
-        provider_call_index: 0,
         request,
     };
     let cancellation = CancellationToken::new();

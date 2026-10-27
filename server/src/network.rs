@@ -34,6 +34,7 @@ pub struct NetworkClients {
 struct ClientCache {
     default: Option<reqwest::Client>,
     cursor: Option<reqwest::Client>,
+    plugin: Option<reqwest::Client>,
     provider: Option<(Duration, reqwest::Client)>,
     /// Fingerprint of the proxy configuration the cached clients were built
     /// with, and when the fingerprint was last recomputed.
@@ -76,6 +77,25 @@ impl NetworkClients {
             .redirect(reqwest::redirect::Policy::none())
             .build()?;
         cache.cursor = Some(client.clone());
+        Ok(client)
+    }
+
+    /// Plugin requests forbid redirects so the declared host permission cannot be bypassed.
+    pub async fn plugin_client(&self) -> Result<reqwest::Client> {
+        self.invalidate_if_proxy_changed().await;
+        if let Some(client) = self.cache.read().await.plugin.clone() {
+            return Ok(client);
+        }
+        let mut cache = self.cache.write().await;
+        if let Some(client) = cache.plugin.clone() {
+            return Ok(client);
+        }
+        let client = client_builder(&self.store)
+            .await?
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(30))
+            .build()?;
+        cache.plugin = Some(client.clone());
         Ok(client)
     }
 

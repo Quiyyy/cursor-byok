@@ -1,4 +1,5 @@
 use super::*;
+use crate::store::Store;
 
 #[tokio::test]
 #[ignore = "requires DENO_TEST_EXECUTABLE"]
@@ -14,7 +15,7 @@ async fn successful_catalogs_replace_removed_models_and_empty_lists_but_errors_p
     .await
     .unwrap();
     let registry = PluginRegistry::in_directory(
-        store,
+        NetworkClients::new(store),
         PluginRuntime::for_test(),
         "0.1.0".into(),
         root.path().to_owned(),

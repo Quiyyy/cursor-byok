@@ -2,6 +2,3 @@
 
 pub mod byok;
 pub mod cursor;
-mod router;
-
-pub use router::router;

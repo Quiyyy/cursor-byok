@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CallTable } from "./CallTable";
 import { PageContent } from "../../shell/layout/PageContent";
-import { appStore, useAppStore } from "../../shared/store/appStore";
+import { callsStore, useCallsStore } from "./state";
 import styles from "./CallsPage.module.scss";
 import { PageActions } from "../../shell/PageActions";
 import { TextInput } from "../../shared/ui/FormControls";
@@ -11,7 +11,7 @@ import { CallDetailDialog } from "./CallDetailDialog";
 const CALL_REFRESH_INTERVAL_MS = 2_000;
 
 export function CallsPage() {
-  const { calls } = useAppStore();
+  const { calls } = useCallsStore();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [selectedCall, setSelectedCall] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export function CallsPage() {
     let disposed = false;
     const refreshCalls = () => {
       if (!disposed && document.visibilityState === "visible") {
-        void appStore.refreshCalls();
+        void callsStore.refreshCalls();
       }
     };
 

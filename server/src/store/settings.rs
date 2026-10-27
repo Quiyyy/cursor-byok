@@ -256,7 +256,7 @@ impl Store {
         .await?;
         value
             .map(|value| serde_json::from_str(&value).map_err(Into::into))
-            .unwrap_or(Ok(true))
+            .unwrap_or(Ok(false))
     }
 
     pub(crate) async fn set_cursor_takeover_enabled(&self, enabled: bool) -> Result<()> {

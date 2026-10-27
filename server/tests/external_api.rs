@@ -54,6 +54,135 @@ fn model_input() -> ModelConfigInput {
     }
 }
 
+#[tokio::test]
+async fn raw_and_translated_requests_share_configuration_and_keep_explicit_options() {
+    let (directory, store) = fixtures::temp_store().await;
+    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    let upstream = Router::new().route("/v1/chat/completions", post(move |Json(body): Json<Value>| {
+        let sender = sender.clone();
+        async move {
+            sender.send(body).unwrap();
+            ([("content-type", "text/event-stream")], "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+        }
+    }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+    let mut model = model_input();
+    model.base_url = format!("http://{address}/v1");
+    model.model_id = "gpt-test".into();
+    model.max_completion_tokens = Some(32000);
+    model.reasoning_effort = Some("high".into());
+    model.openai_extra_params_enabled = true;
+    model.openai_extra_params = json!({"temperature":0.9,"prompt_cache_key":"{{SessionId}}"});
+    store.create_model(&model).await.unwrap();
+    let mut invalid = model.clone();
+    invalid.openai_extra_params = json!({"messages":[]});
+    assert!(store.create_model(&invalid).await.is_err());
+    store
+        .set_external_api_settings(ExternalApiSettings {
+            enabled: true,
+            api_key: "secret".into(),
+        })
+        .await
+        .unwrap();
+    let runtime = PluginRuntime::in_directory(directory.path().join("runtime")).unwrap();
+    let clients = NetworkClients::new(store.clone());
+    let plugins = PluginRegistry::in_directory(
+        clients.clone(),
+        runtime.clone(),
+        "test".into(),
+        directory.path().join("plugins"),
+    )
+    .unwrap();
+    let provider = Arc::new(ProviderRouter::new(
+        store.clone(),
+        plugins.clone(),
+        clients.clone(),
+        Duration::from_secs(10),
+        Duration::from_secs(10),
+    ));
+    let control = control::ControlState::new(
+        store.clone(),
+        provider.clone(),
+        runtime,
+        plugins.clone(),
+        clients.clone(),
+        cursor_server::local_app::CursorHarness::new(store.clone()).unwrap(),
+    );
+    let router = byok::router(
+        store.clone(),
+        plugins,
+        provider,
+        Some(byok::NativeForwarder::new(
+            store.clone(),
+            clients,
+            Duration::from_secs(10),
+            Duration::from_secs(10),
+        )),
+    )
+    .merge(control::api_router(control));
+    for (path, mut request) in [
+        (
+            "/byok/v1/chat/completions",
+            json!({"messages":[{"role":"user","content":"hello"}],"max_tokens":100,"reasoning_effort":"low"}),
+        ),
+        (
+            "/byok/v1/responses",
+            json!({"input":"hello","max_output_tokens":100,"reasoning":{"effort":"low"}}),
+        ),
+        (
+            "/byok/v1/messages",
+            json!({"messages":[{"role":"user","content":"hello"}],"max_tokens":100,"output_config":{"effort":"low"}}),
+        ),
+    ] {
+        request["model"] = json!("work/gpt-test");
+        request["stream"] = json!(true);
+        request["temperature"] = json!(0.2);
+        request["stop"] = json!(["{{SessionId}}"]);
+        request["prompt_cache_key"] = json!("caller-cache");
+        let (status, response) = send(router.clone(), "POST", path, Some("secret"), request).await;
+        assert_eq!(status, StatusCode::OK, "{path}: {response}");
+        let forwarded = receiver.recv().await.unwrap();
+        assert_eq!(
+            forwarded["messages"],
+            json!([{"role":"user","content":"hello"}])
+        );
+        assert_eq!(forwarded["reasoning_effort"], "low");
+        assert_eq!(
+            forwarded
+                .get("max_tokens")
+                .or_else(|| forwarded.get("max_completion_tokens"))
+                .unwrap(),
+            100
+        );
+        assert_eq!(forwarded["temperature"], 0.2);
+        assert_eq!(forwarded["stop"], json!(["{{SessionId}}"]));
+        assert_eq!(forwarded["prompt_cache_key"], "caller-cache");
+    }
+    // Source is independent of Cursor's opaque generation identifier.
+    sqlx::query("UPDATE llm_calls SET run_id = 'opaque-generation'")
+        .execute(store.pool())
+        .await
+        .unwrap();
+    let (_, response) = send(
+        router,
+        "GET",
+        "/__byok-api__/api/llm-calls",
+        None,
+        json!({}),
+    )
+    .await;
+    let calls: Value = serde_json::from_str(&response).unwrap();
+    assert_eq!(calls.as_array().unwrap().len(), 3);
+    for call in calls.as_array().unwrap() {
+        assert_eq!(call["source"], "external_api");
+        assert!(call.get("provider_call_index").is_none());
+        assert!(call.get("call_kind").is_none());
+    }
+    server.abort();
+}
+
 async fn setup() -> (
     axum::Router,
     fake_provider::FakeProvider,
@@ -64,7 +193,7 @@ async fn setup() -> (
     store.create_model(&model_input()).await.unwrap();
     let runtime = PluginRuntime::in_directory(directory.path().join("plugins/runtime")).unwrap();
     let plugins = PluginRegistry::in_directory(
-        store.clone(),
+        cursor_server::network::NetworkClients::new(store.clone()),
         runtime.clone(),
         "0.1.0".into(),
         directory.path().join("plugins"),
@@ -72,14 +201,14 @@ async fn setup() -> (
     .unwrap();
     let provider = fake_provider::FakeProvider::default();
     let shared_provider = Arc::new(provider.clone());
-    let control = control::ControlService::new(
+    let control = control::ControlState::new(
         store.clone(),
         shared_provider.clone(),
         runtime,
         plugins.clone(),
         NetworkClients::new(store.clone()),
-    )
-    .unwrap();
+        cursor_server::local_app::CursorHarness::new(store.clone()).unwrap(),
+    );
     let router = byok::router(store.clone(), plugins, shared_provider, None)
         .merge(control::api_router(control));
     (router, provider, store, directory)
@@ -861,7 +990,7 @@ async fn all_entry_and_upstream_protocol_pairs_preserve_cache_usage() {
         .unwrap();
     let runtime = PluginRuntime::in_directory(directory.path().join("plugins/runtime")).unwrap();
     let plugins = PluginRegistry::in_directory(
-        store.clone(),
+        cursor_server::network::NetworkClients::new(store.clone()),
         runtime,
         "0.1.0".into(),
         directory.path().join("plugins"),
@@ -1023,7 +1152,7 @@ async fn matching_http_protocols_forward_native_requests_and_responses() {
         .unwrap();
     let runtime = PluginRuntime::in_directory(directory.path().join("plugins/runtime")).unwrap();
     let plugins = PluginRegistry::in_directory(
-        store.clone(),
+        cursor_server::network::NetworkClients::new(store.clone()),
         runtime,
         "0.1.0".into(),
         directory.path().join("plugins"),
@@ -1125,6 +1254,10 @@ async fn matching_http_protocols_forward_native_requests_and_responses() {
             }
             let (upstream_headers, forwarded) = receiver.recv().await.unwrap();
             request["model"] = json!("native-model");
+            if model_type == ModelType::Anthropic {
+                request["thinking"] = json!({"type":"adaptive","display":"summarized"});
+                request["output_config"] = json!({"effort":"xhigh"});
+            }
             assert_eq!(forwarded, request);
             if model_type == ModelType::Anthropic {
                 assert_eq!(upstream_headers["x-api-key"], "upstream");

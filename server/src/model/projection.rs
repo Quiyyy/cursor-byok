@@ -18,7 +18,6 @@ pub enum ProjectedContent {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ProjectedMessage {
-    pub message_id: String,
     pub role: Role,
     pub content: ProjectedContent,
 }

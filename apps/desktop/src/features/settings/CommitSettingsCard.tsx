@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type CommitSettingsView } from "../../shared/api";
 import { commitPromptLocale } from "../../i18n/runtime";
 import { useI18n } from "../../i18n/store";
-import { useAppStore } from "../../shared/store/appStore";
+import {useModelsStore} from "../models/state";
+import {usePluginsStore} from "../plugins/state";
 import { Button } from "../../shared/ui/Button";
 import { Modal } from "../../shared/ui/Modal";
 import { ModelSelect, type ModelSelectOption } from "../../shared/ui/ModelSelect";
@@ -17,7 +18,8 @@ function errorText(cause: unknown) {
 }
 
 export function CommitSettingsCard() {
-  const { models, plugins } = useAppStore();
+  const {models} = useModelsStore();
+  const {plugins} = usePluginsStore();
   const { locale } = useI18n();
   const message = useMessage();
   const [view, setView] = useState<CommitSettingsView | null>(null);

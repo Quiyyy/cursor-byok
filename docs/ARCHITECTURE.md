@@ -20,17 +20,24 @@ server/
 │   ├── build.mjs                # 打包安装工具及依赖许可
 │   └── install.bundle.mjs       # 生成产物；不包含 Cursor 源码
 ├── src/
-│   ├── app.rs                   # 依赖装配、路由与服务生命周期
+│   ├── app.rs                   # 统一创建依赖、启动恢复与服务生命周期
+│   ├── configured_models.rs     # API/账号模型的统一身份、能力与容量视图
 │   ├── local_app/               # 原生入口安装、代理、CA 与 Cursor 设置
 │   ├── api/byok/                # 原生模型网关和独立的 External API
 │   ├── api/cursor/              # 模型目录、账户展示及服务 RPC
 │   ├── cursor/services/         # 原生目录封装、TAB、Commit 与账户响应
 │   ├── cursor/protocol/         # Connect 帧及 Commit 等少量服务记录
 │   ├── provider/                # 模型协议、请求记录与流式转发
-│   ├── plugin/                  # 账号、授权续期、Deno 宿主及 SDK
+│   │   └── request_options.rs   # 两条传输路径共用的参数与缓存键规则
+│   ├── plugin/                  # 账号插件与 SDK
+│   │   ├── registry/            # 授权、资源、目录、调用和管理视图各自分文件
+│   │   └── worker/              # Deno 进程通信与宿主网络权限分开
 │   ├── model/                   # 模型配置、HTTP 消息与用量类型
 │   ├── store/                   # 配置、用量和诊断的 SQLite 存储
-│   └── control/                 # 桌面管理 API
+│   └── control/                 # 桌面管理 API；state 只接收依赖
+│       ├── model_test.rs        # 模型测试执行与取消
+│       ├── discovery.rs         # 上游型号发现
+│       └── calls.rs             # 当前模型调用记录与来源
 ├── plugins/build-in/            # 内置账号连接插件
 ├── prompt/cursor/commit/        # 独立 Commit 功能的中英文提示词
 └── migrations/                  # 已应用的数据库结构历史
@@ -51,6 +58,8 @@ Tauri / 独立服务
 开启接管 → 校验 CA → 备份并修改原生路由及新对话入口 → 写入连接与代理设置 → 重启对应 Cursor
 关闭接管 → 禁用网关 → 按哈希还原入口 → 清除托管代理设置 → 停止代理
 ```
+
+新数据目录默认关闭接管。应用在 HTTP 地址确定后按已保存的开启意图恢复一次；接管开关与退出操作共用串行生命周期锁。状态查询只检查证书、入口指纹与代理状态，不安装、不改设置、不终止 Cursor；入口失效或恢复失败报告 degraded，管理接口继续可用。
 
 原生网关使用进程级随机凭据，独立于 External API 的开关和密钥。服务商密钥留在 BYOK 配置或账号插件中，不写进 Cursor 模型目录。备份位于用户数据目录；Cursor 更新替换文件后，不会用旧备份覆盖新版本。
 
@@ -188,7 +197,7 @@ Cursor 原生 WebSearch
 
 已删除 `server/src/run/`，以及 `cursor/` 下的 `compile/`、`prompting/`、`tools/`、`checkpoint/`、`conversation/`、`transport/`、`native/`。旧 Node 工具 worker、Agent 提示模板、固定工具快照、协议提取器和整套 Agent protobuf 也已删除。
 
-旧 Agent 会话的数据库读写模块不再参与运行。既有迁移文件保留校验和，应用不会自动销毁用户的历史数据库；统计与诊断的读取继续保留。
+旧 Agent 会话及 Cursor RPC 追踪代码、CAS blob 存储、对应 API 和界面已经移除。当前诊断由 CallRecorder 保存模型请求、响应、用量与耗时；调用来源按调用标识区分原生 Agent、External API、Commit 和模型测试，不从原生 generation 标识推断。既有迁移文件及数据库结构保留校验和，本次代码清理不重建或销毁用户数据库；旧表不再作为业务读取路径。
 
 ## 其他功能与边界
 
@@ -220,3 +229,13 @@ Google 和 Grok 目录只包含账号接口实际返回的模型，不维护静�
 有效的空目录与解析失败分开处理；非空但没有有效模型项的异常响应不会清空旧数据。没有账号或凭据无效时报告错误，不返回猜测型号。升级后同步一次模型即可清理旧目录中的静态条目；指向已移除型号的既有选择需重新选择，不自动替换成另一模型。
 
 此前 `gemini-3.7-flash-medium` 被静态目录重新加入，但并未出现在该账号的上游目录，普通请求与搜索均返回 429；使用实际返回的 `gemini-3.8-flash-medium` 后搜索成功。因此，该次 429 不能直接归因为额度耗尽。验证范围与证据见[维护状态](./MAINTENANCE_STATUS.md)。
+
+## 管理界面状态与请求配置
+
+`features/models/state.ts`、`plugins/state.ts`、`cursor/state.ts`、`calls/state.ts`、`settings/state.ts` 各自持有业务快照和操作。`shell/refresh.ts` 只负责启动加载和当前页面刷新；独立功能失败不阻止其他快照更新。模型保存只刷新模型相关数据，接管状态刷新独立执行。首页统计由 `features/home/useOverview.ts` 按当前时间和模型筛选请求；模型选项复用 `configuredModelOptions`。
+
+API 模型与账号模型的身份、上下文覆盖及服务商声明统一经 `configured_models.rs` 解析，Cursor 目录、原生网关与管理接口分别编码各自响应。服务商凭据不进入该元数据视图。
+
+同协议原始转发与 Provider 序列化都调用 `provider/request_options.rs`。配置只补齐未提供的参数；显式请求值优先。额外参数不得替换模型、历史消息、工具、系统指令和 Responses 会话关联字段，保存时和发送前均校验。仅保存的配置参与会话模板展开，调用方显式传入的同名字符串保持原样；模板按原生 conversation_id 展开；GPT 缺省缓存键使用该会话标识，显式缓存键保留。原始 Responses 请求与签名回放仍保持独立通道。
+
+插件网络请求通过共享 NetworkClients 复用连接。主机白名单、HTTPS、禁止重定向、流大小限制和取消仍由插件宿主执行。资源凭据准备独立于模型请求取消，轮换结果完成持久化后才能用于后续调用。

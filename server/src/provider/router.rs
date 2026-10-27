@@ -85,11 +85,7 @@ impl Provider for ProviderRouter {
                     }
                     let request_url = model.request_url()?;
                     model.configure(&mut routed.request.model);
-                    routed.request.model.extra_params =
-                        super::request_template::render_json_strings(
-                            model.extra_params(),
-                            &invocation.conversation_id,
-                        );
+                    super::request_options::merge_extra_params(&mut routed.request.model.extra_params, &super::render_json_strings(model.extra_params(), &invocation.conversation_id))?;
                     routed.request.model.model_id = model.model_id.clone();
                     let recorder = start_recorder(&store, &invocation, &model.model_hash, &model.display_name, provider_type, &request_url, &model.model_id).await?;
                     let guard = recorder.cancel_on_drop();
@@ -213,7 +209,6 @@ async fn start_recorder(
             call_id: invocation.call_id.clone(),
             run_id: invocation.run_id.clone(),
             conversation_id: invocation.conversation_id.clone(),
-            provider_call_index: invocation.provider_call_index.min(i64::MAX as u64) as i64,
             model_hash: model_hash.into(),
             provider_type,
             provider_url: request_url.into(),
