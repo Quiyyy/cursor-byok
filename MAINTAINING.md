@@ -4,6 +4,10 @@
 
 先阅读 [AGENTS.md](./AGENTS.md)。产品使用见[使用指南](./docs/GETTING_STARTED.md)，模块职责见[架构说明](./docs/ARCHITECTURE.md)，修复范围见[维护状态](./docs/MAINTENANCE_STATUS.md)。
 
+## Agent 维护规范
+
+`AGENTS.md` 只声明核心设计、维护约束与规范路由；实现现状和操作步骤分别见架构说明与本文。每次提交前，按顶层规范完成实现与规范的一致性自检，并确认规范之间没有矛盾。
+
 ## 环境与启动
 
 - Rust stable、Cargo、rustfmt 和 Clippy。

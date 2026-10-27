@@ -1,25 +1,57 @@
-# AGENTS.md
-- **The directory structure is the architecture.** Simple, clear directory and module naming >= module dependency relationships > concrete implementation details; communicate with the user using directory trees.
-- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
-- Choose the simplest implementation that fully meets the current requirements. Avoid speculative abstractions, configuration, and indirection.
-- Grow the system in layers. Start from the smallest version that works end to end, and add each new capability on top of a product that already works. Never trade a working product for unfinished complexity.
-- Keep components modular and concerns clearly separated.
-- Prefer established, well-maintained libraries when they reduce overall complexity or improve reliability. Do not reimplement common functionality without a clear reason.
-- Lean on the dependencies already in the project before writing your own implementation or adding packages. Do not assume a library lacks a capability without checking its documentation and types.
-- Make architectural decisions for the long term. Do not accept a stopgap that only works for now and is meant to be replaced later.
+# Agent 维护规范
 
-## Communication
+适用于整个仓库。只声明核心设计、维护约束和文档路由，不记录实现快照、操作步骤或历史修复。
 
-- Lead with the conclusion. Keep responses direct and omit filler, repeated context, generic explanations, and narration of obvious steps.
-- Match the level requested by the user: discuss architecture as architecture, behavior as behavior, and code details only when they materially support the answer.
-- For architecture, refactoring, and module-boundary discussions, communicate primarily with annotated directory trees and ASCII architecture/data-flow diagrams instead of long prose.
-- In directory trees, annotate every relevant directory and file with its single responsibility. When discussing code size, include line counts in the comments:
-  - use measured line counts for existing code;
-  - use clearly marked approximate targets such as `≈300 lines` for proposed code;
-  - state whether tests, generated code, and blank lines are excluded.
-- Show the complete main execution path, including inputs, ownership boundaries, runtime loops, persistence, outputs, and extension points. Make the direction of data and control flow explicit.
-- Clearly separate the current structure from the proposed structure. Explicitly list modules that move, merge, split, or are deleted.
-- Use the user's vocabulary consistently. Do not introduce new domain terms when existing plain-language terms are sufficient; when an implementation name must be mentioned, distinguish it from the architecture concept.
-- For stateful or concurrent behavior, show timing, ownership, state boundaries, and before/during/after behavior explicitly. Distinguish continuation within the same lifecycle from creation of a new lifecycle.
-- Prefer compact trees, flow diagrams, state matrices, and mappings when they communicate the structure more clearly than paragraphs.
-- Tie recommendations to the actual repository structure and code. Do not present a speculative target architecture as if it already exists.
+## 核心设计
+
+Cursor 负责 Agent 执行、工具、会话与权限；BYOK 负责模型连接、协议传输和管理能力。
+
+```text
+apps/desktop/  # 用户交互与桌面能力
+server/        # 模型服务与外部系统接入
+```
+
+组件职责清晰，状态与资源有明确所有者。界面、传输和诊断不另建一套 Agent 业务状态。
+
+## 规范路由
+
+先读本文件，再按任务读取以下规范。目录规范默认适用于其子树；跨目录任务规范按声明范围主动读取，不依赖工具自动发现。跨组件任务合并读取适用规范。
+
+| 任务或范围 | 规范 |
+| --- | --- |
+| 代码审查、缺陷归因 | [审查](.agents/review/AGENTS.md) |
+| 行为修改、复现与验收 | [测试](.agents/testing/AGENTS.md) |
+| 全仓文档、规范与引用维护 | [文档](.agents/documentation/AGENTS.md) |
+| 桌面前端 | [桌面与前端](apps/desktop/AGENTS.md) |
+| 桌面宿主 | [宿主](apps/desktop/src-tauri/AGENTS.md)，同时读桌面规范 |
+| 服务端 | [Server](server/AGENTS.md) |
+| Cursor 原生接入 | [原生接入](server/native-agent/AGENTS.md)，同时读 Server 规范 |
+| 发布与更新资产 | [发布技能](.agents/skills/release/SKILL.md) |
+
+## 通用约束
+
+- 目录结构表达职责。采用满足当前需求的最简单、可长期维护的设计；在可工作的产品上逐层演进。
+- 优先复用现有能力和依赖，不为假设需求增加抽象、配置或间接层。
+- 配置的权威来源与覆盖关系明确，可派生信息不重复维护；易变值使用既有配置或输入，稳定常量无需全部配置化。
+- 新增公共抽象须说明实际使用方、现有机制的不足和维护责任，并降低整体维护成本；局部差异留在所属组件。
+- 重构默认保持已约定的产品行为。替代旧路径时同步清理废弃实现、配置、入口和专用测试，不新增兼容路径、回退分支或过渡迁移；持久化数据的处置必须有明确依据。
+- 简化以职责清晰和维护成本下降为准，不以减少行数为目标；必要能力、约束与执行保障必须保留。
+- 保持任务与分支范围明确，保护用户改动。独立旧问题单独报告，不借审查或重构扩大修复。
+- 验证使用隔离环境；涉及真实账号、用户环境或对外发布时遵守任务授权。已有授权无需重复确认。
+- 默认中文，结论先行。架构讨论使用职责树或关系图，区分当前状态与拟议变更；结论不得超过证据范围。
+- GitHub 内容使用本机 `gh` CLI，发布前提供中英文草稿征求意见，实际发布优先英文；工具不可用时先说明。
+
+## 提交前自检
+
+**每次提交前必须完成自检，包括纯文档提交：**
+
+1. 本次改动符合用户需求与适用规范，未混入无关改动。
+2. 改动范围内的实现与规范一致；改变核心设计时，有明确需求依据并同步更新规范，不为迁就缺陷而修改规范。
+3. 适用规范之间没有冲突、重复定义或含糊的职责；文档路由和引用有效。
+4. 已完成与改动风险匹配的验证，结果和未验证范围如实记录。
+
+存在未解决的规范冲突时，不提交受影响改动，先说明冲突。发现范围外的原有不一致时单独报告，不据此扩大任务。
+
+## 参考资料
+
+规范维护遵循[文档规范](.agents/documentation/AGENTS.md)。当前实现与操作资料见[架构说明](docs/ARCHITECTURE.md)、[维护指南](MAINTAINING.md)及各组件引用的技能。用户明确要求优先。
