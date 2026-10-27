@@ -29,6 +29,12 @@ pub(crate) fn merge_extra_params(body: &mut Value, extra: &Value) -> Result<()> 
 
 fn fill_missing(body: &mut Value, defaults: &Value) {
     if let (Some(body), Some(defaults)) = (body.as_object_mut(), defaults.as_object()) {
+        // Discriminated objects cannot borrow fields from a different mode.
+        if let (Some(kind), Some(default_kind)) = (body.get("type"), defaults.get("type")) {
+            if kind != default_kind {
+                return;
+            }
+        }
         for (name, value) in defaults {
             match body.entry(name.clone()) {
                 serde_json::map::Entry::Vacant(entry) => {
@@ -171,6 +177,59 @@ fn fill_cache_key(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_thinking_mode_never_inherits_fields_from_another_mode() {
+        let variants = [
+            json!({"type":"disabled"}),
+            json!({"type":"adaptive","display":"omitted"}),
+            json!({"type":"enabled","budget_tokens":2048}),
+        ];
+        for explicit in &variants {
+            for default in &variants {
+                if explicit["type"] == default["type"] {
+                    continue;
+                }
+                let mut body = json!({"thinking":explicit,"output_config":{"effort":"low"}});
+                merge_extra_params(&mut body, &json!({
+                    "thinking":default,"output_config":{"effort":"high","format":{"type":"json_schema"}}
+                })).unwrap();
+                assert_eq!(&body["thinking"], explicit);
+                assert_eq!(body["output_config"]["effort"], "low");
+                assert_eq!(body["output_config"]["format"]["type"], "json_schema");
+            }
+        }
+        let mut body = json!({"thinking":{"type":"enabled","budget_tokens":2048}});
+        merge_extra_params(
+            &mut body,
+            &json!({"thinking":{
+                "type":"enabled","budget_tokens":4096,"display":"summarized"
+            }}),
+        )
+        .unwrap();
+        assert_eq!(
+            body["thinking"],
+            json!({"type":"enabled","budget_tokens":2048,"display":"summarized"})
+        );
+    }
+
+    #[test]
+    fn serialized_thinking_keeps_the_callers_mode_across_all_defaults() {
+        let mut model = ModelSpec::new("claude-test");
+        model.reasoning.enabled = true;
+        model.extra_params = json!({"thinking":{"type":"enabled","budget_tokens":4096}});
+        let mut body = json!({"thinking":{"type":"disabled"}});
+        apply(
+            ProviderType::Anthropic,
+            &mut body,
+            &model,
+            Some(8192),
+            "conversation",
+        )
+        .unwrap();
+        assert_eq!(body["thinking"], json!({"type":"disabled"}));
+        assert_eq!(body["max_tokens"], 8192);
+    }
 
     #[tokio::test]
     async fn configured_extras_outrank_form_defaults_in_every_protocol() {

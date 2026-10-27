@@ -4,7 +4,6 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Mutex,
     },
-    time::Duration,
 };
 
 use axum::{
@@ -36,7 +35,24 @@ struct DesktopRuntime {
     shutdown: CancellationToken,
     server: Mutex<Option<JoinHandle<Result<()>>>>,
     exiting: AtomicBool,
+    shutdown_complete: AtomicBool,
     server_addr: std::net::SocketAddr,
+}
+
+impl DesktopRuntime {
+    async fn stop(&self) {
+        self.shutdown.cancel();
+        let server = self.server.lock().expect("server lock poisoned").take();
+        if let Some(server) = server {
+            // The server owns installer and HTTP drain deadlines. Do not exit ahead of cleanup.
+            match server.await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => tracing::error!(%error, "desktop server shutdown failed"),
+                Err(error) => tracing::error!(%error, "desktop server task failed"),
+            }
+        }
+        self.shutdown_complete.store(true, Ordering::Release);
+    }
 }
 
 #[tauri::command]
@@ -255,6 +271,7 @@ pub fn run() -> ExitCode {
                 shutdown,
                 server: Mutex::new(Some(task)),
                 exiting: AtomicBool::new(false),
+                shutdown_complete: AtomicBool::new(false),
                 server_addr: address,
             });
             if desktop_settings.silent_start && started_by_autostart {
@@ -282,24 +299,15 @@ pub fn run() -> ExitCode {
             None => api.prevent_exit(),
             Some(_) => {
                 let runtime = app.state::<DesktopRuntime>();
+                if runtime.shutdown_complete.load(Ordering::Acquire) {
+                    return;
+                }
+                // Repeated exit requests must also wait for the in-flight cleanup.
+                api.prevent_exit();
                 if !runtime.exiting.swap(true, Ordering::AcqRel) {
-                    api.prevent_exit();
-                    runtime.shutdown.cancel();
-                    let server = runtime.server.lock().expect("server lock poisoned").take();
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
-                        if let Some(server) = server {
-                            match tokio::time::timeout(Duration::from_secs(11), server).await {
-                                Ok(Ok(Ok(()))) => {}
-                                Ok(Ok(Err(error))) => {
-                                    tracing::error!(%error, "desktop server shutdown failed")
-                                }
-                                Ok(Err(error)) => {
-                                    tracing::error!(%error, "desktop server task failed")
-                                }
-                                Err(_) => tracing::warn!("desktop server shutdown timed out"),
-                            }
-                        }
+                        app.state::<DesktopRuntime>().stop().await;
                         app.exit(0);
                     });
                 }
@@ -316,4 +324,53 @@ pub fn run() -> ExitCode {
     });
 
     ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{sync::Arc, time::Duration};
+    use tokio::sync::oneshot;
+
+    #[tokio::test]
+    async fn desktop_exit_waits_for_slow_restoration_and_cleanup() {
+        let shutdown = CancellationToken::new();
+        let cancelled = shutdown.clone();
+        let (release_startup, startup) = oneshot::channel();
+        let (release_cleanup, cleanup) = oneshot::channel();
+        let (entered_cleanup, cleaning) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            cancelled.cancelled().await;
+            startup.await.unwrap();
+            entered_cleanup.send(()).unwrap();
+            cleanup.await.unwrap();
+            Ok(())
+        });
+        let runtime = Arc::new(DesktopRuntime {
+            shutdown,
+            server: Mutex::new(Some(JoinHandle::Tokio(server))),
+            exiting: AtomicBool::new(false),
+            shutdown_complete: AtomicBool::new(false),
+            server_addr: "127.0.0.1:0".parse().unwrap(),
+        });
+        let stopping = runtime.clone();
+        let stopped = tokio::spawn(async move { stopping.stop().await });
+        runtime.shutdown.cancelled().await;
+        tokio::time::sleep(Duration::from_secs(12)).await;
+        let exited_before_restoration = runtime.shutdown_complete.load(Ordering::Acquire);
+        release_startup.send(()).unwrap();
+        cleaning.await.unwrap();
+        let exited_before_cleanup = runtime.shutdown_complete.load(Ordering::Acquire);
+        release_cleanup.send(()).unwrap();
+        stopped.await.unwrap();
+        assert!(
+            !exited_before_restoration,
+            "desktop exited before startup finished"
+        );
+        assert!(
+            !exited_before_cleanup,
+            "desktop exited before cleanup finished"
+        );
+        assert!(runtime.shutdown_complete.load(Ordering::Acquire));
+    }
 }

@@ -58,6 +58,9 @@ impl PluginRegistry {
                                 if let Some((kind, record)) = resource.as_ref() {
                                     if find_resource(&entry, kind)?.can_prepare {
                                         let prepared = registry.prepare_resource(&entry, &executable, kind, record.clone(), Some(record.clone())).await?;
+                                        let message = value.get("message").and_then(serde_json::Value::as_str).unwrap_or("plugin authentication failed");
+                                        let model_call_id = recorder.retry(&Error::Provider(message.to_owned())).await?;
+                                        yield ModelEvent::Start { model_call_id };
                                         resource = Some((kind.clone(), prepared));
                                         retry = true;
                                         break;

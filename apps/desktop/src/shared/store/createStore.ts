@@ -16,5 +16,5 @@ export function createStore<S extends { error: string | null }>(initial: S) {
     listeners.forEach((listener) => listener());
     if (snapshot.error && snapshot.error !== previousError) message(snapshot.error);
   };
-  return { getSnapshot, subscribe, update, useSnapshot: () => useSyncExternalStore(subscribe, getSnapshot) };
+  return { getSnapshot, subscribe, update, useSnapshot: () => useSyncExternalStore(subscribe, getSnapshot, getSnapshot) };
 }

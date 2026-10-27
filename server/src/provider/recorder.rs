@@ -133,6 +133,28 @@ impl CallRecorder {
         self.inner.finished.load(Ordering::Acquire)
     }
 
+    /// Authentication retry starts a new log entry within the same conversation and run.
+    pub(crate) async fn retry(&self, error: &crate::Error) -> Result<String> {
+        let mut attempt = self.inner.attempt.lock().await;
+        self.flush_locked(&mut attempt).await?;
+        self.inner
+            .store
+            .finish_llm_call(
+                &attempt.call_id,
+                "error",
+                None,
+                elapsed_ms(attempt.started),
+                Some(error_kind(error)),
+                Some(&error.to_string()),
+            )
+            .await?;
+        let mut call = self.inner.base_call.clone();
+        call.call_id = format!("{}:retry:{}", call.call_id, uuid::Uuid::new_v4());
+        self.inner.store.start_llm_call(&call).await?;
+        *attempt = AttemptState::new(call.call_id.clone());
+        Ok(call.call_id)
+    }
+
     pub(crate) fn cancel_on_drop(&self) -> CancelOnDrop {
         CancelOnDrop {
             recorder: self.clone(),

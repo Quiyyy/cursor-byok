@@ -11,7 +11,7 @@ import styles from "./CursorTakeover.module.scss";
 
 /** Cursor integration is global and remains available independently of the active page. */
 export function CursorTakeover() {
-  const { cursorHarness: status, cursorBusy, busy: refreshing } = useCursorStore();
+  const { cursorHarness: status, cursorBusy, busy: refreshing, error } = useCursorStore();
   const message = useMessage();
   const switchId = useId();
   const [setupOpen, setSetupOpen] = useState(false);
@@ -54,9 +54,11 @@ export function CursorTakeover() {
   return <>
     <div className={styles.control} data-degraded={degraded || undefined}>
       <label htmlFor={switchId}>{t("Cursor 接管")}</label>
-      <TooltipTrigger label={description}>
+      {!status && error ? <Button id={switchId} variant="ghost" size="small" aria-label={t("刷新接入状态")} disabled={busy} onClick={() => void refreshCa()}>
+        {t("刷新")}
+      </Button> : <TooltipTrigger label={description}>
         <Switch id={switchId} className={styles.switch} label={t("Cursor 接管")} checked={checked} disabled={busy || !status} aria-busy={busy} onChange={toggle} />
-      </TooltipTrigger>
+      </TooltipTrigger>}
     </div>
     <Modal open={setupOpen} title={t("准备 Cursor 接入")} onClose={() => setSetupOpen(false)} closeLabel={t("关闭")} busy={busy}>
       <div className={styles.setup}>

@@ -67,7 +67,7 @@ impl ControlState {
         const TEST_PROMPT: &str = "Output the numbers 1 through 120 separated by a single space. No commas, no newlines, no explanation.";
 
         let model = ModelSpec::new(model_hash);
-        let call_id = format!("model-test-{}", uuid::Uuid::new_v4());
+        let mut call_id = format!("model-test-{}", uuid::Uuid::new_v4());
         let invocation = ModelInvocation {
             call_id: call_id.clone(),
             run_id: call_id.clone(),
@@ -101,6 +101,8 @@ impl ControlState {
                     first_valid_response_at = Some(Instant::now());
                 }
                 match event {
+                    // Authentication retries have their own log entry; timeouts target the active one.
+                    ModelEvent::Start { model_call_id } => call_id = model_call_id,
                     ModelEvent::TextDelta(delta) => {
                         output.push_str(&delta);
                     }

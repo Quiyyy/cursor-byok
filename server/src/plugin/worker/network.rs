@@ -435,6 +435,111 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn authentication_retry_records_separate_attempts_in_both_logging_modes() {
+        for detailed in [true, false] {
+            let (_directory, store, recorder) = recorder(detailed, "native-agent:retry").await;
+            let host = host_with_recorder(store.clone(), recorder.clone()).await;
+            let (request, _, observed) =
+                host.request("invocation", &network_params()).await.unwrap();
+            drop(request);
+            assert!(observed.is_some());
+            recorder.response_headers(401).await.unwrap();
+            recorder.response_chunk(b"expired token").await.unwrap();
+            let retry_id = recorder
+                .retry(&Error::Provider("expired token".into()))
+                .await
+                .unwrap();
+            host.invocations.lock().await.insert(
+                "retry".into(),
+                Arc::new(InvocationState {
+                    cancellation: CancellationToken::new(),
+                    recorder: Some(recorder.clone()),
+                    recorder_claimed: AtomicBool::new(false),
+                }),
+            );
+            let mut params = network_params();
+            params["headers"]["x-client-request-id"] = "request-2".into();
+            let (request, _, observed) = host.request("retry", &params).await.unwrap();
+            drop(request);
+            assert!(observed.is_some());
+            recorder.response_headers(200).await.unwrap();
+            recorder.response_chunk(b"success").await.unwrap();
+            recorder.completed(FinishReason::Stop).await.unwrap();
+
+            let ids: Vec<String> =
+                sqlx::query_scalar("SELECT call_id FROM llm_calls ORDER BY call_id")
+                    .fetch_all(store.pool())
+                    .await
+                    .unwrap();
+            assert_eq!(ids.len(), 2);
+            assert_eq!(ids[1], retry_id);
+            assert!(retry_id.starts_with("native-agent:retry:retry:"));
+            for (id, status, http_status, response, request_id) in [
+                (&ids[0], "error", 401, "expired token", "request-1"),
+                (&ids[1], "completed", 200, "success", "request-2"),
+            ] {
+                let summary = store.llm_call(id).await.unwrap().unwrap();
+                assert_eq!(summary.status, status);
+                assert_eq!(summary.http_status, Some(http_status));
+                assert_eq!(summary.conversation_id, "conversation");
+                assert_eq!(summary.run_id, "run");
+                assert_eq!(summary.response_bytes, response.len() as i64);
+                assert_eq!(summary.stream_event_count, 1);
+                let request = store.llm_call_request(id).await.unwrap();
+                let chunks = store.llm_call_chunks(id).await.unwrap();
+                if detailed {
+                    assert_eq!(request.unwrap().headers["x-client-request-id"], request_id);
+                    assert_eq!(chunks.len(), 1);
+                    assert_eq!(chunks[0].seq, 0);
+                    assert_eq!(chunks[0].data, response);
+                } else {
+                    assert!(request.is_none());
+                    assert!(chunks.is_empty());
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn dropping_a_retry_cancels_only_the_current_attempt() {
+        let (_directory, store, recorder) = recorder(true, "native-agent:cancel-retry").await;
+        let guard = recorder.cancel_on_drop();
+        recorder
+            .request(serde_json::json!({}), &serde_json::json!({}))
+            .await
+            .unwrap();
+        let retry_id = recorder
+            .retry(&Error::Provider("expired token".into()))
+            .await
+            .unwrap();
+        recorder
+            .request(serde_json::json!({}), &serde_json::json!({}))
+            .await
+            .unwrap();
+        drop(guard);
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if store.llm_call(&retry_id).await.unwrap().unwrap().status == "cancelled" {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let first = store
+            .llm_call("native-agent:cancel-retry")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.status, "error");
+        assert_eq!(
+            first.error_message.as_deref(),
+            Some("provider error: expired token")
+        );
+    }
+
+    #[tokio::test]
     async fn standard_plugin_network_recording_keeps_metrics_without_payloads() {
         let (_directory, store, recorder) = recorder(false, "standard-plugin").await;
         let host = host_with_recorder(store.clone(), recorder.clone()).await;

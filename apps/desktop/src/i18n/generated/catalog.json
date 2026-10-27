@@ -521,7 +521,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 67,
+          "line": 57,
+          "column": 90
+        },
+        {
+          "file": "features/cursor/CursorTakeover.tsx",
+          "line": 69,
           "column": 92
         }
       ]
@@ -1680,12 +1685,12 @@
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 61,
+          "line": 63,
           "column": 103
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 70,
+          "line": 72,
           "column": 80
         },
         {
@@ -2309,7 +2314,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 65,
+          "line": 67,
           "column": 96
         }
       ]
@@ -3517,7 +3522,7 @@
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 58,
+          "line": 60,
           "column": 64
         }
       ]
@@ -3802,7 +3807,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 65,
+          "line": 67,
           "column": 79
         }
       ]
@@ -4179,7 +4184,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 65,
+          "line": 67,
           "column": 34
         }
       ]
@@ -4424,7 +4429,7 @@
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 61,
+          "line": 63,
           "column": 36
         }
       ]
@@ -4501,7 +4506,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 63,
+          "line": 65,
           "column": 13
         }
       ]
@@ -4551,6 +4556,11 @@
       "kind": "text",
       "placeholders": [],
       "refs": [
+        {
+          "file": "features/cursor/CursorTakeover.tsx",
+          "line": 58,
+          "column": 10
+        },
         {
           "file": "features/home/overview/OverviewTimeRangeFilter.tsx",
           "line": 99,
@@ -4822,7 +4832,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 70,
+          "line": 72,
           "column": 103
         }
       ]
@@ -5444,7 +5454,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 72,
+          "line": 74,
           "column": 18
         }
       ]
@@ -5900,7 +5910,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 73,
+          "line": 75,
           "column": 16
         }
       ]
@@ -5938,7 +5948,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 70,
+          "line": 72,
           "column": 53
         }
       ]
