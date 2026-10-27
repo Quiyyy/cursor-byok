@@ -11,18 +11,19 @@ import { install } from './install.mjs';
 import { install as installBundled } from './install.bundle.mjs';
 import { catalogEntry } from './catalog.mjs';
 import { workbench } from './workbench.fixture.mjs';
+import { hostControl, localControl } from './control.fixture.mjs';
 const require = createRequire(import.meta.url);
 const {
   route
 } = require('./route.cjs');
 const host = `class Adapter {constructor(client){this.client=client;this.mintLlmGatewayCredential=null;}run(t){return this.client.run(t);}}
 class Router {async run(t){log('Selected Agent Host turn runtime');return 'official';}} globalThis.Router=Router;
-const modules={71(module,exports,load){"use strict";function search(client,options){if((function(){return this})()!==undefined)throw Error('strict mode lost');return async(ctx,args,call)=>{const result=await client.runWebSearch({searchTerm:args.searchTerm,modelId:options.modelId,callSignature:undefined},{signal:ctx.signal});return {answer:result.answer,documents:result.documents.map(d=>d)}}}}};
+const modules={${hostControl},71(module,exports,load){"use strict";function search(client,options){if((function(){return this})()!==undefined)throw Error('strict mode lost');return async(ctx,args,call)=>{const result=await client.runWebSearch({searchTerm:args.searchTerm,modelId:options.modelId,callSignature:undefined},{signal:ctx.signal});return {answer:result.answer,documents:result.documents.map(d=>d)}}}}};
 const cache={};function __webpack_require__(id){if(!cache[id]){const out={};modules[id]({},out,__webpack_require__);cache[id]=out;}return cache[id]}
 __webpack_require__.d=(out,entries)=>{for(const [key,get]of Object.entries(entries))Object.defineProperty(out,key,{get})};
 function createRouter(network,privateInference){const create=()=>{const options={runtimeCapabilities:network.runtimeCapabilities,privateInference};return new Router(network.agentClient,options)};return create()};globalThis.createRouter=createRouter;
 function unrelated(){class Router{}return new Router}`;
-const runtime = `(()=>{class Model{constructor(p){Object.assign(this,p)}static fromBinary(p){return p}}class Client{};
+const runtime = `(()=>{class Model{constructor(p){Object.assign(this,p)}static fromBinary(p){return p}}${localControl};
 function taskModels(o){const provider=o.localProvider;return {parentRequestedModelName:o.modelId,subagentModels:[],requireServerSideSubagent:false,getTaskToolConfig:id=>({id,provider})}}
 function providerSearch(config){return async(ctx,args)=>({answer:await request({path:"/responses",input:args.searchTerm}),documents:[]})}
 function tools(options){return {webSearch:providerSearch({modelId:options.modelId})}}
@@ -148,7 +149,7 @@ test('native router retains every host-owned state object and callback', async (
   const sandbox = {
     log() {},
     require: () => ({
-      route: async () => ({
+      run: async (turn,load,privacy,search,control,invoke) => invoke({
         client: {
           run(t) {
             received = t;
@@ -159,13 +160,15 @@ test('native router retains every host-owned state object and callback', async (
           modelId: 'grok-4.6'
         },
         options: {}
-      })
+      },turn)
     })
   };
   vm.runInNewContext(patchAgentHost(host, '/test/route.cjs'), sandbox);
   const turn = Object.fromEntries(['ctx', 'conversationState', 'action', 'resources', 'blobStore', 'conversationActionManager', 'checkpointHandler', 'interactionListener', 'mcpTools'].map(k => [k, {}]));
+  turn.modelDetails={modelId:'byok:test'};
+  turn.runOptions={};
   assert.equal(await new sandbox.Router().run(turn), 'native');
-  for (const key of Object.keys(turn)) assert.equal(received[key], turn[key]);
+  for (const key of Object.keys(turn).filter(key=>!['modelDetails','runOptions'].includes(key))) assert.equal(received[key], turn[key]);
 });
 
 test('each patched Host router retains its own authenticated search client', async () => {
@@ -223,6 +226,6 @@ for (const [name, installer] of [['source', install], ['bundle', installBundled]
   assert.equal(fs.readFileSync(path.join(app, files[0]), 'utf8'), host + '\n// Updated Cursor');
   fs.writeFileSync(path.join(app, files[2]), workbench);
   fs.writeFileSync(path.join(app, files[1]), 'const unsupported=true;');
-  assert.throws(() => installer(app, data), /native LocalAgentClient/);
+  assert.throws(() => installer(app, data), /native (LocalAgentClient|turn control boundary)/);
   assert.equal(fs.readFileSync(path.join(app, files[0]), 'utf8'), host + '\n// Updated Cursor');
 });
