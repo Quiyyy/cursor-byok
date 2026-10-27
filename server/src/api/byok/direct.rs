@@ -273,16 +273,8 @@ fn apply_native_defaults(
     model: &ModelConfig,
     session: &str,
 ) -> Result<()> {
-    let mut options = crate::model::ModelSpec::new(&model.model_id);
-    model.configure(&mut options);
-    options.extra_params = crate::provider::render_json_strings(model.extra_params(), session);
-    crate::provider::request_options::apply(
-        protocol.provider_type(),
-        body,
-        &options,
-        model.max_output_tokens(),
-        session,
-    )
+    debug_assert_eq!(protocol.provider_type(), model.provider_type());
+    crate::provider::request_options::apply_configured(body, model, session)
 }
 
 fn build_response(status: StatusCode, headers: &HeaderMap, body: Body) -> Response {
@@ -430,14 +422,22 @@ mod tests {
         let mut body = serde_json::json!({"model":"model","messages":[{"role":"user","content":"hello"}],"reasoning_effort":"low"});
         let original = body["messages"].clone();
         apply_native_defaults(Protocol::Chat, &mut body, &model, "conversation-one").unwrap();
-        assert_eq!(body["max_completion_tokens"], 32000);
+        assert_eq!(body["max_tokens"], 32000);
+        assert!(body.get("max_completion_tokens").is_none());
         assert_eq!(body["reasoning_effort"], "low");
         assert_eq!(body["prompt_cache_key"], "conversation-one");
         assert_eq!(body["messages"], original);
         let mut second =
             serde_json::json!({"model":"model","input":"next turn","max_output_tokens":100});
-        apply_native_defaults(Protocol::Responses, &mut second, &model, "conversation-one")
-            .unwrap();
+        let mut responses_model = model.clone();
+        responses_model.openai_endpoint = crate::model::OPENAI_RESPONSES_ENDPOINT.into();
+        apply_native_defaults(
+            Protocol::Responses,
+            &mut second,
+            &responses_model,
+            "conversation-one",
+        )
+        .unwrap();
         assert_eq!(second["max_output_tokens"], 100);
         assert_eq!(second["reasoning"]["effort"], "high");
         assert_eq!(second["prompt_cache_key"], body["prompt_cache_key"]);

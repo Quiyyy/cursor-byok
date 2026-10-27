@@ -74,8 +74,8 @@ async fn raw_and_translated_requests_share_configuration_and_keep_explicit_optio
     model.max_completion_tokens = Some(32000);
     model.reasoning_effort = Some("high".into());
     model.openai_extra_params_enabled = true;
-    model.openai_extra_params = json!({"temperature":0.9,"prompt_cache_key":"{{SessionId}}"});
-    store.create_model(&model).await.unwrap();
+    model.openai_extra_params = json!({"temperature":0.9,"prompt_cache_key":"{{SessionId}}","reasoning_effort":"medium","max_tokens":600});
+    let configured = store.create_model(&model).await.unwrap();
     let mut invalid = model.clone();
     invalid.openai_extra_params = json!({"messages":[]});
     assert!(store.create_model(&invalid).await.is_err());
@@ -160,6 +160,45 @@ async fn raw_and_translated_requests_share_configuration_and_keep_explicit_optio
         assert_eq!(forwarded["stop"], json!(["{{SessionId}}"]));
         assert_eq!(forwarded["prompt_cache_key"], "caller-cache");
     }
+    for (path, mut request) in [
+        (
+            "/byok/v1/chat/completions",
+            json!({"messages":[{"role":"user","content":"hello"}]}),
+        ),
+        ("/byok/v1/responses", json!({"input":"hello"})),
+        (
+            "/byok/v1/messages",
+            json!({"messages":[{"role":"user","content":"hello"}]}),
+        ),
+    ] {
+        request["model"] = json!("work/gpt-test");
+        request["stream"] = json!(true);
+        let (status, response) = send(router.clone(), "POST", path, Some("secret"), request).await;
+        assert_eq!(status, StatusCode::OK, "{path}: {response}");
+        let forwarded = receiver.recv().await.unwrap();
+        assert_eq!(forwarded["reasoning_effort"], "medium", "{path}");
+        assert_eq!(forwarded["max_tokens"], 600, "{path}");
+        assert!(
+            forwarded.get("max_completion_tokens").is_none(),
+            "{path}: {forwarded}"
+        );
+    }
+    let (status, response) = send(
+        router.clone(),
+        "POST",
+        &format!(
+            "/__byok-api__/api/models/{}/test/options",
+            configured.model_hash
+        ),
+        None,
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    let tested = receiver.recv().await.unwrap();
+    assert_eq!(tested["reasoning_effort"], "medium");
+    assert_eq!(tested["max_tokens"], 600);
+    assert!(tested.get("max_completion_tokens").is_none());
     // Source is independent of Cursor's opaque generation identifier.
     sqlx::query("UPDATE llm_calls SET run_id = 'opaque-generation'")
         .execute(store.pool())
@@ -174,9 +213,32 @@ async fn raw_and_translated_requests_share_configuration_and_keep_explicit_optio
     )
     .await;
     let calls: Value = serde_json::from_str(&response).unwrap();
-    assert_eq!(calls.as_array().unwrap().len(), 3);
+    assert_eq!(calls.as_array().unwrap().len(), 7);
+    assert_eq!(
+        calls
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|call| call["reasoning_effort"] == "low")
+            .count(),
+        3
+    );
+    assert_eq!(
+        calls
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|call| call["reasoning_effort"] == "medium")
+            .count(),
+        4
+    );
     for call in calls.as_array().unwrap() {
-        assert_eq!(call["source"], "external_api");
+        let source = if call["call_id"].as_str().unwrap().starts_with("model-test-") {
+            "model_test"
+        } else {
+            "external_api"
+        };
+        assert_eq!(call["source"], source);
         assert!(call.get("provider_call_index").is_none());
         assert!(call.get("call_kind").is_none());
     }

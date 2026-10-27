@@ -64,11 +64,9 @@ impl Provider for AnthropicProvider {
                     "cache_control": {"type": "ephemeral"}
                 }])
             };
-            let max_tokens = request.model.max_output_tokens.or(config.max_output_tokens)
-                .unwrap_or(DEFAULT_MAX_OUTPUT_TOKENS);
             let mut body = json!({
                 "model": request.model.model_id, "system": system, "messages": messages,
-                "max_tokens": max_tokens, "stream": true
+                "stream": true
             });
             if !request.prompt.tools.is_empty() {
                 let tool_count = request.prompt.tools.len();
@@ -82,7 +80,7 @@ impl Provider for AnthropicProvider {
                     value
                 }).collect::<Vec<_>>());
             }
-            super::request_options::apply(crate::model::ProviderType::Anthropic, &mut body, &request.model, config.max_output_tokens, &conversation_id)?;
+            super::request_options::apply(crate::model::ProviderType::Anthropic, &mut body, &request.model, config.max_output_tokens.or(Some(DEFAULT_MAX_OUTPUT_TOKENS)), &conversation_id)?;
             let request_headers = recorded_headers(
                 &config,
                 &[("content-type", "application/json"), ("anthropic-version", "2023-06-01")],

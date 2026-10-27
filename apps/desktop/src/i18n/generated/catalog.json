@@ -2593,6 +2593,18 @@
         }
       ]
     },
+    "60919e6d8ad0efc3": {
+      "source": "所有模型调用汇总及其请求、响应内容都会被删除。模型配置、CA 和应用设置不会受到影响，此操作无法撤销。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/SettingsPage.tsx",
+          "line": 160,
+          "column": 7
+        }
+      ]
+    },
     "609640f72d422b57": {
       "source": "快捷时间范围",
       "kind": "text",
@@ -2991,13 +3003,13 @@
       "refs": [
         {
           "file": "features/models/state.ts",
-          "line": 79,
-          "column": 23
+          "line": 169,
+          "column": 16
         },
         {
           "file": "features/models/state.ts",
-          "line": 86,
-          "column": 25
+          "line": 178,
+          "column": 18
         }
       ]
     },
@@ -3034,6 +3046,18 @@
           "file": "features/settings/SettingsPage.tsx",
           "line": 257,
           "column": 26
+        }
+      ]
+    },
+    "7967a669e70e6265": {
+      "source": "仅删除模型调用的请求和响应详细内容，保留调用汇总、统计指标和配置。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/SettingsPage.tsx",
+          "line": 161,
+          "column": 7
         }
       ]
     },
@@ -3603,18 +3627,6 @@
           "file": "features/plugins/PluginManagementPage.tsx",
           "line": 104,
           "column": 57
-        }
-      ]
-    },
-    "92156a483d4ba248": {
-      "source": "仅删除请求、响应和追踪附件等详细内容，保留调用汇总、统计指标和配置。",
-      "kind": "text",
-      "placeholders": [],
-      "refs": [
-        {
-          "file": "features/settings/SettingsPage.tsx",
-          "line": 161,
-          "column": 7
         }
       ]
     },
@@ -5239,18 +5251,6 @@
           "file": "features/models/CursorModelEditor.tsx",
           "line": 176,
           "column": 50
-        }
-      ]
-    },
-    "d1a3d72618d1ed27": {
-      "source": "所有调用汇总、详细内容和追踪记录都会被删除。模型配置、CA 和应用设置不会受到影响，此操作无法撤销。",
-      "kind": "text",
-      "placeholders": [],
-      "refs": [
-        {
-          "file": "features/settings/SettingsPage.tsx",
-          "line": 160,
-          "column": 7
         }
       ]
     },

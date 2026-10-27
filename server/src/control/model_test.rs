@@ -66,20 +66,7 @@ impl ControlState {
         const TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
         const TEST_PROMPT: &str = "Output the numbers 1 through 120 separated by a single space. No commas, no newlines, no explanation.";
 
-        let mut model = ModelSpec::new(model_hash);
-        if model_hash.starts_with(crate::plugin::ADAPTER_ID_PREFIX) {
-            let descriptor = self.plugins.model_descriptor(model_hash).await?;
-            model.display_name = Some(descriptor.display_name);
-            model.max_output_tokens = Some(descriptor.max_output_tokens.unwrap_or(65_536));
-        } else {
-            let configured = self
-                .store
-                .model(model_hash)
-                .await?
-                .ok_or_else(|| Error::RunNotFound(format!("model {model_hash}")))?;
-            configured.configure(&mut model);
-            model.max_output_tokens = Some(configured.max_output_tokens().unwrap_or(65_536));
-        }
+        let model = ModelSpec::new(model_hash);
         let call_id = format!("model-test-{}", uuid::Uuid::new_v4());
         let invocation = ModelInvocation {
             call_id: call_id.clone(),

@@ -115,8 +115,16 @@ impl Store {
                 .execute(&mut *transaction)
                 .await?;
         }
-        sqlx::query("UPDATE llm_calls SET request_bytes = ? WHERE call_id = ?")
+        // Record the final protocol value, including a configured extra-param override.
+        // Opaque account protocols without these fields retain their invocation metadata.
+        let effort = body
+            .get("reasoning_effort")
+            .or_else(|| body.pointer("/reasoning/effort"))
+            .or_else(|| body.pointer("/output_config/effort"));
+        sqlx::query("UPDATE llm_calls SET request_bytes = ?, reasoning_effort = CASE WHEN ? THEN ? ELSE reasoning_effort END WHERE call_id = ?")
             .bind(body_json.len() as i64)
+            .bind(effort.is_some())
+            .bind(effort.and_then(serde_json::Value::as_str))
             .bind(call_id)
             .execute(&mut *transaction)
             .await?;

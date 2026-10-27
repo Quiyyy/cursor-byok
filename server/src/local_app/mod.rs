@@ -114,10 +114,6 @@ impl CursorHarness {
         self.inner.proxy.lock().await.port()
     }
 
-    pub async fn cleanup_stale_settings(&self) -> Result<()> {
-        settings::clear_stale_managed_settings()
-    }
-
     pub async fn status(&self) -> Result<CursorHarnessStatus> {
         let _lifecycle = self.inner.lifecycle.lock().await;
         self.status_with_ca(self.inner.ca.state()?).await
@@ -252,6 +248,11 @@ impl CursorHarness {
     /// Restore the persisted intent once, after the HTTP address is known.
     pub async fn restore_on_start(&self) -> Result<()> {
         let _lifecycle = self.inner.lifecycle.lock().await;
+        // An explicit enable request may have completed while startup was waiting.
+        if self.inner.native.is_current().await {
+            return Ok(());
+        }
+        settings::clear_stale_managed_settings()?;
         if self.inner.store.cursor_takeover_enabled().await?
             && matches!(self.inner.ca.state()?, CaState::Ready)
         {

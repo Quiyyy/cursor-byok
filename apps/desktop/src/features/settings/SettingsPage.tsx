@@ -157,8 +157,8 @@ export function SettingsPage() {
   };
   const clearTitle = clearScope === "all" ? t("确定要清理全部统计数据吗？") : t("确定要清理详细记录吗？");
   const clearDescription = clearScope === "all"
-    ? t("所有调用汇总、详细内容和追踪记录都会被删除。模型配置、CA 和应用设置不会受到影响，此操作无法撤销。")
-    : t("仅删除请求、响应和追踪附件等详细内容，保留调用汇总、统计指标和配置。");
+    ? t("所有模型调用汇总及其请求、响应内容都会被删除。模型配置、CA 和应用设置不会受到影响，此操作无法撤销。")
+    : t("仅删除模型调用的请求和响应详细内容，保留调用汇总、统计指标和配置。");
   const content = (
     <div className={styles.page}>
       <TitledCard title={t("调用观测")}>
