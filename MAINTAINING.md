@@ -37,6 +37,7 @@ npm --prefix apps/desktop run tauri:dev
 
 ```sh
 npm --prefix apps/desktop run check
+npm --prefix apps/desktop run test:state
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets

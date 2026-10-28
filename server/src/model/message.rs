@@ -2,8 +2,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::ToolImageReference;
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
@@ -27,8 +25,6 @@ pub struct ToolResultContent {
     pub name: String,
     pub content: String,
     pub is_error: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image: Option<ToolImageReference>,
     #[serde(skip)]
     pub provider_parts: Vec<ContentPart>,
 }

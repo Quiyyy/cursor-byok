@@ -6,6 +6,7 @@ mod normalize;
 mod openai_chat;
 mod openai_responses;
 mod recorder;
+pub(crate) mod request_options;
 mod request_template;
 mod router;
 pub(crate) mod text_tools;
@@ -96,34 +97,6 @@ fn provider_event_error(label: &str, value: &serde_json::Value) -> Option<crate:
     Some(crate::Error::Provider(format!("{label} error: {message}")))
 }
 
-fn merge_extra_params(body: &mut serde_json::Value, extra: &serde_json::Value) -> Result<()> {
-    let extra = extra
-        .as_object()
-        .ok_or_else(|| crate::Error::Config("model extra params must be an object".into()))?;
-    let body = body
-        .as_object_mut()
-        .ok_or_else(|| crate::Error::Provider("provider request body must be an object".into()))?;
-    for (name, value) in extra {
-        if matches!(
-            name.as_str(),
-            "model"
-                | "stream"
-                | "messages"
-                | "input"
-                | "tools"
-                | "system"
-                | "instructions"
-                | "prompt_cache_key"
-        ) {
-            return Err(crate::Error::Config(format!(
-                "model extra params cannot replace {name}"
-            )));
-        }
-        body.insert(name.clone(), value.clone());
-    }
-    Ok(())
-}
-
 fn apply_body_allowlist(
     body: &mut serde_json::Value,
     allowed: Option<&std::collections::HashSet<String>>,
@@ -134,19 +107,6 @@ fn apply_body_allowlist(
     body.as_object_mut()
         .ok_or_else(|| crate::Error::Provider("provider request body must be an object".into()))?
         .retain(|name, _| allowed.contains(name));
-    Ok(())
-}
-
-fn apply_openai_prompt_cache_key(body: &mut serde_json::Value, model_id: &str) -> Result<()> {
-    if !model_id.to_ascii_lowercase().contains("gpt") {
-        return Ok(());
-    }
-    body.as_object_mut()
-        .ok_or_else(|| crate::Error::Provider("provider request body must be an object".into()))?
-        .insert(
-            "prompt_cache_key".into(),
-            serde_json::Value::String("cursor-byok".into()),
-        );
     Ok(())
 }
 
@@ -218,5 +178,20 @@ mod tests {
             panic!("expected provider error");
         };
         assert_eq!(message, expected);
+    }
+}
+
+#[cfg(test)]
+mod request_policy_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn configured_request_options_preserve_explicit_values_and_accept_session_cache_keys() {
+        let mut body = json!({"reasoning":{"effort":"low"},"max_output_tokens":100});
+        request_options::merge_extra_params(&mut body, &json!({"reasoning":{"effort":"high"},"max_output_tokens":200,"prompt_cache_key":"conversation-one"})).unwrap();
+        assert_eq!(body["reasoning"]["effort"], "low");
+        assert_eq!(body["max_output_tokens"], 100);
+        assert_eq!(body["prompt_cache_key"], "conversation-one");
     }
 }

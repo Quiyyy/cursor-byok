@@ -1,8 +1,5 @@
 //! Exposes the local persistence interface.
-mod cas;
 mod cursor_model;
-mod cursor_traces;
-mod legacy_config;
 mod llm_calls;
 mod migrations;
 mod model_settings;
@@ -13,9 +10,7 @@ mod sqlite;
 mod storage;
 mod writer;
 
-pub use cas::*;
 pub use cursor_model::CursorModelSettings;
-pub(crate) use cursor_traces::BufferedCursorTraceChunk;
 pub(crate) use llm_calls::BufferedLlmChunk;
 pub use model_settings::ModelSettings;
 pub use settings::*;

@@ -63,28 +63,6 @@ export interface ModelDiscoveryInput {
   custom_headers: Record<string, string>;
 }
 
-export interface LegacyModelImportPreviewItem {
-  model_hash: string;
-  display_name: string;
-  model_id: string;
-  type: ModelType;
-  existing: boolean;
-}
-
-export interface LegacyModelImportPreview {
-  source: string;
-  total: number;
-  new_models: number;
-  existing_models: number;
-  models: LegacyModelImportPreviewItem[];
-}
-
-export interface LegacyModelImportResult {
-  imported: number;
-  skipped: number;
-  total: number;
-}
-
 export interface ModelConnectivityResult {
   duration_ms: number;
   first_valid_response_ms: number | null;
@@ -119,7 +97,6 @@ export interface ExternalApiSettings {
 
 export interface StatisticsStorage {
   call_count: number;
-  trace_count: number;
 }
 
 export type StatisticsStorageScope = "details" | "all";
@@ -388,12 +365,10 @@ export interface Overview {
 }
 
 export interface LlmCall {
-  call_kind: "provider_llm" | "cursor_official";
-  route: "local_byok" | "cursor_official";
+  source: "native_agent" | "external_api" | "commit" | "model_test";
   call_id: string;
   run_id: string;
   conversation_id: string;
-  provider_call_index: number;
   model_hash: string | null;
   provider_type: string;
   provider_url: string;
@@ -428,33 +403,6 @@ export interface CallDetail {
   call: LlmCall;
   request: { headers: unknown; body: unknown; byte_count: number } | null;
   response_chunks: Array<{ seq: number; received_offset_ms: number; data: string; byte_count: number }>;
-  cursor_trace: {
-    trace: {
-      request_id: string;
-      conversation_id: string | null;
-      route: "local_byok" | "cursor_official";
-      model_id: string | null;
-      status: string;
-      request_bytes: number;
-      response_bytes: number;
-      response_event_count: number;
-      http_status: number | null;
-      received_at_ms: number;
-      first_response_at_ms: number | null;
-      finished_at_ms: number | null;
-      error_message: string | null;
-    };
-    artifacts: Array<{
-      seq: number;
-      artifact_type: string;
-      source: string;
-      metadata: unknown;
-      created_at_ms: number;
-      byte_count: number;
-      encoding: "utf8" | "base64";
-      data: string;
-    }>;
-  } | null;
 }
 
 const packagedDesktop = "__TAURI_INTERNALS__" in window
@@ -492,8 +440,6 @@ export const api = {
   createModels: (models: ModelInput[]) => request<Model[]>("/models", { method: "POST", body: JSON.stringify({ models }) }),
   reorderModels: (modelHashes: string[]) => request<Model[]>("/models/order", { method: "PUT", body: JSON.stringify({ model_hashes: modelHashes }) }),
   discoverModels: (input: ModelDiscoveryInput) => request<{ models: string[] }>("/models/discover", { method: "POST", body: JSON.stringify(input) }),
-  previewV0049Models: () => request<LegacyModelImportPreview>("/models/import-v0049"),
-  importV0049Models: () => request<LegacyModelImportResult>("/models/import-v0049", { method: "POST" }),
   updateModel: (hash: string, model: ModelInput) => request<Model>(`/models/${hash}`, { method: "PUT", body: JSON.stringify(model) }),
   deleteModel: (hash: string) => request<void>(`/models/${hash}`, { method: "DELETE" }),
   testModel: (hash: string, testId: string, signal?: AbortSignal) => request<ModelConnectivityResult>(`/models/${encodeURIComponent(hash)}/test/${encodeURIComponent(testId)}`, { method: "POST", signal }),

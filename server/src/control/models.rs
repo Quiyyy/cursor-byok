@@ -4,17 +4,15 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use crate::{
     model::{ModelConfig, ModelConfigInput},
     Result,
 };
 
-use super::{
-    ControlService, DiscoveredModels, LegacyModelImportPreview, LegacyModelImportResult,
-    ModelConnectivityResult, ModelDiscoveryInput,
-};
+use super::{ControlState, DiscoveredModels, ModelConnectivityResult, ModelDiscoveryInput};
 
 #[derive(Deserialize)]
 pub struct SaveModels {
@@ -26,73 +24,75 @@ pub struct ModelOrder {
     pub model_hashes: Vec<String>,
 }
 
-pub async fn list(State(service): State<ControlService>) -> Result<Json<Vec<ModelConfig>>> {
-    Ok(Json(service.models().await?))
+pub async fn list(State(service): State<ControlState>) -> Result<Json<Vec<ModelConfig>>> {
+    Ok(Json(service.store.models().await?))
 }
 
 pub async fn all_settings(
-    State(service): State<ControlService>,
-) -> Result<Json<std::collections::BTreeMap<String, super::service::ModelSettingsView>>> {
+    State(service): State<ControlState>,
+) -> Result<Json<std::collections::BTreeMap<String, ModelSettingsView>>> {
     Ok(Json(service.all_model_settings().await?))
 }
 
 pub async fn settings(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Path(id): Path<String>,
-) -> Result<Json<super::service::ModelSettingsView>> {
+) -> Result<Json<ModelSettingsView>> {
     Ok(Json(service.model_settings(&id).await?))
 }
 
 pub async fn update_settings(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Path(id): Path<String>,
     Json(settings): Json<crate::store::ModelSettings>,
-) -> Result<Json<super::service::ModelSettingsView>> {
+) -> Result<Json<ModelSettingsView>> {
     Ok(Json(service.set_model_settings(&id, settings).await?))
 }
 
 pub async fn create(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(input): Json<SaveModels>,
 ) -> Result<(StatusCode, Json<Vec<ModelConfig>>)> {
     Ok((
         StatusCode::CREATED,
-        Json(service.create_models(&input.models).await?),
+        Json(service.store.create_models(&input.models).await?),
     ))
 }
 
 pub async fn reorder(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(input): Json<ModelOrder>,
 ) -> Result<Json<Vec<ModelConfig>>> {
-    Ok(Json(service.reorder_models(&input.model_hashes).await?))
+    Ok(Json(
+        service.store.reorder_models(&input.model_hashes).await?,
+    ))
 }
 
 pub async fn remove(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Path(model_hash): Path<String>,
 ) -> Result<StatusCode> {
-    service.delete_model(&model_hash).await?;
+    service.store.delete_model(&model_hash).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn update(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Path(model_hash): Path<String>,
     Json(input): Json<ModelConfigInput>,
 ) -> Result<Json<ModelConfig>> {
-    Ok(Json(service.update_model(&model_hash, &input).await?))
+    Ok(Json(service.store.update_model(&model_hash, &input).await?))
 }
 
 pub async fn test(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Path((model_hash, test_id)): Path<(String, String)>,
 ) -> Result<Json<ModelConnectivityResult>> {
     Ok(Json(service.test_model(&model_hash, &test_id).await?))
 }
 
 pub async fn cancel(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Path((_model_hash, test_id)): Path<(String, String)>,
 ) -> Result<StatusCode> {
     service.cancel_model_test(&test_id);
@@ -100,20 +100,56 @@ pub async fn cancel(
 }
 
 pub async fn discover(
-    State(service): State<ControlService>,
+    State(service): State<ControlState>,
     Json(input): Json<ModelDiscoveryInput>,
 ) -> Result<Json<DiscoveredModels>> {
     Ok(Json(service.discover_models(&input).await?))
 }
-
-pub async fn import_v0049(
-    State(service): State<ControlService>,
-) -> Result<Json<LegacyModelImportResult>> {
-    Ok(Json(service.import_v0049_models().await?))
+#[derive(Clone, Debug, Serialize)]
+pub struct ModelSettingsView {
+    #[serde(flatten)]
+    pub settings: crate::store::ModelSettings,
+    pub default_context_window_tokens: u64,
 }
 
-pub async fn preview_v0049(
-    State(service): State<ControlService>,
-) -> Result<Json<LegacyModelImportPreview>> {
-    Ok(Json(service.preview_v0049_models().await?))
+impl ControlState {
+    pub async fn model_settings(&self, id: &str) -> Result<ModelSettingsView> {
+        let model = crate::configured_models::resolve(&self.store, &self.plugins, id).await?;
+        Ok(ModelSettingsView {
+            settings: crate::store::ModelSettings {
+                context_window_tokens: model.context_override,
+            },
+            default_context_window_tokens: model.default_context,
+        })
+    }
+
+    pub async fn all_model_settings(&self) -> Result<BTreeMap<String, ModelSettingsView>> {
+        Ok(
+            crate::configured_models::list(&self.store, Some(&self.plugins))
+                .await?
+                .into_iter()
+                .map(|model| {
+                    (
+                        model.id,
+                        ModelSettingsView {
+                            settings: crate::store::ModelSettings {
+                                context_window_tokens: model.context_override,
+                            },
+                            default_context_window_tokens: model.default_context,
+                        },
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    pub async fn set_model_settings(
+        &self,
+        id: &str,
+        settings: crate::store::ModelSettings,
+    ) -> Result<ModelSettingsView> {
+        let mut view = self.model_settings(id).await?;
+        view.settings = self.store.set_model_settings(id, settings).await?;
+        Ok(view)
+    }
 }

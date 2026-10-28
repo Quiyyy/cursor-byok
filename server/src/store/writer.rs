@@ -1,4 +1,4 @@
-//! Serializes write transactions that mutate Conversation state.
+//! Serializes write transactions that mutate local configuration and request records.
 use std::sync::Arc;
 
 use tokio::sync::{Mutex, MutexGuard};

@@ -26,7 +26,6 @@ pub struct ModelInvocation {
     pub call_id: String,
     pub run_id: String,
     pub conversation_id: String,
-    pub provider_call_index: u64,
     pub request: ModelRequest,
 }
 

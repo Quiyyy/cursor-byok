@@ -10,16 +10,16 @@ use serde_json::{json, Map, Value};
 use crate::{
     config::ProviderConfig,
     model::{
-        ContentPart, ModelInvocation, ModelLatency, ProjectedContent, ProjectedMessage, Role,
-        ToolCallContent, Usage,
+        ContentPart, ModelInvocation, ProjectedContent, ProjectedMessage, Role, ToolCallContent,
+        Usage,
     },
     Error, Result,
 };
 
 use super::{
-    apply_body_allowlist, apply_openai_prompt_cache_key,
+    apply_body_allowlist,
     attempt::{send_once, Attempt},
-    map_sse_error, merge_extra_params, provider_event_error,
+    map_sse_error, provider_event_error,
     recorder::recorded_headers,
     CallRecorder, FinishReason, ModelEvent, Provider, ProviderStream,
 };
@@ -65,7 +65,7 @@ impl Provider for OpenAiChatProvider {
         let config = self.config.clone();
         let recorder = self.recorder.clone();
         let stream = Box::pin(try_stream! {
-            let ModelInvocation { call_id, request, .. } = invocation;
+            let ModelInvocation { call_id, conversation_id, request, .. } = invocation;
             tracing::debug!(
                 model = %request.model.model_id,
                 call_id = %call_id,
@@ -85,9 +85,7 @@ impl Provider for OpenAiChatProvider {
                     "name": tool.name, "description": tool.description, "parameters": tool.parameters
                 }})).collect::<Vec<_>>());
             }
-            apply_model(&mut body, &request.model, config.max_output_tokens)?;
-            merge_extra_params(&mut body, &request.model.extra_params)?;
-            apply_openai_prompt_cache_key(&mut body, &request.model.model_id)?;
+            super::request_options::apply(crate::model::ProviderType::OpenAiChat, &mut body, &request.model, config.max_output_tokens, &conversation_id)?;
             apply_body_allowlist(&mut body, config.allowed_body_fields.as_ref())?;
             let request_headers = recorded_headers(&config, &[("content-type", "application/json")]);
             if let Some(recorder) = &recorder {
@@ -215,26 +213,6 @@ impl Provider for OpenAiChatProvider {
         });
         super::text_tools::json_response(stream, raw_tools)
     }
-}
-
-fn apply_model(
-    body: &mut Value,
-    model: &crate::model::ModelSpec,
-    route_max_output_tokens: Option<u64>,
-) -> Result<()> {
-    let object = body
-        .as_object_mut()
-        .ok_or_else(|| Error::Provider("OpenAI Chat request body is not an object".into()))?;
-    if let Some(max) = model.max_output_tokens.or(route_max_output_tokens) {
-        object.insert("max_completion_tokens".into(), json!(max));
-    }
-    if let Some(effort) = &model.reasoning.effort {
-        object.insert("reasoning_effort".into(), json!(effort));
-    }
-    if model.latency == ModelLatency::Fast {
-        object.insert("service_tier".into(), json!("fast"));
-    }
-    Ok(())
 }
 
 fn openai_chat_messages(instructions: &str, messages: &[ProjectedMessage]) -> Result<Vec<Value>> {

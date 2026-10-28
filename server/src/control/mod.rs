@@ -1,11 +1,13 @@
 //! Exposes the local control API.
 mod calls;
+mod discovery;
 mod harness;
+mod model_test;
 mod models;
 mod overview;
 mod plugins;
-mod service;
 mod settings;
+mod state;
 
 use axum::{
     body::{to_bytes, Body},
@@ -20,12 +22,13 @@ use tower_http::{
 };
 use url::{Host, Url};
 
-pub use service::{
-    CallDetail, CallSummary, ControlService, DiscoveredModels, LegacyModelImportPreview,
-    LegacyModelImportResult, ModelConnectivityResult, ModelDiscoveryInput, ObservabilitySettings,
-};
+pub use calls::{CallDetail, CallSummary};
+pub use discovery::{DiscoveredModels, ModelDiscoveryInput};
+pub use model_test::ModelConnectivityResult;
+pub use settings::ObservabilitySettings;
+pub use state::ControlState;
 
-pub fn web_router(service: ControlService, assets: impl AsRef<std::path::Path>) -> Router {
+pub fn web_router(service: ControlState, assets: impl AsRef<std::path::Path>) -> Router {
     Router::new()
         .nest_service(
             "/__byok-api__",
@@ -34,7 +37,7 @@ pub fn web_router(service: ControlService, assets: impl AsRef<std::path::Path>) 
         .merge(api_router(service))
 }
 
-pub fn proxy_web_router(service: ControlService, target: Url) -> Router {
+pub fn proxy_web_router(service: ControlState, target: Url) -> Router {
     frontend_proxy_router(target).merge(api_router(service))
 }
 
@@ -108,17 +111,13 @@ fn proxy_error(error: impl std::fmt::Display) -> Response<Body> {
         .expect("static proxy error response")
 }
 
-pub fn api_router(service: ControlService) -> Router {
+pub fn api_router(service: ControlState) -> Router {
     Router::new()
         .route(
             "/__byok-api__/api/models",
             get(models::list).post(models::create),
         )
         .route("/__byok-api__/api/models/discover", post(models::discover))
-        .route(
-            "/__byok-api__/api/models/import-v0049",
-            get(models::preview_v0049).post(models::import_v0049),
-        )
         .route("/__byok-api__/api/models/order", put(models::reorder))
         .route("/__byok-api__/api/model-settings", get(models::all_settings))
         .route("/__byok-api__/api/models/{model_hash}/settings", get(models::settings).put(models::update_settings))

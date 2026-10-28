@@ -34,9 +34,11 @@ pub struct LoadedCa {
 
 impl CaManager {
     pub fn managed() -> Result<Self> {
-        Ok(Self {
-            dir: managed_data_dir()?.join("ca"),
-        })
+        Ok(Self::in_directory(managed_data_dir()?.join("ca")))
+    }
+
+    pub(super) fn in_directory(dir: PathBuf) -> Self {
+        Self { dir }
     }
 
     fn cert_path(&self) -> PathBuf {

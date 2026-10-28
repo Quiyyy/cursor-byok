@@ -6,7 +6,6 @@ pub mod compatibility;
 pub mod default_model;
 pub(crate) mod entitlement;
 pub mod model_catalog;
-pub mod observability;
 pub mod tab;
 
 /// Dependencies for model catalog, TAB and Commit RPCs; no Agent lifecycle.

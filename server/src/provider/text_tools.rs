@@ -69,7 +69,6 @@ mod tests {
             call_id: "m".into(),
             run_id: "r".into(),
             conversation_id: "c".into(),
-            provider_call_index: 0,
             request: ModelRequest {
                 native_responses: None,
                 model: ModelSpec::new("model"),

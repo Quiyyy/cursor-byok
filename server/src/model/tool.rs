@@ -35,10 +35,3 @@ pub enum ToolInputFormat {
     Text,
     Grammar { definition: String, syntax: String },
 }
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ToolImageReference {
-    pub blob_id: String,
-    pub mime_type: String,
-    pub path: String,
-}

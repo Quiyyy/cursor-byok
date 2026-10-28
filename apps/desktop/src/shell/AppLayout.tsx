@@ -11,7 +11,7 @@ import { refreshIcon } from "../shared/ui/icons";
 import { accountsIcon, callsIcon, modelsIcon, overviewIcon, preferencesIcon } from "../shared/ui/workbenchIcons";
 import { CursorTakeover } from "../features/cursor/CursorTakeover";
 import { VirtualList } from "../shared/virtual/VirtualList";
-import { appStore, useAppStore } from "../shared/store/appStore";
+import {refreshPage} from "./refresh";
 import { useUpdateStore } from "../shared/store/updateStore";
 import styles from "./AppLayout.module.scss";
 import { PageActionsTarget } from "./PageActions";
@@ -21,7 +21,7 @@ type MenuItem = { path: string; label: string; icon: IconifyIcon };
 const keptAlivePages = ["/", "/calls", "/settings", "/models", "/providers"];
 
 export function AppLayout() {
-  const { busy } = useAppStore();
+  const [busy,setBusy] = useState(false);
   const { availableVersion } = useUpdateStore();
   const location = useLocation();
   const [leftActionTarget, setLeftActionTarget] = useState<HTMLDivElement | null>(null);
@@ -64,7 +64,7 @@ export function AppLayout() {
       <div className={styles.actionRegion}>
         <Card className={styles.actions}>
           <div ref={setLeftActionTarget} className={styles.pageActions} />
-          {location.pathname !== "/" && <TooltipTrigger label={t("刷新")}><button className={controls.iconButton} aria-label={t("刷新")} disabled={busy} onClick={() => void appStore.refresh()}>
+          {location.pathname !== "/" && <TooltipTrigger label={t("刷新")}><button className={controls.iconButton} aria-label={t("刷新")} disabled={busy} onClick={() => {setBusy(true); void refreshPage(location.pathname).finally(()=>setBusy(false));}}>
             <Icon className={busy ? controls.spin : ""} icon={refreshIcon} size="1.1em" />
           </button></TooltipTrigger>}
           <div ref={setRightActionTarget} className={styles.pageActions} />

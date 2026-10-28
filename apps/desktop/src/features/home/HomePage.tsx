@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, pluginText, type Overview } from "../../shared/api";
+import { useMemo, useState } from "react";
 import { OverviewActivity } from "./overview/OverviewActivity";
 import { DailyTokenUsageChart } from "./charts/DailyTokenUsageChart";
 import { HomeMetrics } from "./metrics/HomeMetrics";
@@ -7,10 +6,11 @@ import { PageContent } from "../../shell/layout/PageContent";
 import type { VirtualPageSection } from "../../shell/layout/VirtualPage";
 import { OverviewTimeRangeFilter, type OverviewRangePreset, type QuickPreset } from "./overview/OverviewTimeRangeFilter";
 import { PageActions } from "../../shell/PageActions";
-import { appStore, useAppStore } from "../../shared/store/appStore";
+import {useModelsStore} from "../models/state";
+import {usePluginsStore} from "../plugins/state";
+import {useOverview} from "./useOverview";
+import {configuredModelOptions} from "../../shared/utils/configuredModelOptions";
 import { formatTimeInput, parseTimeInput } from "../../shared/utils/parseTimeInput";
-import { modelProviderName } from "../../shared/utils/modelProvider";
-import { claudeIcon, flatColorOrganizationIcon, openAiIcon } from "../../shared/ui/icons";
 import { useI18n } from "../../i18n/store";
 
 type TimeRange = { startMs: number; endMs: number };
@@ -34,7 +34,8 @@ function presetRange(preset: Exclude<OverviewRangePreset, "custom">, now = new D
 }
 
 export function HomePage() {
-  const { overview, busy, models, plugins } = useAppStore();
+  const {models} = useModelsStore();
+  const {plugins} = usePluginsStore();
   const { locale } = useI18n();
   const [preset, setPreset] = useState<OverviewRangePreset>("month");
   const [quick, setQuick] = useState<QuickPreset | null>(null);
@@ -44,27 +45,10 @@ export function HomePage() {
   const [customEnd, setCustomEnd] = useState("");
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [appliedModels, setAppliedModels] = useState<string[]>([]);
-  const [rangeOverview, setRangeOverview] = useState<Overview | null>(null);
-  const [rangeBusy, setRangeBusy] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
-  const selectedRange = useMemo(() => preset === "custom" ? customRange : presetRange(preset), [preset, customRange, refreshVersion, overview]);
+  const selectedRange = useMemo(() => preset === "custom" ? customRange : presetRange(preset), [preset, customRange, refreshVersion]);
 
-  useEffect(() => {
-    if (!selectedRange) return;
-    let active = true;
-    setRangeBusy(true);
-    void api.overview({
-      ...selectedRange,
-      modelHashes: appliedModels,
-    }).then((next) => {
-      if (active) setRangeOverview(next);
-    }).finally(() => {
-      if (active) setRangeBusy(false);
-    });
-    return () => { active = false; };
-  }, [preset, customRange, overview, refreshVersion, appliedModels]);
-
-  const filteredOverview = rangeOverview ?? overview;
+  const {overview:filteredOverview,busy:rangeBusy} = useOverview(selectedRange,appliedModels,refreshVersion);
   const dailyTokenUsage = filteredOverview.token_usage_series.map((bucket) => ({
     bucketStartMs: bucket.bucket_start_ms,
     inputTokens: bucket.input_tokens,
@@ -116,27 +100,9 @@ export function HomePage() {
     setCustomOpen(false);
   };
   const refresh = async () => {
-    await appStore.refresh();
     setRefreshVersion((version) => version + 1);
   };
-  const iconFor = (type: string) => type === "anthropic" ? claudeIcon : openAiIcon;
-  const modelOptions = [
-    ...models.map((model) => ({
-      value: model.model_hash,
-      label: model.display_name,
-      group: modelProviderName(model),
-      icon: iconFor(model.type),
-    })),
-    ...plugins.flatMap((plugin) => plugin.providers.flatMap((provider) =>
-      provider.configured ? provider.models.filter((model) => model.enabled).map((model) => ({
-        value: model.id,
-        label: model.displayName,
-        group: pluginText(provider.displayName, locale) || model.pluginName,
-        iconSrc: model.icon || undefined,
-        icon: model.icon ? undefined : flatColorOrganizationIcon,
-      })) : [],
-    )),
-  ];
+  const modelOptions = configuredModelOptions(models,plugins,locale);
   const sections: VirtualPageSection[] = [
     {
       key: "metrics",
@@ -167,7 +133,7 @@ export function HomePage() {
       customEnd={customEnd}
       modelOptions={modelOptions}
       selectedModels={selectedModels}
-      busy={busy || rangeBusy}
+      busy={rangeBusy}
       onSelect={selectPreset}
       onQuickSelect={selectQuick}
       onCustomOpenChange={openCustom}

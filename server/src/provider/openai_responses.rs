@@ -7,16 +7,14 @@ use serde_json::{json, Map, Value};
 
 use crate::{
     config::ProviderConfig,
-    model::{
-        ContentPart, ModelInvocation, ModelLatency, ProjectedContent, ProjectedMessage, Role, Usage,
-    },
+    model::{ContentPart, ModelInvocation, ProjectedContent, ProjectedMessage, Role, Usage},
     Error, Result,
 };
 
 use super::{
-    apply_body_allowlist, apply_openai_prompt_cache_key,
+    apply_body_allowlist,
     attempt::{send_once, Attempt},
-    map_sse_error, merge_extra_params, provider_event_error,
+    map_sse_error, provider_event_error,
     recorder::recorded_headers,
     CallRecorder, FinishReason, ModelEvent, Provider, ProviderStream,
 };
@@ -69,7 +67,7 @@ impl Provider for OpenAiResponsesProvider {
         let config = self.config.clone();
         let recorder = self.recorder.clone();
         Box::pin(try_stream! {
-            let ModelInvocation { call_id, request, .. } = invocation;
+            let ModelInvocation { call_id, conversation_id, request, .. } = invocation;
             let native_responses = request.native_responses.is_some();
             let input = if native_responses { Vec::new() } else { responses_input(&request.history)? };
             let mut body = json!({
@@ -83,7 +81,6 @@ impl Provider for OpenAiResponsesProvider {
                     None=>json!({"type":"function","name":tool.name,"description":tool.description,"parameters":tool.parameters,"strict":false}),
                 }).collect::<Vec<_>>());
             }
-            apply_model(&mut body, &request.model, config.max_output_tokens)?;
             if let Some(mut native) = request.native_responses.clone() {
                 for field in ["max_output_tokens", "reasoning", "service_tier"] {
                     if native.get(field).is_none() {
@@ -94,8 +91,7 @@ impl Provider for OpenAiResponsesProvider {
                 native["stream"] = json!(true);
                 body = native;
             }
-            merge_extra_params(&mut body, &request.model.extra_params)?;
-            apply_openai_prompt_cache_key(&mut body, &request.model.model_id)?;
+            super::request_options::apply(crate::model::ProviderType::OpenAiResponses, &mut body, &request.model, config.max_output_tokens, &conversation_id)?;
             apply_body_allowlist(&mut body, config.allowed_body_fields.as_ref())?;
             let request_headers = recorded_headers(&config, &[("content-type", "application/json")]);
             if let Some(recorder) = &recorder {
@@ -405,31 +401,6 @@ fn update_response_tool(
     Ok(events)
 }
 
-fn apply_model(
-    body: &mut Value,
-    model: &crate::model::ModelSpec,
-    route_max_output_tokens: Option<u64>,
-) -> Result<()> {
-    let object = body
-        .as_object_mut()
-        .ok_or_else(|| Error::Provider("OpenAI Responses request body is not an object".into()))?;
-    if let Some(max) = model.max_output_tokens.or(route_max_output_tokens) {
-        object.insert("max_output_tokens".into(), json!(max));
-    }
-    if model.reasoning.enabled || model.reasoning.effort.is_some() {
-        let mut reasoning = Map::new();
-        reasoning.insert("summary".into(), json!("auto"));
-        if let Some(effort) = &model.reasoning.effort {
-            reasoning.insert("effort".into(), json!(effort));
-        }
-        object.insert("reasoning".into(), Value::Object(reasoning));
-    }
-    if model.latency == ModelLatency::Fast {
-        object.insert("service_tier".into(), json!("fast"));
-    }
-    Ok(())
-}
-
 fn responses_input(messages: &[ProjectedMessage]) -> Result<Vec<Value>> {
     let mut raw_calls = std::collections::HashSet::new();
     let mut input = Vec::new();
@@ -604,7 +575,6 @@ mod tests {
         fn round(arguments: Value) -> [ProjectedMessage; 2] {
             [
                 ProjectedMessage {
-                    message_id: "assistant".into(),
                     role: Role::Assistant,
                     content: ProjectedContent::Assistant {
                         text: String::new(),
@@ -619,14 +589,12 @@ mod tests {
                     },
                 },
                 ProjectedMessage {
-                    message_id: "result".into(),
                     role: Role::Tool,
                     content: ProjectedContent::ToolResult(ToolResultContent {
                         call_id: "reused".into(),
                         name: "ApplyPatch".into(),
                         content: "ok".into(),
                         is_error: false,
-                        image: None,
                         provider_parts: Vec::new(),
                     }),
                 },
@@ -647,7 +615,6 @@ mod tests {
     #[test]
     fn reasoning_replay_projects_response_items_to_valid_input_items() {
         let messages = [ProjectedMessage {
-            message_id: "assistant-1".into(),
             role: Role::Assistant,
             content: ProjectedContent::Assistant {
                 text: String::new(),

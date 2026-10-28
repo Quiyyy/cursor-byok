@@ -12,7 +12,7 @@ import {
   type PluginResourceView,
 } from "../../shared/api";
 import { useI18n } from "../../i18n/store";
-import { appStore } from "../../shared/store/appStore";
+import { pluginsStore } from "./state";
 import { Button } from "../../shared/ui/Button";
 import { Card } from "../../shared/ui/Card";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
@@ -90,7 +90,7 @@ function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
           return;
         }
         if (result.status === "completed") {
-          await appStore.refreshPlugins();
+          await pluginsStore.refreshPlugins();
           if (stopped.current || controller.signal.aborted) return;
           setStatus("success");
           onConfigured(result.modelSyncError ?? undefined);
@@ -170,7 +170,7 @@ export function PluginAccountsPanel({ plugin, onBusyChange }: { plugin: PluginDe
       setError(errorText(cause));
       return false;
     } finally {
-      await appStore.refreshPlugins();
+      await pluginsStore.refreshPlugins();
       setBusy(null);
     }
   };
@@ -192,7 +192,7 @@ export function PluginAccountsPanel({ plugin, onBusyChange }: { plugin: PluginDe
         input,
       );
       setResourceActionResult(result);
-      await appStore.refreshPlugins();
+      await pluginsStore.refreshPlugins();
     } catch (cause) {
       setResourceActionError(errorText(cause));
     } finally {

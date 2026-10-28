@@ -233,8 +233,8 @@ pub fn normalize_model_input(input: &ModelConfigInput) -> Result<ModelConfigInpu
         ModelType::OpenAi => normalize_openai_endpoint(&input.openai_endpoint)?,
         ModelType::Anthropic => String::new(),
     };
-    validate_object(&input.openai_extra_params, "OpenAI extra params")?;
-    validate_object(&input.anthropic_extra_params, "Anthropic extra params")?;
+    validate_extra_params(&input.openai_extra_params)?;
+    validate_extra_params(&input.anthropic_extra_params)?;
     validate_headers(&input.custom_headers)?;
 
     let normalized = ModelConfigInput {
@@ -543,4 +543,29 @@ impl ModelSpec {
             extra_params: serde_json::json!({}),
         }
     }
+}
+
+pub(crate) fn validate_extra_params(extra: &serde_json::Value) -> Result<()> {
+    let fields = extra
+        .as_object()
+        .ok_or_else(|| Error::Config("model extra params must be an object".into()))?;
+    for name in fields.keys() {
+        if matches!(
+            name.as_str(),
+            "model"
+                | "stream"
+                | "messages"
+                | "input"
+                | "tools"
+                | "system"
+                | "instructions"
+                | "previous_response_id"
+                | "conversation"
+        ) {
+            return Err(Error::Config(format!(
+                "model extra params cannot replace {name}"
+            )));
+        }
+    }
+    Ok(())
 }

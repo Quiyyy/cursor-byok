@@ -78,7 +78,7 @@ jobs:
 
       - name: Check types and production build
         working-directory: apps/desktop
-        run: npm run check
+        run: npm run check && npm run test:state
 
       - name: Check native installer bundle and routing tests
         run: |

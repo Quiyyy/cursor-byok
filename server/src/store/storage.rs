@@ -9,7 +9,6 @@ use super::Store;
 #[derive(Clone, Copy, Debug, Default, Serialize)]
 pub struct StatisticsStorage {
     pub call_count: i64,
-    pub trace_count: i64,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
@@ -22,16 +21,10 @@ pub enum StatisticsStorageScope {
 
 impl Store {
     pub async fn statistics_storage(&self) -> Result<StatisticsStorage> {
-        let (call_count, trace_count) = sqlx::query_as::<_, (i64, i64)>(
-            "SELECT (SELECT COUNT(*) FROM llm_calls), (SELECT COUNT(*) FROM cursor_run_traces)",
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(StatisticsStorage {
-            call_count,
-            trace_count,
-        })
+        let call_count = sqlx::query_scalar("SELECT COUNT(*) FROM llm_calls")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(StatisticsStorage { call_count })
     }
 
     pub async fn clear_statistics_storage(&self) -> Result<StatisticsStorage> {
@@ -46,11 +39,7 @@ impl Store {
     pub async fn clear_all_statistics_storage(&self) -> Result<StatisticsStorage> {
         let _write = self.writes.lock().await;
         let mut transaction = self.pool.begin().await?;
-        Self::clear_trace_artifacts_tx(&mut transaction).await?;
         sqlx::query("DELETE FROM llm_calls")
-            .execute(&mut *transaction)
-            .await?;
-        sqlx::query("DELETE FROM cursor_run_traces")
             .execute(&mut *transaction)
             .await?;
         transaction.commit().await?;
@@ -60,7 +49,7 @@ impl Store {
 
     async fn reclaim_statistics_space(&self) -> Result<()> {
         // DELETE only places pages on SQLite's freelist. The user explicitly
-        // requested cleanup; reclaim those pages without deleting conversations.
+        // requested cleanup; reclaim those pages without deleting model configuration.
         sqlx::query("VACUUM").execute(&self.pool).await?;
         sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
             .execute(&self.pool)
@@ -75,47 +64,6 @@ impl Store {
             .execute(&mut **transaction)
             .await?;
         sqlx::query("DELETE FROM llm_call_response_chunks")
-            .execute(&mut **transaction)
-            .await?;
-        Self::clear_trace_artifacts_tx(transaction).await
-    }
-
-    async fn clear_trace_artifacts_tx(
-        transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    ) -> Result<()> {
-        sqlx::query(
-            "CREATE TEMP TABLE IF NOT EXISTS clear_statistics_blob_ids(
-                blob_id BLOB PRIMARY KEY
-             )",
-        )
-        .execute(&mut **transaction)
-        .await?;
-        sqlx::query("DELETE FROM clear_statistics_blob_ids")
-            .execute(&mut **transaction)
-            .await?;
-        sqlx::query(
-            "INSERT OR IGNORE INTO clear_statistics_blob_ids(blob_id)
-             SELECT blob_id FROM cursor_run_trace_artifacts",
-        )
-        .execute(&mut **transaction)
-        .await?;
-        sqlx::query("DELETE FROM cursor_run_trace_artifacts")
-            .execute(&mut **transaction)
-            .await?;
-        sqlx::query(
-            "DELETE FROM blobs
-             WHERE blob_id IN (SELECT blob_id FROM clear_statistics_blob_ids)
-               AND NOT EXISTS (
-                   SELECT 1 FROM cursor_run_trace_artifacts a WHERE a.blob_id = blobs.blob_id
-               )
-               AND NOT EXISTS (
-                   SELECT 1 FROM blob_edges e
-                   WHERE e.parent_blob_id = blobs.blob_id OR e.child_blob_id = blobs.blob_id
-               )",
-        )
-        .execute(&mut **transaction)
-        .await?;
-        sqlx::query("DROP TABLE clear_statistics_blob_ids")
             .execute(&mut **transaction)
             .await?;
         Ok(())

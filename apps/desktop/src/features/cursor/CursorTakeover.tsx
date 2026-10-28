@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { api } from "../../shared/api";
-import { appStore, useAppStore } from "../../shared/store/appStore";
+import { cursorStore, useCursorStore } from "./state";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { Modal } from "../../shared/ui/Modal";
@@ -11,7 +11,7 @@ import styles from "./CursorTakeover.module.scss";
 
 /** Cursor integration is global and remains available independently of the active page. */
 export function CursorTakeover() {
-  const { cursorHarness: status, cursorBusy, busy: refreshing } = useAppStore();
+  const { cursorHarness: status, cursorBusy, busy: refreshing, error } = useCursorStore();
   const message = useMessage();
   const switchId = useId();
   const [setupOpen, setSetupOpen] = useState(false);
@@ -30,20 +30,20 @@ export function CursorTakeover() {
   }, [caCommand, message]);
 
   const toggle = (enabled: boolean) => {
-    const current = appStore.getSnapshot();
+    const current = cursorStore.getSnapshot();
     if (current.cursorBusy || current.busy || !current.cursorHarness) return;
     if (enabled && current.cursorHarness.ca !== "ready") setSetupOpen(true);
-    else void appStore.setCursorEnabled(enabled);
+    else void cursorStore.setCursorEnabled(enabled);
   };
   const initializeCa = async () => {
-    const next = await appStore.initializeCursorCa();
+    const next = await cursorStore.initializeCursorCa();
     if (next?.ca === "ready") setSetupOpen(false);
     if (next?.ca === "untrusted" && next.ca_install_command) setCaCommand(next.ca_install_command);
   };
   const refreshCa = async () => {
-    await appStore.refresh();
+    await cursorStore.refresh();
     setWaitingForCaRefresh(false);
-    if (appStore.getSnapshot().cursorHarness?.ca === "ready") setSetupOpen(false);
+    if (cursorStore.getSnapshot().cursorHarness?.ca === "ready") setSetupOpen(false);
   };
   const openCaTerminal = () => {
     if (caCommand) void api.openCursorCaInstallTerminal(caCommand).catch((cause) => message(errorText(cause)));
@@ -54,9 +54,11 @@ export function CursorTakeover() {
   return <>
     <div className={styles.control} data-degraded={degraded || undefined}>
       <label htmlFor={switchId}>{t("Cursor 接管")}</label>
-      <TooltipTrigger label={description}>
+      {!status && error ? <Button id={switchId} variant="ghost" size="small" aria-label={t("刷新接入状态")} disabled={busy} onClick={() => void refreshCa()}>
+        {t("刷新")}
+      </Button> : <TooltipTrigger label={description}>
         <Switch id={switchId} className={styles.switch} label={t("Cursor 接管")} checked={checked} disabled={busy || !status} aria-busy={busy} onChange={toggle} />
-      </TooltipTrigger>
+      </TooltipTrigger>}
     </div>
     <Modal open={setupOpen} title={t("准备 Cursor 接入")} onClose={() => setSetupOpen(false)} closeLabel={t("关闭")} busy={busy}>
       <div className={styles.setup}>

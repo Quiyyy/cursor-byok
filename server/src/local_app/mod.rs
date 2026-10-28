@@ -80,6 +80,7 @@ struct Inner {
     store: Store,
     ca: CaManager,
     ca_initialization: Mutex<()>,
+    lifecycle: Mutex<()>,
     backend_addr: RwLock<Option<SocketAddr>>,
     tab_mode: Arc<RwLock<TabMode>>,
     proxy: Mutex<ProxyRuntime>,
@@ -93,6 +94,7 @@ impl CursorHarness {
                 store,
                 ca: CaManager::managed()?,
                 ca_initialization: Mutex::new(()),
+                lifecycle: Mutex::new(()),
                 backend_addr: RwLock::new(None),
                 tab_mode: Arc::new(RwLock::new(TabMode::default())),
                 proxy: Mutex::new(ProxyRuntime::default()),
@@ -112,21 +114,17 @@ impl CursorHarness {
         self.inner.proxy.lock().await.port()
     }
 
-    pub async fn cleanup_stale_settings(&self) -> Result<()> {
-        settings::clear_stale_managed_settings()
+    pub async fn status(&self) -> Result<CursorHarnessStatus> {
+        let _lifecycle = self.inner.lifecycle.lock().await;
+        self.status_with_ca(self.inner.ca.state()?).await
     }
 
-    pub async fn status(&self) -> Result<CursorHarnessStatus> {
+    async fn status_with_ca(&self, ca: CaState) -> Result<CursorHarnessStatus> {
         let models = self.inner.store.models().await?;
         let configured_models = models.len();
         let enabled_models = configured_models;
-        let ca = self.inner.ca.state()?;
-        if self.inner.store.cursor_takeover_enabled().await?
-            && matches!(ca, CaState::Ready)
-            && self.inner.backend_addr.read().is_some()
-        {
-            self.enable().await?;
-        }
+        let desired = self.inner.store.cursor_takeover_enabled().await?;
+        let native_ready = self.inner.native.is_current().await;
         let proxy = self.inner.proxy.lock().await;
         let proxy_url = proxy.url();
         let settings_applied = proxy_url
@@ -134,9 +132,15 @@ impl CursorHarness {
             .map(settings::settings_match)
             .transpose()?
             .unwrap_or(false);
-        let integration = match (proxy.running(), settings_applied) {
-            (false, false) => IntegrationState::Disabled,
-            (true, true) => IntegrationState::Enabled,
+        let integration = match (
+            desired,
+            proxy.running(),
+            settings_applied,
+            native_ready,
+            matches!(ca, CaState::Ready),
+        ) {
+            (false, false, false, false, _) => IntegrationState::Disabled,
+            (true, true, true, true, true) => IntegrationState::Enabled,
             _ => IntegrationState::Degraded,
         };
         Ok(CursorHarnessStatus {
@@ -161,23 +165,24 @@ impl CursorHarness {
     }
 
     pub async fn set_enabled(&self, enabled: bool) -> Result<CursorHarnessStatus> {
+        let _lifecycle = self.inner.lifecycle.lock().await;
         if enabled {
             if let Err(error) = self.enable().await {
                 let _ = self.inner.store.set_cursor_takeover_enabled(false).await;
-                if let Err(cleanup) = self.disable().await {
+                if let Err(cleanup) = self.disable_inner().await {
                     tracing::warn!(%cleanup, "failed to clean up unsuccessful Cursor takeover");
                 }
                 return Err(error);
             }
             if let Err(error) = self.inner.store.set_cursor_takeover_enabled(true).await {
-                let _ = self.disable().await;
+                let _ = self.disable_inner().await;
                 return Err(error);
             }
         } else {
             self.inner.store.set_cursor_takeover_enabled(false).await?;
-            self.disable().await?;
+            self.disable_inner().await?;
         }
-        self.status().await
+        self.status_with_ca(self.inner.ca.state()?).await
     }
 
     pub async fn set_tab_settings(&self, settings: TabSettings) -> Result<TabSettings> {
@@ -240,7 +245,33 @@ impl CursorHarness {
         Ok(())
     }
 
+    /// Restore the persisted intent once, after the HTTP address is known.
+    pub async fn restore_on_start(&self) -> Result<()> {
+        let _lifecycle = self.inner.lifecycle.lock().await;
+        // An explicit enable request may have completed while startup was waiting.
+        if self.inner.native.is_current().await {
+            return Ok(());
+        }
+        settings::clear_stale_managed_settings()?;
+        if self.inner.store.cursor_takeover_enabled().await?
+            && matches!(self.inner.ca.state()?, CaState::Ready)
+        {
+            if let Err(error) = self.enable().await {
+                if let Err(cleanup) = self.disable_inner().await {
+                    tracing::warn!(%cleanup, "failed to clean up startup takeover");
+                }
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
     pub async fn disable(&self) -> Result<()> {
+        let _lifecycle = self.inner.lifecycle.lock().await;
+        self.disable_inner().await
+    }
+
+    async fn disable_inner(&self) -> Result<()> {
         let native = self.inner.native.disable().await;
         let settings = settings::clear_proxy_settings();
         self.inner.proxy.lock().await.stop().await;

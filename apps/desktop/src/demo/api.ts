@@ -51,12 +51,10 @@ const calls: LlmCall[] = Array.from({ length: 24 }, (_, index) => {
   const model = models[index % models.length];
   const failed = index === 7 || index === 19;
   return {
-    call_kind: "provider_llm",
-    route: "local_byok",
+    source: "native_agent",
     call_id: `mock-call-${String(index + 1).padStart(3, "0")}`,
     run_id: `mock-run-${Math.floor(index / 3) + 1}`,
     conversation_id: `mock-conversation-${Math.floor(index / 4) + 1}`,
-    provider_call_index: index + 1,
     model_hash: model.model_hash,
     provider_type: model.type,
     provider_url: model.base_url,
@@ -111,7 +109,7 @@ let proxySettings: ProxySettings = {
 };
 let tabSettings: TabSettings = { mode: "direct", address: "" };
 let cursorModelSettings = { model_id: "plugin:demo.grok/Grok 4.7", updated_at_ms: FIXED_NOW };
-let storage: StatisticsStorage = { call_count: calls.length, trace_count: calls.length };
+let storage: StatisticsStorage = { call_count: calls.length };
 
 export function installDemoApi() {
   const nativeFetch = window.fetch.bind(window);
@@ -155,10 +153,6 @@ export function installDemoApi() {
       return json(models);
     }
     if (path === "/models/discover") return json({ models: models.map((model) => model.model_id) });
-    if (path === "/models/import-v0049" && method === "GET") {
-      return json({ source: "demo", total: 0, new_models: 0, existing_models: 0, models: [] });
-    }
-    if (path === "/models/import-v0049") return json({ imported: 0, skipped: 0, total: 0 });
     if (/^\/models\/[^/]+\/test\/[^/]+$/.test(path) && method === "POST") {
       await demoDelay(init?.signal ?? (input instanceof Request ? input.signal : undefined));
       if (decodeURIComponent(path).includes("demo.grok")) return json({ message: "Demo: authorization expired (401)" }, 502);
@@ -218,7 +212,7 @@ export function installDemoApi() {
     if (path === "/settings/storage/statistics" && method === "GET") return json(storage);
     if (path === "/settings/storage/statistics") {
       const scope = (body as { scope?: string } | null)?.scope ?? "details";
-      storage = scope === "all" ? { call_count: 0, trace_count: 0 } : storage;
+      storage = scope === "all" ? { call_count: 0 } : storage;
       return json(storage);
     }
     if (path === "/settings/proxy" && method === "GET") return json(proxySettings);
@@ -353,7 +347,6 @@ function createCallDetail(id: string): CallDetail {
       { seq: 1, received_offset_ms: 418, data: "event: response.created", byte_count: 128 },
       { seq: 2, received_offset_ms: 512, data: "event: response.output_text.delta", byte_count: 256 },
     ],
-    cursor_trace: null,
   };
 }
 

@@ -8,7 +8,6 @@ import { Button } from "../../shared/ui/Button";
 import { ActionMenu } from "../../shared/ui/ActionMenu";
 import styles from "./CursorSettings.module.scss";
 import { PageContent } from "../../shell/layout/PageContent";
-import { LegacyModelImport } from "./LegacyModelImport";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { FormField, SecretTextInput, TextInput } from "../../shared/ui/FormControls";
 import controls from "../../shared/ui/Controls.module.scss";
@@ -17,10 +16,12 @@ import { Modal } from "../../shared/ui/Modal";
 import { addIcon } from "../../shared/ui/icons";
 import { useMessage } from "../../shared/ui/message";
 import { PageActions } from "../../shell/PageActions";
-import { appStore, useAppStore } from "../../shared/store/appStore";
+import { usePluginsStore } from "../plugins/state";
+import { modelsStore, useModelsStore } from "./state";
 
 export function CursorSettingsPage() {
-  const { models, busy, cursorBusy, plugins, modelSettings, savingModelSettings, cursorModelSettings, savingCursorDefaultModel } = useAppStore();
+  const { models, busy, saving: cursorBusy, modelSettings, savingModelSettings, cursorModelSettings, savingCursorDefaultModel } = useModelsStore();
+  const {plugins} = usePluginsStore();
   const navigate = useNavigate();
   const message = useMessage();
   const [draft, setDraft] = useState<CursorModelDraft | null>(null);
@@ -93,7 +94,7 @@ export function CursorSettingsPage() {
     if (!draft) return null;
     const input = draftInput(draft);
     if (editing) {
-      const saved = await appStore.updateCursorModel(editing.model_hash, input);
+      const saved = await modelsStore.updateCursorModel(editing.model_hash, input);
       if (saved) setModelTestResults((current) => {
         const next = new Map(current);
         next.delete(editing.model_hash);
@@ -101,7 +102,7 @@ export function CursorSettingsPage() {
       });
       return saved;
     }
-    return (await appStore.createModels([input]))?.[0] ?? null;
+    return (await modelsStore.createModels([input]))?.[0] ?? null;
   };
   const save = async () => {
     if (submitting.current) return;
@@ -112,7 +113,7 @@ export function CursorSettingsPage() {
         setDraft(null);
         setEditing(null);
       } else {
-        setEditorError(appStore.getSnapshot().error);
+        setEditorError(modelsStore.getSnapshot().error);
       }
     } catch (cause) {
       setEditorError(errorText(cause));
@@ -174,7 +175,7 @@ export function CursorSettingsPage() {
     try {
       const saved = await persist();
       if (!saved) {
-        setEditorError(appStore.getSnapshot().error);
+        setEditorError(modelsStore.getSnapshot().error);
         return;
       }
       setEditing(saved);
@@ -256,13 +257,13 @@ export function CursorSettingsPage() {
     } catch (cause) {
       message(errorText(cause));
     } finally {
-      await appStore.refresh();
+      await modelsStore.refresh();
       setGroupSettingsBusy(false);
     }
   };
   const reorderModels = useCallback(async (modelHashes: string[]) => {
-    if (!await appStore.reorderCursorModels(modelHashes)) {
-      message(appStore.getSnapshot().error || t("排序失败"));
+    if (!await modelsStore.reorderCursorModels(modelHashes)) {
+      message(modelsStore.getSnapshot().error || t("排序失败"));
     }
   }, [message]);
 
@@ -285,12 +286,12 @@ export function CursorSettingsPage() {
     defaultModelDisabled={busy || !cursorModelSettings || savingCursorDefaultModel !== null}
     savingDefaultModelId={savingCursorDefaultModel}
     onSetDefault={async (id) => {
-      if (await appStore.setCursorDefaultModel(id)) message(t("默认模型已保存，重载 Cursor 窗口后生效"));
-      else message(appStore.getSnapshot().error || t("保存失败"));
+      if (await modelsStore.setCursorDefaultModel(id)) message(t("默认模型已保存，重载 Cursor 窗口后生效"));
+      else message(modelsStore.getSnapshot().error || t("保存失败"));
     }}
     onContextChange={async (id, value) => {
-      const saved = await appStore.setModelContext(id, value);
-      if (!saved) message(appStore.getSnapshot().error || t("保存失败"));
+      const saved = await modelsStore.setModelContext(id, value);
+      if (!saved) message(modelsStore.getSnapshot().error || t("保存失败"));
       return saved;
     }}
     onDuplicate={duplicateModel}
@@ -314,13 +315,12 @@ export function CursorSettingsPage() {
       <Button variant="ghost" disabled={cursorBusy || (!batchTesting && (!testTargets.length || testingModelHashes.size > 0))} onClick={() => void (batchTesting ? cancelAllModelTests() : testAllModels())}>{batchTesting ? t("取消全部测试") : t("测试全部")}</Button>
     </PageActions>
     <PageActions>
-      <LegacyModelImport>{({ busy, open }) => <ActionMenu iconOnly label={t("更多")} disabled={busy || cursorBusy} items={[
+      <ActionMenu iconOnly label={t("更多")} disabled={cursorBusy} items={[
         { id: "group-provider", label: t("按来源分组"), disabled: grouping === "provider", onSelect: () => setGrouping("provider") },
         { id: "group-type", label: t("按协议分组"), disabled: grouping === "type", onSelect: () => setGrouping("type") },
         { id: "group-flat", label: t("平铺与排序"), disabled: grouping === "flat", onSelect: () => setGrouping("flat") },
         { id: "accounts", label: t("连接账号"), onSelect: () => navigate("/providers") },
-        { id: "import", label: t("导入旧版配置"), onSelect: open },
-      ]} />}</LegacyModelImport>
+      ]} />
       <Button variant="primary" disabled={cursorBusy} onClick={openNew}><Icon icon={addIcon} size="1.1em" />{t("添加模型")}</Button>
     </PageActions>
     <PageContent title={t("模型管理")} sections={[
@@ -344,7 +344,7 @@ export function CursorSettingsPage() {
         </FormField>
       </div>}
     </Modal>
-    <ConfirmDialog open={deleting !== null} title={t("删除模型")} cancelLabel={t("取消")} confirmLabel={t("删除")} onCancel={() => setDeleting(null)} onConfirm={() => { if (deleting) void appStore.deleteModel(deleting.model_hash); setDeleting(null); }}><p>{t("确定删除这个模型吗？")}</p></ConfirmDialog>
+    <ConfirmDialog open={deleting !== null} title={t("删除模型")} cancelLabel={t("取消")} confirmLabel={t("删除")} onCancel={() => setDeleting(null)} onConfirm={() => { if (deleting) void modelsStore.deleteModel(deleting.model_hash); setDeleting(null); }}><p>{t("确定删除这个模型吗？")}</p></ConfirmDialog>
   </>;
 }
 

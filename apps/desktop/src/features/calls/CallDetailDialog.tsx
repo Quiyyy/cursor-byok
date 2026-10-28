@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type CallDetail } from "../../shared/api";
-import { appStore } from "../../shared/store/appStore";
+import { callsStore } from "./state";
 import { Button } from "../../shared/ui/Button";
 import { Modal } from "../../shared/ui/Modal";
 import { CallDetails } from "./CallDetails";
@@ -21,7 +21,7 @@ export function CallDetailDialog({ callId, onClose }: { callId: string | null; o
   const current = detail?.call.call_id === callId ? detail : null;
   return <Modal fullHeight open={callId !== null} title={current?.call.display_name ?? t("调用详情")} onClose={onClose} closeLabel={t("关闭")}
     banner={current?.call.error_message ? <p role="alert" className={styles.detailError}>{t("错误：{error}", { error: current.call.error_message })}</p> : undefined}
-    secondaryAction={<Button onClick={() => { if (callId) void appStore.openCallDetails(callId); }}>{t("在独立窗口中打开")}</Button>}>
+    secondaryAction={<Button onClick={() => { if (callId) void callsStore.openCallDetails(callId); }}>{t("在独立窗口中打开")}</Button>}>
     {error ? <p role="alert">{error}</p> : current ? <CallDetails detail={current} /> : <p>{t("正在加载调用详情…")}</p>}
   </Modal>;
 }

@@ -73,7 +73,7 @@ pub(super) fn parse(protocol: Protocol, body: &Value) -> Result<ParsedRequest> {
                 .to_owned();
             if !native_responses {
                 match body.get("input") {
-                    Some(Value::String(text)) => history.push(text_message(0, Role::User, text)),
+                    Some(Value::String(text)) => history.push(text_message(Role::User, text)),
                     Some(input) => parse_responses_input(input, &mut prompt, &mut history)?,
                     None => return Err(Error::Protocol("input is required".into())),
                 }
@@ -108,6 +108,19 @@ pub(super) fn parse(protocol: Protocol, body: &Value) -> Result<ParsedRequest> {
             body.pointer("/thinking/type").and_then(Value::as_str),
             Some("enabled" | "adaptive")
         );
+    for field in ["temperature", "top_p", "seed", "prompt_cache_key"] {
+        if let Some(value) = body.get(field) {
+            model.extra_params[field] = value.clone();
+        }
+    }
+    let stop_field = if matches!(protocol, Protocol::Messages) {
+        "stop_sequences"
+    } else {
+        "stop"
+    };
+    if let Some(value) = body.get(stop_field) {
+        model.extra_params["stop"] = value.clone();
+    }
     Ok(ParsedRequest {
         public_model_id,
         request: ModelRequest {
@@ -128,9 +141,8 @@ fn required_string<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
         .ok_or_else(|| Error::Protocol(format!("{field} is required")))
 }
 
-fn text_message(index: usize, role: Role, text: &str) -> ProjectedMessage {
+fn text_message(role: Role, text: &str) -> ProjectedMessage {
     ProjectedMessage {
-        message_id: format!("external:{index}"),
         role,
         content: ProjectedContent::Parts(vec![ContentPart::Text { text: text.into() }]),
     }
@@ -216,7 +228,7 @@ fn parse_chat_messages(
     let messages = value
         .and_then(Value::as_array)
         .ok_or_else(|| Error::Protocol("messages must be an array".into()))?;
-    for (index, message) in messages.iter().enumerate() {
+    for message in messages {
         let role = required_string(message, "role")?;
         match role {
             "system" | "developer" => {
@@ -233,7 +245,6 @@ fn parse_chat_messages(
                 prompt.instructions.push_str(&text);
             }
             "user" => history.push(ProjectedMessage {
-                message_id: format!("external:{index}"),
                 role: Role::User,
                 content: ProjectedContent::Parts(parse_parts(message.get("content"))?),
             }),
@@ -263,7 +274,6 @@ fn parse_chat_messages(
                     .transpose()?
                     .unwrap_or_default();
                 history.push(ProjectedMessage {
-                    message_id: format!("external:{index}"),
                     role: Role::Assistant,
                     content: ProjectedContent::Assistant {
                         text,
@@ -274,7 +284,6 @@ fn parse_chat_messages(
                 });
             }
             "tool" => history.push(ProjectedMessage {
-                message_id: format!("external:{index}"),
                 role: Role::Tool,
                 content: ProjectedContent::ToolResult(ToolResultContent {
                     call_id: required_string(message, "tool_call_id")?.into(),
@@ -294,7 +303,6 @@ fn parse_chat_messages(
                         .unwrap_or_else(|| "tool".into()),
                     content: text_content(message.get("content")).unwrap_or_default(),
                     is_error: false,
-                    image: None,
                     provider_parts: Vec::new(),
                 }),
             }),
@@ -312,11 +320,10 @@ fn parse_responses_input(
     let items = value
         .as_array()
         .ok_or_else(|| Error::Protocol("input must be text or an array".into()))?;
-    for (index, item) in items.iter().enumerate() {
+    for item in items {
         match item.get("type").and_then(Value::as_str) {
             Some("function_call_output" | "custom_tool_call_output") => {
                 history.push(ProjectedMessage {
-                    message_id: format!("external:{index}"),
                     role: Role::Tool,
                     content: ProjectedContent::ToolResult(ToolResultContent {
                         call_id: required_string(item, "call_id")?.into(),
@@ -324,7 +331,6 @@ fn parse_responses_input(
                             .unwrap_or_else(|| "tool".into()),
                         content: text_content(item.get("output")).unwrap_or_default(),
                         is_error: false,
-                        image: None,
                         provider_parts: if item["output"].is_array() {
                             parse_parts(item.get("output"))?
                         } else {
@@ -334,7 +340,6 @@ fn parse_responses_input(
                 })
             }
             Some("function_call" | "custom_tool_call") => history.push(ProjectedMessage {
-                message_id: format!("external:{index}"),
                 role: Role::Assistant,
                 content: ProjectedContent::Assistant {
                     text: String::new(),
@@ -353,7 +358,6 @@ fn parse_responses_input(
                 },
             }),
             Some("reasoning") => history.push(ProjectedMessage {
-                message_id: format!("external:{index}"),
                 role: Role::Assistant,
                 content: ProjectedContent::Assistant {
                     text: String::new(),
@@ -387,7 +391,6 @@ fn parse_responses_input(
                     _ => return Err(Error::Protocol(format!("unsupported role: {role}"))),
                 };
                 history.push(ProjectedMessage {
-                    message_id: format!("external:{index}"),
                     role,
                     content: ProjectedContent::Parts(parse_parts(item.get("content"))?),
                 });
@@ -404,7 +407,7 @@ fn parse_anthropic_messages(
     let messages = value
         .and_then(Value::as_array)
         .ok_or_else(|| Error::Protocol("messages must be an array".into()))?;
-    for (index, message) in messages.iter().enumerate() {
+    for message in messages {
         let role = required_string(message, "role")?;
         let content = message
             .get("content")
@@ -412,7 +415,7 @@ fn parse_anthropic_messages(
         if let Some(blocks) = content.as_array() {
             let mut text_parts = Vec::new();
             let mut calls = Vec::new();
-            for (block_index, block) in blocks.iter().enumerate() {
+            for block in blocks {
                 match block.get("type").and_then(Value::as_str) {
                     Some("tool_use") => calls.push(ToolCallContent {
                         index: calls.len(),
@@ -431,14 +434,12 @@ fn parse_anthropic_messages(
                         }
                         if !text_parts.is_empty() {
                             history.push(ProjectedMessage {
-                                message_id: format!("external:{index}:{block_index}:text"),
                                 role: Role::User,
                                 content: ProjectedContent::Parts(std::mem::take(&mut text_parts)),
                             });
                         }
                         let call_id = required_string(block, "tool_use_id")?;
                         history.push(ProjectedMessage {
-                            message_id: format!("external:{index}:{block_index}:tool"),
                             role: Role::Tool,
                             content: ProjectedContent::ToolResult(ToolResultContent {
                                 call_id: call_id.into(),
@@ -448,7 +449,6 @@ fn parse_anthropic_messages(
                                     .get("is_error")
                                     .and_then(Value::as_bool)
                                     .unwrap_or(false),
-                                image: None,
                                 provider_parts: Vec::new(),
                             }),
                         });
@@ -469,7 +469,6 @@ fn parse_anthropic_messages(
                     .collect::<Vec<_>>()
                     .join("");
                 history.push(ProjectedMessage {
-                    message_id: format!("external:{index}"),
                     role: Role::Assistant,
                     content: ProjectedContent::Assistant {
                         text,
@@ -480,7 +479,6 @@ fn parse_anthropic_messages(
                 });
             } else if !text_parts.is_empty() {
                 history.push(ProjectedMessage {
-                    message_id: format!("external:{index}"),
                     role: Role::User,
                     content: ProjectedContent::Parts(text_parts),
                 });
@@ -492,7 +490,6 @@ fn parse_anthropic_messages(
                 _ => return Err(Error::Protocol(format!("unsupported role: {role}"))),
             };
             history.push(ProjectedMessage {
-                message_id: format!("external:{index}"),
                 role,
                 content: ProjectedContent::Parts(parse_parts(Some(content))?),
             });

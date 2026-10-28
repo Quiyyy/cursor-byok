@@ -58,9 +58,8 @@ impl NativeForwarder {
         let request_url = model.request_url()?;
         let conversation_id =
             super::native_identity(kind, incoming_headers, "x-byok-conversation-id", &call_id);
-        if kind == "native-agent" && (body.get("messages").is_some() || body.get("input").is_some())
-        {
-            apply_native_defaults(protocol, &mut body, model, &conversation_id);
+        if body.get("messages").is_some() || body.get("input").is_some() {
+            apply_native_defaults(protocol, &mut body, model, &conversation_id)?;
         }
         let new_call = NewLlmCall {
             call_id: call_id.clone(),
@@ -71,7 +70,6 @@ impl NativeForwarder {
                 &call_id,
             ),
             conversation_id: conversation_id.clone(),
-            provider_call_index: 0,
             model_hash: model.model_hash.clone(),
             provider_type: model.provider_type(),
             provider_url: request_url.clone(),
@@ -269,39 +267,14 @@ impl NativeForwarder {
     }
 }
 
-fn apply_native_defaults(protocol: Protocol, body: &mut Value, model: &ModelConfig, session: &str) {
-    if let Some(tokens) = model.max_output_tokens() {
-        let field = match protocol {
-            Protocol::Responses => "max_output_tokens",
-            _ => "max_tokens",
-        };
-        if body.get(field).is_none() && body.get("max_completion_tokens").is_none() {
-            body[field] = serde_json::json!(tokens);
-        }
-    }
-    let mut defaults = crate::model::ModelSpec::new(&model.model_id);
-    model.configure(&mut defaults);
-    if let Some(effort) = defaults.reasoning.effort {
-        match protocol {
-            Protocol::Chat if body.get("reasoning_effort").is_none() => {
-                body["reasoning_effort"] = serde_json::json!(effort)
-            }
-            Protocol::Responses if body.get("reasoning").is_none() => {
-                body["reasoning"] = serde_json::json!({"effort":effort})
-            }
-            Protocol::Messages if body.get("output_config").is_none() => {
-                body["output_config"] = serde_json::json!({"effort":effort});
-                if body.get("thinking").is_none() {
-                    body["thinking"] = serde_json::json!({"type":"adaptive"});
-                }
-            }
-            _ => {}
-        }
-    }
-    let extra = crate::provider::render_json_strings(model.extra_params(), session);
-    if let (Some(body), Some(extra)) = (body.as_object_mut(), extra.as_object()) {
-        body.extend(extra.clone());
-    }
+fn apply_native_defaults(
+    protocol: Protocol,
+    body: &mut Value,
+    model: &ModelConfig,
+    session: &str,
+) -> Result<()> {
+    debug_assert_eq!(protocol.provider_type(), model.provider_type());
+    crate::provider::request_options::apply_configured(body, model, session)
 }
 
 fn build_response(status: StatusCode, headers: &HeaderMap, body: Body) -> Response {
@@ -448,14 +421,23 @@ mod tests {
         let model = store.create_model(&input).await.unwrap();
         let mut body = serde_json::json!({"model":"model","messages":[{"role":"user","content":"hello"}],"reasoning_effort":"low"});
         let original = body["messages"].clone();
-        apply_native_defaults(Protocol::Chat, &mut body, &model, "conversation-one");
+        apply_native_defaults(Protocol::Chat, &mut body, &model, "conversation-one").unwrap();
         assert_eq!(body["max_tokens"], 32000);
+        assert!(body.get("max_completion_tokens").is_none());
         assert_eq!(body["reasoning_effort"], "low");
         assert_eq!(body["prompt_cache_key"], "conversation-one");
         assert_eq!(body["messages"], original);
         let mut second =
             serde_json::json!({"model":"model","input":"next turn","max_output_tokens":100});
-        apply_native_defaults(Protocol::Responses, &mut second, &model, "conversation-one");
+        let mut responses_model = model.clone();
+        responses_model.openai_endpoint = crate::model::OPENAI_RESPONSES_ENDPOINT.into();
+        apply_native_defaults(
+            Protocol::Responses,
+            &mut second,
+            &responses_model,
+            "conversation-one",
+        )
+        .unwrap();
         assert_eq!(second["max_output_tokens"], 100);
         assert_eq!(second["reasoning"]["effort"], "high");
         assert_eq!(second["prompt_cache_key"], body["prompt_cache_key"]);

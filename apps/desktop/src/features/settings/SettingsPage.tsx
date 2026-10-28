@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type ProxySettings, type ProxySettingsInput, type StatisticsStorage, type StatisticsStorageScope, type TabSettings } from "../../shared/api";
 import { PageContent } from "../../shell/layout/PageContent";
-import { LegacyModelImport } from "../models/LegacyModelImport";
 import { AppLifecycleSettingsCard } from "./AppLifecycleSettingsCard";
 import { CommitSettingsCard } from "./CommitSettingsCard";
 import { ExternalApiSettingsCard } from "./ExternalApiSettingsCard";
@@ -16,12 +15,14 @@ import { Select } from "../../shared/ui/Select";
 import { TitledCard } from "../../shared/ui/TitledCard";
 import { setLocalePreference, useI18n, type LocalePreference } from "../../i18n/store";
 import { useMessage } from "../../shared/ui/message";
-import { appStore, useAppStore } from "../../shared/store/appStore";
+import {callsStore} from "../calls/state";
+import {invalidateOverview} from "../home/useOverview";
+import { settingsStore, useSettingsStore } from "./state";
 import { themeOptions } from "../../shared/theme/theme";
 import styles from "./SettingsPage.module.scss";
 
 export function SettingsPage() {
-  const { detailed, ports, theme } = useAppStore();
+  const { detailed, ports, theme } = useSettingsStore();
   const { preference, locale } = useI18n();
   const message = useMessage();
   const [proxyPort, setProxyPort] = useState(String(ports.proxy_port));
@@ -71,7 +72,7 @@ export function SettingsPage() {
         service_port: parsePort(servicePort, t("服务端口")),
       };
       setSavingPorts(true);
-      if (await appStore.updatePorts(next)) {
+      if (await settingsStore.updatePorts(next)) {
         setEditingPorts(false);
         message(t("端口设置已保存，重启软件后生效"), { duration: 4_000 });
       }
@@ -96,7 +97,8 @@ export function SettingsPage() {
       setClearing(true);
       setStorage(await api.clearStatisticsStorage(clearScope));
       setConfirmClear(false);
-      await appStore.refresh();
+      await callsStore.refreshCalls();
+      invalidateOverview();
       message(clearScope === "all" ? t("全部统计数据已清理") : t("详细记录已清理"));
     } catch (cause) {
       message(cause instanceof Error ? cause.message : String(cause));
@@ -155,8 +157,8 @@ export function SettingsPage() {
   };
   const clearTitle = clearScope === "all" ? t("确定要清理全部统计数据吗？") : t("确定要清理详细记录吗？");
   const clearDescription = clearScope === "all"
-    ? t("所有调用汇总、详细内容和追踪记录都会被删除。模型配置、CA 和应用设置不会受到影响，此操作无法撤销。")
-    : t("仅删除请求、响应和追踪附件等详细内容，保留调用汇总、统计指标和配置。");
+    ? t("所有模型调用汇总及其请求、响应内容都会被删除。模型配置、CA 和应用设置不会受到影响，此操作无法撤销。")
+    : t("仅删除模型调用的请求和响应详细内容，保留调用汇总、统计指标和配置。");
   const content = (
     <div className={styles.page}>
       <TitledCard title={t("调用观测")}>
@@ -170,7 +172,7 @@ export function SettingsPage() {
           <Checkbox
             label={t("详细模式")}
             checked={detailed}
-            onChange={(checked) => void appStore.updateDetailed(checked)}
+            onChange={(checked) => void settingsStore.updateDetailed(checked)}
           />
         </div>
       </TitledCard>
@@ -231,17 +233,6 @@ export function SettingsPage() {
       <CommitSettingsCard />
       <PricingSettingsCard />
       <AppLifecycleSettingsCard />
-      <LegacyModelImport>{({ busy, previewing, open }) => <TitledCard title={t("导入")}>
-        <div className={styles.importRow}>
-          <div>
-            <strong>{t("旧版配置")}</strong>
-            <small>{t("从本机旧版配置读取模型；确认前会显示新增和已存在的模型。")}</small>
-          </div>
-          <Button size="small" disabled={busy} onClick={open}>
-            {previewing ? t("读取中…") : t("查看并导入")}
-          </Button>
-        </div>
-      </TitledCard>}</LegacyModelImport>
       <TitledCard title={t("语言")}>
         <div className={styles.settingRow}>
           <div>
@@ -269,7 +260,7 @@ export function SettingsPage() {
             <button
               className={theme === id ? styles.selected : ""}
               key={id}
-              onClick={() => appStore.selectTheme(id)}
+              onClick={() => settingsStore.selectTheme(id)}
             >
               {id === "default-dark" ? t("默认暗色") : t("默认亮色")}
             </button>
@@ -280,7 +271,7 @@ export function SettingsPage() {
         <div className={styles.storageRow}>
           <div>
             <strong>{t("统计数据")}</strong>
-            <small>{storage ? t("调用记录 {calls} 条 · 追踪记录 {traces} 条", { calls: storage.call_count, traces: storage.trace_count }) : t("计算中…")}</small>
+            <small>{storage ? t("调用记录 {calls} 条", { calls: storage.call_count }) : t("计算中…")}</small>
           </div>
           <button
             type="button"

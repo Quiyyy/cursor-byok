@@ -220,7 +220,6 @@ mod tests {
             call_id: "call".into(),
             run_id: "run".into(),
             conversation_id: "conversation".into(),
-            provider_call_index: 0,
             request: ModelRequest {
                 native_responses: None,
                 prompt: PromptSpec {
@@ -230,14 +229,12 @@ mod tests {
                 model: ModelSpec::new("plugin:p/c/m"),
                 history: vec![
                     ProjectedMessage {
-                        message_id: "m1".into(),
                         role: Role::User,
                         content: ProjectedContent::Parts(vec![ContentPart::Text {
                             text: "hi".into(),
                         }]),
                     },
                     ProjectedMessage {
-                        message_id: "m2".into(),
                         role: Role::Assistant,
                         content: ProjectedContent::Assistant {
                             text: "".into(),
@@ -255,14 +252,12 @@ mod tests {
                         },
                     },
                     ProjectedMessage {
-                        message_id: "m3".into(),
                         role: Role::Tool,
                         content: ProjectedContent::ToolResult(ToolResultContent {
                             call_id: "c1".into(),
                             name: "read".into(),
                             content: "data".into(),
                             is_error: false,
-                            image: None,
                             provider_parts: Vec::new(),
                         }),
                     },
