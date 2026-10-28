@@ -66,6 +66,7 @@ async fn lookup(state: &ApiState, id: &str) -> Result<(ListedModel, Value)> {
         model.reasoning_efforts,
     );
     let mut capabilities = json!({"supports_tool_use":true,"supports_streaming":true,"supports_vision":images,"output_modalities":["text"],"context_length":context});
+    capabilities["supports_fast"] = json!(model.supports_fast);
     if !efforts.is_empty() {
         capabilities["supports_reasoning"] = json!(true);
         capabilities["reasoning_effort"] = json!(efforts);
@@ -93,7 +94,7 @@ async fn resolve(
         return *e;
     }
     match lookup(&state, &id).await {
-        Ok((model, metadata)) => Json(json!({"modelId":model.public_id,"contextWindowTokens":metadata.pointer("/capabilities/context_length"),"reasoningEfforts":metadata.pointer("/capabilities/reasoning_effort")})).into_response(),
+        Ok((model, metadata)) => Json(json!({"modelId":model.public_id,"contextWindowTokens":metadata.pointer("/capabilities/context_length"),"reasoningEfforts":metadata.pointer("/capabilities/reasoning_effort"),"supportsFast":metadata.pointer("/capabilities/supports_fast")})).into_response(),
         Err(e) => api_error(StatusCode::NOT_FOUND, e),
     }
 }
@@ -131,6 +132,9 @@ async fn generate(
         );
     }
     if let Err(error) = preserve_selected_effort(&mut body, protocol, &headers, &metadata) {
+        return api_error(StatusCode::BAD_REQUEST, error);
+    }
+    if let Err(error) = preserve_selected_fast(&mut body, &headers, &metadata) {
         return api_error(StatusCode::BAD_REQUEST, error);
     }
     let search = matches!(protocol, Protocol::Responses) && super::search::prepare(&mut body);
@@ -179,6 +183,30 @@ fn preserve_selected_effort(
             body["reasoning"]["effort"] = json!(effort);
         }
         _ => {}
+    }
+    Ok(())
+}
+
+fn preserve_selected_fast(body: &mut Value, headers: &HeaderMap, metadata: &Value) -> Result<()> {
+    let Some(fast) = headers.get("x-byok-fast") else {
+        return Ok(());
+    };
+    if metadata
+        .pointer("/capabilities/supports_fast")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        return Err(Error::Protocol(
+            "Fast is not supported by this model connection".into(),
+        ));
+    }
+    let tier = match fast.to_str().ok() {
+        Some("true") => "priority",
+        Some("false") => "default",
+        _ => return Err(Error::Protocol("invalid Fast selection".into())),
+    };
+    if body.get("service_tier").is_none_or(Value::is_null) {
+        body["service_tier"] = json!(tier);
     }
     Ok(())
 }
@@ -275,6 +303,26 @@ async fn images(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fast_selection_requires_support_and_preserves_explicit_tiers() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-byok-fast", "true".parse().unwrap());
+        let metadata = json!({"capabilities":{"supports_fast":true}});
+        let mut body = json!({});
+        preserve_selected_fast(&mut body, &headers, &metadata).unwrap();
+        assert_eq!(body["service_tier"], "priority");
+        body["service_tier"] = json!("default");
+        preserve_selected_fast(&mut body, &headers, &metadata).unwrap();
+        assert_eq!(body["service_tier"], "default");
+        assert!(preserve_selected_fast(
+            &mut body,
+            &headers,
+            &json!({"capabilities":{"supports_fast":false}})
+        )
+        .is_err());
+        headers.insert("x-byok-fast", "invalid".parse().unwrap());
+        assert!(preserve_selected_fast(&mut body, &headers, &metadata).is_err());
+    }
     #[test]
     fn forwards_advertised_effort_without_replacing_native_parameters() {
         let mut headers = HeaderMap::new();

@@ -77,6 +77,7 @@ export function buildResponsesBody(call: OpenAiResponsesCall): Record<string, Js
     body.instructions ??= call.request.instructions;
     if (call.request.maxOutputTokens === null) delete body.max_output_tokens;
     if (call.request.cacheKey !== null) body.prompt_cache_key ??= call.request.cacheKey;
+    if (call.request.latency === "fast") body.service_tier ??= "priority";
     return body;
   }
   const input: JsonValue[] = [];

@@ -32,7 +32,7 @@ pub(crate) fn project_request_options(protocol: ProviderType, options: &mut Valu
         }
     }
     let unsupported: &[&str] = match protocol {
-        ProviderType::Anthropic => &["seed", "prompt_cache_key"],
+        ProviderType::Anthropic => &["seed", "prompt_cache_key", "service_tier"],
         ProviderType::OpenAiResponses => &["seed", "stop"],
         _ => &[],
     };
@@ -177,7 +177,7 @@ fn model_options(protocol: ProviderType, model: &ModelSpec) -> Result<Value> {
         _ => {}
     }
     if model.latency == ModelLatency::Fast && protocol != ProviderType::Anthropic {
-        options["service_tier"] = json!("fast");
+        options["service_tier"] = json!("priority");
     }
     Ok(options)
 }

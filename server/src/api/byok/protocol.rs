@@ -3,9 +3,9 @@ use serde_json::Value;
 
 use crate::{
     model::{
-        ContentPart, ModelRequest, ModelSpec, ProjectedContent, ProjectedMessage, PromptSpec,
-        ProviderReplayState, ProviderType, Role, ToolCallContent, ToolDefinition, ToolInputFormat,
-        ToolResultContent,
+        ContentPart, ModelLatency, ModelRequest, ModelSpec, ProjectedContent, ProjectedMessage,
+        PromptSpec, ProviderReplayState, ProviderType, Role, ToolCallContent, ToolDefinition,
+        ToolInputFormat, ToolResultContent,
     },
     Error, Result,
 };
@@ -56,6 +56,16 @@ pub(super) fn parse(protocol: Protocol, body: &Value) -> Result<ParsedRequest> {
     };
     let mut history = Vec::new();
     let mut model = ModelSpec::new(&public_model_id);
+    if matches!(protocol, Protocol::Chat | Protocol::Responses) {
+        if let Some(tier) = body.get("service_tier") {
+            model.extra_params["service_tier"] = tier.clone();
+        }
+    }
+    if matches!(protocol, Protocol::Chat | Protocol::Responses)
+        && body.get("service_tier").and_then(Value::as_str) == Some("priority")
+    {
+        model.latency = ModelLatency::Fast;
+    }
     match protocol {
         Protocol::Chat => {
             parse_chat_messages(body.get("messages"), &mut prompt, &mut history)?;

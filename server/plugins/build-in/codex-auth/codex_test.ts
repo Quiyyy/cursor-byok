@@ -417,6 +417,28 @@ Deno.test("invoke streams normalized events from the Codex Responses API", async
   ]);
 });
 
+Deno.test("Fast applies to native Responses without changing explicit tiers or request prefixes", () => {
+  for (const explicitTier of [undefined, "default", "priority"]) {
+    const input = request();
+    input.nativeResponses = {
+      input: [{ type: "reasoning", encrypted_content: "signed-prefix" }],
+      tools: [{ type: "web_search" }],
+      prompt_cache_key: "native-conversation",
+      ...(explicitTier ? { service_tier: explicitTier } : {}),
+    };
+    const before = JSON.stringify(input.nativeResponses);
+    const body = buildResponsesBody({ url: "https://example.com/responses", model: "gpt-test", request: input });
+    assertEquals(body.service_tier, explicitTier ?? "priority");
+    assertEquals(body.input, input.nativeResponses.input);
+    assertEquals(body.tools, input.nativeResponses.tools);
+    assertEquals(body.prompt_cache_key, "native-conversation");
+    assertEquals(JSON.stringify(input.nativeResponses), before);
+    input.latency = "standard";
+    const standard = buildResponsesBody({ url: "https://example.com/responses", model: "gpt-test", request: input });
+    assertEquals(standard.service_tier, explicitTier);
+  }
+});
+
 Deno.test("reasoning replay projects response items to valid input items", () => {
   const replayRequest = request();
   replayRequest.messages = [{
@@ -535,6 +557,7 @@ Deno.test("native Responses preserves hosted tools, signed input, citations and 
     rawEvents.map((event) => ({ type: "responses-event", event })),
   );
   assertEquals(codexProvider.nativeResponses, true);
+  assertEquals(codexProvider.supportsFast, true);
 });
 
 Deno.test("invoke streams incremental tool calls and replays reasoning items", async () => {

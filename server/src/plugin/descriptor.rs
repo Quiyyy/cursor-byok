@@ -28,6 +28,8 @@ pub struct ProviderDefinition {
     pub has_models: bool,
     #[serde(default)]
     pub native_responses: bool,
+    #[serde(default)]
+    pub supports_fast: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -144,6 +146,7 @@ pub struct PluginModelDescriptor {
     pub default_reasoning_effort: Option<String>,
     pub images: bool,
     pub enabled: bool,
+    pub supports_fast: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -304,6 +307,7 @@ impl PluginModelDescriptor {
             default_reasoning_effort: model.default_reasoning_effort.clone(),
             images: model.images,
             enabled: model.enabled,
+            supports_fast: provider.supports_fast,
         }
     }
 }

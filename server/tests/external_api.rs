@@ -74,7 +74,7 @@ async fn raw_and_translated_requests_share_configuration_and_keep_explicit_optio
     model.max_completion_tokens = Some(32000);
     model.reasoning_effort = Some("high".into());
     model.openai_extra_params_enabled = true;
-    model.openai_extra_params = json!({"temperature":0.9,"prompt_cache_key":"{{SessionId}}","reasoning_effort":"medium","max_tokens":600});
+    model.openai_extra_params = json!({"temperature":0.9,"prompt_cache_key":"{{SessionId}}","reasoning_effort":"medium","max_tokens":600,"service_tier":"default"});
     let configured = store.create_model(&model).await.unwrap();
     let mut invalid = model.clone();
     invalid.openai_extra_params = json!({"messages":[]});
@@ -139,6 +139,9 @@ async fn raw_and_translated_requests_share_configuration_and_keep_explicit_optio
         request["model"] = json!("work/gpt-test");
         request["stream"] = json!(true);
         request["temperature"] = json!(0.2);
+        if !path.ends_with("/messages") {
+            request["service_tier"] = json!("priority");
+        }
         let (status, response) = send(router.clone(), "POST", path, Some("secret"), request).await;
         assert_eq!(status, StatusCode::OK, "{path}: {response}");
         let forwarded = receiver.recv().await.unwrap();
@@ -155,6 +158,14 @@ async fn raw_and_translated_requests_share_configuration_and_keep_explicit_optio
             100
         );
         assert_eq!(forwarded["temperature"], 0.2);
+        assert_eq!(
+            forwarded.get("service_tier").and_then(Value::as_str),
+            if path.ends_with("/messages") {
+                Some("default")
+            } else {
+                Some("priority")
+            }
+        );
         if path.ends_with("/responses") {
             assert!(forwarded.get("stop").is_none());
         } else {
@@ -223,6 +234,15 @@ async fn raw_and_translated_requests_share_configuration_and_keep_explicit_optio
     .await;
     let calls: Value = serde_json::from_str(&response).unwrap();
     assert_eq!(calls.as_array().unwrap().len(), 7);
+    assert_eq!(
+        calls
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|call| call["fast"] == true)
+            .count(),
+        2
+    );
     assert_eq!(
         calls
             .as_array()
