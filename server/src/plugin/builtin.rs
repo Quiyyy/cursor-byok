@@ -273,7 +273,7 @@ mod tests {
     fn existing_installations_receive_all_search_adapters_and_google_module() {
         let root = tempfile::tempdir().unwrap();
         for (name, version) in [
-            ("codex-auth", "0.1.10"),
+            ("codex-auth", "0.1.11"),
             ("grok-auth", "0.1.12"),
             ("antigravity-auth", "0.1.11"),
         ] {
@@ -295,6 +295,11 @@ mod tests {
             );
         }
         assert!(root.path().join("antigravity-auth/search.ts").is_file());
+        assert!(
+            std::fs::read_to_string(root.path().join("codex-auth/provider.ts"))
+                .unwrap()
+                .contains("supportsFast: true")
+        );
     }
 
     #[test]

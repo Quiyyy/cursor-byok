@@ -69,6 +69,9 @@ async function route(turn, loadNative, getPrivacyMode, createWebSearch, configPa
   const Client = library.__byokLocalAgentClient();
   const selectedEffort = options.requestedModel?.parameters?.find(p => p.id === 'reasoning')?.value;
   const advertisedEffort = model.reasoningEfforts?.includes(selectedEffort) ? selectedEffort : undefined;
+  const selectedSpeed = options.requestedModel?.parameters?.find(p=>p.id==='fast'||p.id==='speed');
+  const fast = model.supportsFast && selectedSpeed
+    ? String(selectedSpeed.value==='true'||selectedSpeed.value==='fast') : undefined;
   const endpoint = {
     baseUrl: `${config.baseUrl}/models/${encodeURIComponent(selected)}/v1`,
     apiKey: config.apiKey
@@ -93,6 +96,7 @@ async function route(turn, loadNative, getPrivacyMode, createWebSearch, configPa
       privacyMode: getPrivacyMode(),
       customHeaders: {
         ...(advertisedEffort ? {'x-byok-reasoning-effort':advertisedEffort} : {}),
+        ...(fast !== undefined ? {'x-byok-fast':fast} : {}),
         ...(turn.runOptions.conversationId ? {
           'x-byok-conversation-id': turn.runOptions.conversationId
         } : {}),

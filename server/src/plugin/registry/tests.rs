@@ -206,3 +206,183 @@ async fn failed_disk_write_retries_saved_rotation_without_reusing_old_token() {
     assert!(registry.inner.pending_preparations.lock().await.is_empty());
     stop_workers(&registry).await;
 }
+
+async fn fast_invocation_fixture() -> (
+    tempfile::TempDir,
+    PluginRegistry,
+    Store,
+    crate::provider::ProviderRouter,
+) {
+    let (root, mut registry, entry, executable, _) = fixture().await;
+    std::fs::write(&entry.entry, r#"
+      import {defineProviderPlugin} from 'cursor-byok:plugin';
+      import {buildResponsesBody} from 'cursor-byok:protocol/openai-responses';
+      defineProviderPlugin({
+        providers:[{id:'fake',displayName:'fake',providerType:'test',resourceType:'account',
+          supportsFast:true,nativeResponses:true,
+          invoke:async(input,output)=>{
+            const text=JSON.stringify(buildResponsesBody({url:'https://example.com/responses',model:input.model.id,request:input.request}));
+            if(input.request.nativeResponses) output.emit({type:'responses-event',event:{type:'response.completed',response:{status:'completed',output:[{type:'message',role:'assistant',content:[{type:'output_text',text}]}]}}});
+            else output.emit({type:'text-delta',text});
+            output.emit({type:'done',reason:'stop'});
+            return {status:'completed'};
+          }}],
+        resources:[{type:'account',displayName:'account',present:()=>({displayName:'test'})}]
+      });
+    "#).unwrap();
+    let entry = super::super::catalog::load_plugin(
+        &entry.directory,
+        registry.inner.catalog.loader(),
+        &executable,
+        "0.1.7",
+    )
+    .await
+    .unwrap();
+    // Use the supplied Deno executable without downloading a runtime.
+    let mut command = tokio::process::Command::new(executable);
+    super::super::detach_console(&mut command);
+    let output = command
+        .args(["eval", "console.log(Deno.execPath())"])
+        .output()
+        .await
+        .unwrap();
+    assert!(output.status.success());
+    let runtime_root = root.path().join("runtime");
+    let asset = super::super::asset::RuntimeAsset::current().unwrap();
+    let installed = super::super::installation::runtime_executable(&runtime_root, asset);
+    std::fs::create_dir_all(installed.parent().unwrap()).unwrap();
+    std::fs::copy(String::from_utf8(output.stdout).unwrap().trim(), &installed).unwrap();
+    std::fs::write(installed.parent().unwrap().join(".ready"), "test").unwrap();
+    let inner = Arc::get_mut(&mut registry.inner).unwrap();
+    inner.runtime = PluginRuntime::in_directory(runtime_root).unwrap();
+    *inner.entries.get_mut() = Some(vec![entry]);
+    let model = StoredModel::from_definition(
+        &serde_json::json!({"id":"fast","displayName":"Fast fixture"}),
+    )
+    .unwrap();
+    registry
+        .inner
+        .state
+        .replace_models("dev.refresh", "fake", &[model])
+        .await
+        .unwrap();
+    let store = Store::connect(&format!(
+        "sqlite://{}",
+        root.path().join("test.db").display()
+    ))
+    .await
+    .unwrap();
+    let provider = crate::provider::ProviderRouter::new(
+        store.clone(),
+        registry.clone(),
+        NetworkClients::new(store.clone()),
+        Duration::from_secs(10),
+        Duration::from_secs(10),
+    );
+    (root, registry, store, provider)
+}
+
+#[tokio::test]
+#[ignore = "requires DENO_TEST_EXECUTABLE"]
+async fn native_fast_selection_reaches_plugin_requests_and_call_records() {
+    use axum::{
+        body::{to_bytes, Body},
+        http::{Request, StatusCode},
+    };
+    use tower::ServiceExt;
+    let (root, registry, store, provider) = fast_invocation_fixture().await;
+    store.set_cursor_takeover_enabled(true).await.unwrap();
+    let clients = NetworkClients::new(store.clone());
+    let router = crate::api::byok::native_router(
+        store.clone(),
+        registry.clone(),
+        Arc::new(provider),
+        crate::api::byok::NativeForwarder::new(
+            store.clone(),
+            clients,
+            Duration::from_secs(10),
+            Duration::from_secs(10),
+        ),
+        crate::local_app::NativeAgent::for_test(root.path()),
+    );
+    let route = "/__byok-native__/models/byok%3Aplugin%3Adev.refresh%2Ffake%2Ffast";
+    let metadata = router
+        .clone()
+        .oneshot(
+            Request::get(route)
+                .header("authorization", "Bearer native-test-key")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(metadata.status(), StatusCode::OK);
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&to_bytes(metadata.into_body(), 65536).await.unwrap()).unwrap();
+    assert_eq!(metadata["supportsFast"], true);
+    for (index, (endpoint, fast, explicit, expected)) in [
+        ("chat/completions", true, None, Some("priority")),
+        ("chat/completions", false, None, None),
+        ("responses", true, None, Some("priority")),
+        ("responses", false, None, Some("default")),
+        ("responses", true, Some("default"), Some("default")),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut body = if endpoint == "responses" {
+            serde_json::json!({"model":"fast","stream":false,"input":[{"type":"reasoning","encrypted_content":"signed-history"}],"tools":[{"type":"web_search"}]})
+        } else {
+            serde_json::json!({"model":"fast","stream":false,"messages":[{"role":"user","content":"hi"}]})
+        };
+        if let Some(tier) = explicit {
+            body["service_tier"] = tier.into();
+        }
+        let response = router
+            .clone()
+            .oneshot(
+                Request::post(format!("{route}/v1/{endpoint}"))
+                    .header("authorization", "Bearer native-test-key")
+                    .header("content-type", "application/json")
+                    .header("x-byok-fast", fast.to_string())
+                    .header("x-byok-conversation-id", "same-conversation")
+                    .header("x-byok-generation-id", format!("run-{index}"))
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), 65536).await.unwrap();
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "case {index}: {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        let response: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let output = if endpoint == "responses" {
+            &response["output"][0]["content"][0]["text"]
+        } else {
+            &response["choices"][0]["message"]["content"]
+        };
+        let sent: serde_json::Value = serde_json::from_str(output.as_str().unwrap()).unwrap();
+        assert_eq!(
+            sent.get("service_tier").and_then(serde_json::Value::as_str),
+            expected
+        );
+        assert_eq!(sent["prompt_cache_key"], "same-conversation");
+        if endpoint == "responses" {
+            assert_eq!(sent["input"], body["input"]);
+            assert_eq!(sent["tools"], body["tools"]);
+        }
+        let calls = store.llm_calls(20).await.unwrap();
+        let call = calls
+            .iter()
+            .find(|call| call.run_id == format!("run-{index}"))
+            .unwrap();
+        assert_eq!(call.fast, Some(expected == Some("priority")));
+        assert_eq!(call.conversation_id, "same-conversation");
+    }
+    stop_workers(&registry).await;
+}

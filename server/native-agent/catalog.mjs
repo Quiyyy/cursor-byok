@@ -36,6 +36,16 @@ export function catalogEntry(entry, model) {
     })));
     value.supportsThinking = true;
   }
+  if (model.supportsFast && !value.parameterDefinitions.some(p=>p.id==='fast'||p.id==='speed')) {
+    value.parameterDefinitions.push({id:'fast',name:'Fast',parameterType:{booleanParameter:{values:[{value:'false',displayName:'Off'},{value:'true',displayName:'On'}]}}});
+    value.variants = value.variants.flatMap(base=>[false,true].map(fast=>({
+      ...base, parameterValues:[...base.parameterValues,{id:'fast',value:String(fast)}],
+      displayName:`${base.displayName}${fast?' Fast':''}`,
+      displayNameOutsidePicker:`${base.displayNameOutsidePicker??base.displayName}${fast?' Fast':''}`,
+      isDefaultNonMaxConfig:!!base.isDefaultNonMaxConfig&&!fast,
+      isDefaultMaxConfig:!!base.isDefaultMaxConfig&&!fast,
+    })));
+  }
   // The current Workbench derives its modelName from this field when a variant is selected.
   // Without it a BYOK selection can be labelled "default", hiding context token counts.
   for (const variant of value.variants) variant.legacySlug = model.cursorId;

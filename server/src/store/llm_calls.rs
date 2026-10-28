@@ -121,10 +121,13 @@ impl Store {
             .get("reasoning_effort")
             .or_else(|| body.pointer("/reasoning/effort"))
             .or_else(|| body.pointer("/output_config/effort"));
-        sqlx::query("UPDATE llm_calls SET request_bytes = ?, reasoning_effort = CASE WHEN ? THEN ? ELSE reasoning_effort END WHERE call_id = ?")
+        let tier = body.get("service_tier");
+        sqlx::query("UPDATE llm_calls SET request_bytes = ?, reasoning_effort = CASE WHEN ? THEN ? ELSE reasoning_effort END, fast = CASE WHEN ? THEN ? ELSE fast END WHERE call_id = ?")
             .bind(body_json.len() as i64)
             .bind(effort.is_some())
             .bind(effort.and_then(serde_json::Value::as_str))
+            .bind(tier.is_some())
+            .bind(tier.and_then(serde_json::Value::as_str) == Some("priority"))
             .bind(call_id)
             .execute(&mut *transaction)
             .await?;

@@ -134,6 +134,7 @@ async function invoke(
 }
 
 export const codexProvider: ProviderSupport = {
+  supportsFast: true,
   nativeResponses: true,
   id: "codex",
   displayName: "OpenAI Codex",

@@ -32,7 +32,7 @@ async fn configured_models(services: &CursorServices) -> Result<Vec<serde_json::
         json!({"cursorId":format!("byok:{}",model.id),"id":model.model_id,"displayName":model.display_name,
             "source":model.source,"contextLength":model.context,"maxOutputTokens":model.max_output_tokens,
             "supportsVision":model.images,"extendedCapabilitiesDetected":true,
-            "reasoningEfforts":model.reasoning_efforts,"defaultReasoningEffort":model.default_reasoning_effort})
+            "reasoningEfforts":model.reasoning_efforts,"defaultReasoningEffort":model.default_reasoning_effort,"supportsFast":model.supports_fast})
     }).collect();
     // Native optional fields use undefined, not null, for absent metadata.
     for model in &mut models {

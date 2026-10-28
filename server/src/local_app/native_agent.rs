@@ -47,6 +47,19 @@ struct Inner {
     catalog: Mutex<Option<CachedCatalog>>,
 }
 impl NativeAgent {
+    #[cfg(test)]
+    pub(crate) fn for_test(root: &Path) -> Self {
+        Self {
+            inner: Arc::new(Inner {
+                app: root.join("unused-cursor"),
+                directory: root.join("native"),
+                key: "native-test-key".into(),
+                installed: Mutex::new(None),
+                catalog: Mutex::new(None),
+            }),
+        }
+    }
+
     pub fn managed() -> Result<Self> {
         let app = installed_app_path()?;
         Ok(Self {

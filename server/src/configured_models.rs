@@ -20,6 +20,7 @@ pub struct ConfiguredModel {
     pub images: bool,
     pub reasoning_efforts: Vec<String>,
     pub default_reasoning_effort: Option<String>,
+    pub supports_fast: bool,
 }
 
 impl ConfiguredModel {
@@ -48,6 +49,7 @@ impl ConfiguredModel {
             images: true,
             reasoning_efforts: Vec::new(),
             default_reasoning_effort: None,
+            supports_fast: false,
         }
     }
 
@@ -77,6 +79,7 @@ impl ConfiguredModel {
             images: model.images,
             reasoning_efforts: model.reasoning_efforts,
             default_reasoning_effort: model.default_reasoning_effort,
+            supports_fast: model.supports_fast,
         })
     }
 }

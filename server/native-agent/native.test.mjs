@@ -69,7 +69,7 @@ test('routing uses the real model family, preserves parameters and leaves offici
     assert.match(url, /byok%3Aaccount-a/);
     assert.equal(init.headers.Authorization, 'Bearer test-key');
     return Response.json({
-      modelId: 'gpt-5.4', contextWindowTokens, reasoningEfforts:['low','high']
+      modelId: 'gpt-5.4', contextWindowTokens, reasoningEfforts:['low','high'], supportsFast:true
     });
   };
   const native = {
@@ -118,6 +118,13 @@ test('routing uses the real model family, preserves parameters and leaves offici
     throw Error('should not load native');
   }, () => 2, undefined, config), undefined);
   assert.equal(fetches, 1);
+  for (const value of ['true', 'false']) {
+    turn.runOptions.requestedModel.parameters.push({id:'fast',value});
+    const next = await route(turn, () => native, () => 2, undefined, config);
+    assert.equal(options.customHeaders['x-byok-fast'], value);
+    assert.equal(next.options.requestedModel.parameters.find(p=>p.id==='fast').value, value);
+    assert.equal(turn.runOptions.requestedModel.parameters.pop().value, value);
+  }
   turn.runOptions.requestedModel.parameters[0].value = '200k';
   for (const count of [200000, 500000, 1000000]) {
     contextWindowTokens = count;
@@ -144,6 +151,24 @@ test('provider reasoning and context metadata retain native routing and default 
   assert.ok(result.variants.every(v=>v.legacySlug==='byok:account'));
   assert.equal(source.toJson().supportsThinking,false);
 });
+test('Fast is a native per-conversation option alongside reasoning, with standard as default', () => {
+  class Entry { constructor(value){this.value=value;} toJson(){return structuredClone(this.value);} static fromJson(value){return new Entry(value);} }
+  const source = new Entry({clientDisplayName:'GPT',parameterDefinitions:[],variants:[]});
+  const metadata = {cursorId:'byok:codex',source:'Codex',reasoningEfforts:['low','high'],defaultReasoningEffort:'high',supportsFast:true};
+  const result = catalogEntry(source, metadata).toJson();
+  assert.deepEqual(result.parameterDefinitions.find(p=>p.id==='fast').parameterType, {booleanParameter:{values:[{value:'false',displayName:'Off'},{value:'true',displayName:'On'}]}});
+  assert.equal(result.variants.length,4);
+  for (const effort of ['low','high']) for (const fast of ['false','true']) {
+    const matches = result.variants.filter(v=>v.parameterValues.some(p=>p.id==='reasoning'&&p.value===effort)&&v.parameterValues.some(p=>p.id==='fast'&&p.value===fast));
+    assert.equal(matches.length,1);
+    assert.equal(matches[0].legacySlug,'byok:codex');
+    assert.equal(matches[0].isDefaultNonMaxConfig,effort==='high'&&fast==='false');
+    assert.equal(matches[0].displayName.endsWith(' Fast'),fast==='true');
+  }
+  assert.equal(catalogEntry(source,{...metadata,supportsFast:false}).toJson().parameterDefinitions.some(p=>p.id==='fast'),false);
+  assert.equal(source.toJson().parameterDefinitions.length,0);
+});
+
 test('native router retains every host-owned state object and callback', async () => {
   let received;
   const sandbox = {
