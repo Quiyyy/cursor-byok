@@ -101,6 +101,261 @@ async fn stop_workers(registry: &PluginRegistry) {
     }
 }
 
+// Reuse the credential fixture, but execute requests through ProviderRouter and a real Deno worker.
+async fn invocation_fixture() -> (
+    tempfile::TempDir,
+    PluginRegistry,
+    Store,
+    crate::provider::ProviderRouter,
+) {
+    let (root, mut registry, entry, executable, _) = fixture().await;
+    std::fs::write(entry.entry.clone(), r#"
+      import {defineProviderPlugin} from 'cursor-byok:plugin';
+      let calls = 0, aborted = 0;
+      const stopped = Promise.withResolvers();
+      defineProviderPlugin({
+        providers:[{id:'fake',displayName:'fake',providerType:'test',resourceType:'account',
+          invoke:async(input,output,context)=>{
+            calls++;
+            const emit = text => {output.emit({type:'text-start'}); output.emit({type:'text-delta',text}); output.emit({type:'text-end'});};
+            if(input.model.id==='retry' && input.resource.privateData.token==='expired') return {status:'auth-error',message:'expired'};
+            if(input.model.id==='partial') {emit(`partial:${calls}`); return {status:'auth-error',message:'failed after output'};}
+            if(input.model.id==='wait') {
+              emit('waiting');
+              await new Promise(resolve=>{
+                if(context.signal.aborted) resolve();
+                else context.signal.addEventListener('abort',resolve,{once:true});
+              });
+              aborted++;
+              stopped.resolve();
+              return {status:'request-error',message:'cancelled'};
+            }
+            if(input.model.id==='next') await stopped.promise;
+            emit(`${input.resource.privateData.token}:calls=${calls}:aborted=${aborted}`);
+            output.emit({type:'done',reason:'stop'});
+            return {status:'completed'};
+          }}],
+        resources:[{type:'account',displayName:'account',present:()=>({displayName:'test'}),
+          prepare:async(resource,rejected)=>rejected ? {privateData:{token:'fresh',refreshToken:'rotated'}} : null
+        }]
+      });
+    "#).unwrap();
+    // Populate an isolated ready runtime with the executable supplied by CI, without downloading.
+    let mut command = tokio::process::Command::new(executable);
+    super::super::detach_console(&mut command);
+    let output = command
+        .args(["eval", "console.log(Deno.execPath())"])
+        .output()
+        .await
+        .unwrap();
+    assert!(output.status.success());
+    let runtime_root = root.path().join("runtime");
+    let asset = super::super::asset::RuntimeAsset::current().unwrap();
+    let installed = super::super::installation::runtime_executable(&runtime_root, asset);
+    std::fs::create_dir_all(installed.parent().unwrap()).unwrap();
+    std::fs::copy(String::from_utf8(output.stdout).unwrap().trim(), &installed).unwrap();
+    std::fs::write(installed.parent().unwrap().join(".ready"), "test").unwrap();
+    let inner = Arc::get_mut(&mut registry.inner).unwrap();
+    inner.runtime = PluginRuntime::in_directory(runtime_root).unwrap();
+    *inner.entries.get_mut() = Some(vec![entry]);
+    let models = ["retry", "partial", "wait", "next"].map(|id| {
+        StoredModel::from_definition(&serde_json::json!({"id":id,"displayName":id})).unwrap()
+    });
+    registry
+        .inner
+        .state
+        .replace_models("dev.refresh", "fake", &models)
+        .await
+        .unwrap();
+    let store = Store::connect(&format!(
+        "sqlite://{}",
+        root.path().join("test.db").display()
+    ))
+    .await
+    .unwrap();
+    let provider = crate::provider::ProviderRouter::new(
+        store.clone(),
+        registry.clone(),
+        NetworkClients::new(store.clone()),
+        Duration::from_secs(10),
+        Duration::from_secs(10),
+    );
+    (root, registry, store, provider)
+}
+
+fn invocation(model: &str) -> ModelInvocation {
+    ModelInvocation {
+        call_id: format!("native-agent:{model}"),
+        conversation_id: "conversation".into(),
+        run_id: format!("run-{model}"),
+        request: crate::model::ModelRequest {
+            native_responses: None,
+            prompt: crate::model::PromptSpec {
+                instructions: "test".into(),
+                tools: vec![],
+            },
+            model: crate::model::ModelSpec::new(format!("plugin:dev.refresh/fake/{model}")),
+            history: vec![],
+        },
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires DENO_TEST_EXECUTABLE"]
+async fn worker_auth_retry_uses_persisted_credentials_and_never_replays_partial_output() {
+    use crate::provider::Provider;
+    use futures_util::StreamExt;
+    let (_root, registry, store, provider) = invocation_fixture().await;
+    for (model, expected, fails) in [
+        ("retry", "fresh:calls=2:aborted=0", false),
+        ("partial", "partial:3", true),
+    ] {
+        let mut stream = provider.stream(invocation(model), CancellationToken::new());
+        let mut text = String::new();
+        let mut errors = 0;
+        tokio::time::timeout(Duration::from_secs(15), async {
+            while let Some(event) = stream.next().await {
+                match event {
+                    Ok(ModelEvent::TextDelta(delta)) => text.push_str(&delta),
+                    Err(_) => errors += 1,
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(text, expected);
+        assert_eq!(errors, usize::from(fails));
+    }
+    let saved = registry
+        .inner
+        .state
+        .resources("dev.refresh", "account")
+        .await
+        .unwrap();
+    assert_eq!(saved[0].private_data["refreshToken"], "rotated");
+    let rows: Vec<(String, String, String, String)> = sqlx::query_as(
+        "SELECT call_id,conversation_id,run_id,status FROM llm_calls ORDER BY call_id",
+    )
+    .fetch_all(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        rows.len(),
+        3,
+        "one rejected attempt, one successful retry, one partial failure"
+    );
+    assert_eq!(
+        rows[0],
+        (
+            "native-agent:partial".into(),
+            "conversation".into(),
+            "run-partial".into(),
+            "error".into()
+        )
+    );
+    assert_eq!(
+        rows[1],
+        (
+            "native-agent:retry".into(),
+            "conversation".into(),
+            "run-retry".into(),
+            "error".into()
+        )
+    );
+    assert!(rows[2].0.starts_with("native-agent:retry:retry:"));
+    assert_eq!(
+        (&rows[2].1, &rows[2].2, &rows[2].3),
+        (
+            &"conversation".into(),
+            &"run-retry".into(),
+            &"completed".into()
+        )
+    );
+    stop_workers(&registry).await;
+}
+
+#[tokio::test]
+#[ignore = "requires DENO_TEST_EXECUTABLE"]
+async fn cancellation_reaches_the_worker_without_cancelling_the_next_invocation() {
+    use axum::{
+        body::{to_bytes, Body},
+        http::Request,
+    };
+    use futures_util::StreamExt;
+    use tower::ServiceExt;
+    let (_root, registry, store, provider) = invocation_fixture().await;
+    store
+        .set_external_api_settings(crate::store::ExternalApiSettings {
+            enabled: true,
+            api_key: "test".into(),
+        })
+        .await
+        .unwrap();
+    let router =
+        crate::api::byok::router(store.clone(), registry.clone(), Arc::new(provider), None);
+    let request = |model: &str| {
+        Request::post("/byok/v1/chat/completions")
+        .header("authorization","Bearer test").header("content-type","application/json")
+        .body(Body::from(serde_json::json!({"model":format!("plugin:dev.refresh:fake/{model}"),"stream":true,"messages":[{"role":"user","content":"test"}]}).to_string())).unwrap()
+    };
+    let response = router.clone().oneshot(request("wait")).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let mut stream = response.into_body().into_data_stream();
+    let mut text = String::new();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !text.contains("waiting") {
+            text.push_str(&String::from_utf8_lossy(
+                &stream.next().await.unwrap().unwrap(),
+            ));
+        }
+    })
+    .await
+    .unwrap();
+    // Dropping the actual HTTP response exercises the gateway's cancellation owner.
+    drop(stream);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let status: Option<String> =
+                sqlx::query_scalar("SELECT status FROM llm_calls WHERE model_id='wait'")
+                    .fetch_optional(store.pool())
+                    .await
+                    .unwrap();
+            if status.as_deref() == Some("cancelled") {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let response = router.oneshot(request("next")).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let bytes = tokio::time::timeout(
+        Duration::from_secs(5),
+        to_bytes(response.into_body(), 65536),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let text = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(text.contains("expired:calls=2:aborted=1"), "{text}");
+    assert!(!text.contains("waiting"));
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT model_id,status FROM llm_calls ORDER BY model_id")
+            .fetch_all(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            ("next".into(), "completed".into()),
+            ("wait".into(), "cancelled".into())
+        ]
+    );
+    stop_workers(&registry).await;
+}
+
 #[tokio::test]
 #[ignore = "requires DENO_TEST_EXECUTABLE"]
 async fn concurrent_requests_refresh_once_and_observe_committed_tokens() {

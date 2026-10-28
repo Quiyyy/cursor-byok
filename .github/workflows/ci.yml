@@ -60,8 +60,18 @@ jobs:
           DENO_TEST_EXECUTABLE: deno
         run: "cargo test --package cursor-server --lib plugin:: -- --include-ignored"
 
+      - name: Build server for management UI tests
+        run: cargo build --locked --package cursor-server --bin cursor-server
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: management-ui-server
+          path: target/debug/cursor-server
+          retention-days: 1
+
   frontend:
     name: Frontend
+    needs: rust
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +94,26 @@ jobs:
         run: |
           node server/native-agent/build.mjs --check
           node --test server/native-agent/*.test.mjs
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: management-ui-server
+          path: target/debug
+
+      - name: Test management page interactions against the server
+        working-directory: apps/desktop
+        run: |
+          chmod +x ../../target/debug/cursor-server
+          npx playwright install --with-deps chromium
+          npm run test:ui
+
+      - name: Upload UI test report and failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: management-ui-test-results
+          path: target/ui-tests/
+          retention-days: 7
 
   desktop-rust:
     name: Desktop Rust (${{ matrix.os }})
