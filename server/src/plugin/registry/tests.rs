@@ -1,5 +1,6 @@
 use super::*;
 use crate::store::Store;
+mod streaming;
 #[test]
 fn authentication_retries_once_and_never_after_output() {
     assert!(should_retry_auth("auth-error", 0, false));

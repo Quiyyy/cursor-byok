@@ -42,6 +42,14 @@ struct ClientCache {
 }
 
 impl NetworkClients {
+    #[cfg(test)]
+    pub(crate) async fn with_plugin_client_for_test(store: Store, client: reqwest::Client) -> Self {
+        let clients = Self::new(store);
+        clients.invalidate_if_proxy_changed().await;
+        clients.cache.write().await.plugin = Some(client);
+        clients
+    }
+
     pub fn new(store: Store) -> Self {
         Self {
             store,
