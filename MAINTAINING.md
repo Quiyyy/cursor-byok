@@ -57,7 +57,7 @@ cargo test --package cursor-server --lib plugin:: -- --include-ignored
 
 集成测试使用临时目录中的 `PluginRuntime::in_directory` 与 `PluginRegistry::in_directory`；不要调用会读取正式账号目录的 `managed()`。基准测试有独立的[运行说明](./support/benchmarks/semble/README.md)。
 
-CI 包含前端类型与生产构建检查、Linux Rust 检查和测试、Windows/macOS 桌面 Rust 检查，以及插件凭据生命周期测试。
+CI 包含前端类型与生产构建检查、Linux Rust 检查和测试、Windows/macOS 桌面 Rust 检查，以及插件凭据生命周期测试。原生网关、取消、重试及管理页面的自动化覆盖与运行方式见[自动化验收](./docs/testing.md)。
 
 ## 本地打包与 UI 调试
 

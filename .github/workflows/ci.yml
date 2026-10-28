@@ -60,6 +60,15 @@ jobs:
           DENO_TEST_EXECUTABLE: deno
         run: "cargo test --package cursor-server --lib plugin:: -- --include-ignored"
 
+      - name: Build server for management UI tests
+        run: cargo build --locked --package cursor-server --bin cursor-server
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: management-ui-server
+          path: target/debug/cursor-server
+          retention-days: 1
+
   frontend:
     name: Frontend
     runs-on: ubuntu-22.04
@@ -84,6 +93,54 @@ jobs:
         run: |
           node server/native-agent/build.mjs --check
           node --test server/native-agent/*.test.mjs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: management-ui-assets
+          path: apps/desktop/dist
+          retention-days: 1
+
+  management-ui:
+    name: Management UI
+    needs: [rust, frontend]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: management-ui-server
+          path: target/debug
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: management-ui-assets
+          path: apps/desktop/dist
+
+      - name: Test management page interactions against the server
+        working-directory: apps/desktop
+        run: |
+          chmod +x ../../target/debug/cursor-server
+          npx playwright install --with-deps chromium
+          npm run test:ui
+
+      - name: Upload UI test report and failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: management-ui-test-results
+          path: target/ui-tests/
+          retention-days: 7
 
   desktop-rust:
     name: Desktop Rust (${{ matrix.os }})

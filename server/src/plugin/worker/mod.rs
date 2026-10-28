@@ -200,19 +200,21 @@ impl PluginWorker {
         let request_id = id.clone();
         tokio::spawn(async move {
             tokio::select! {
-                _ = cancellation.cancelled() => {
-                    request_cancellation.cancel();
-                    if let Some(process) = inner.process.lock().await.as_ref() {
-                        let _ = write_message(&process.stdin, &HostMessage::Cancel { id: &request_id }).await;
-                    }
-                    let _ = sender.send(WorkerStreamItem::Result(Err(Error::Cancelled)));
-                    inner.pending.lock().await.remove(&request_id);
-                    inner.host.invocations.lock().await.remove(&request_id);
-                }
-                _ = sender.closed() => {
-                    inner.host.invocations.lock().await.remove(&request_id);
-                }
+                _ = cancellation.cancelled() => {},
+                _ = sender.closed() => {},
             }
+            // A disconnected response may close the receiver before its cancellation is polled.
+            // Both paths release upstream work; completed results have already left pending.
+            request_cancellation.cancel();
+            let active = inner.pending.lock().await.remove(&request_id).is_some();
+            if active {
+                if let Some(process) = inner.process.lock().await.as_ref() {
+                    let _ = write_message(&process.stdin, &HostMessage::Cancel { id: &request_id })
+                        .await;
+                }
+                let _ = sender.send(WorkerStreamItem::Result(Err(Error::Cancelled)));
+            }
+            inner.host.invocations.lock().await.remove(&request_id);
         });
         Ok(receiver)
     }

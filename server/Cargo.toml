@@ -52,6 +52,7 @@ zip = { version = "4", default-features = false, features = ["deflate"] }
 [dev-dependencies]
 flate2 = "1"
 tempfile = "3"
+tokio-rustls = "0.26"
 tower = { version = "0.5", features = ["util"] }
 
 [target.'cfg(windows)'.dependencies]

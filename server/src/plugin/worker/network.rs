@@ -371,6 +371,48 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn cancelling_plugin_network_closes_a_connection_waiting_for_tls() {
+        use tokio::io::AsyncReadExt;
+        let (_directory, store, recorder) = recorder(false, "plugin-network-cancel").await;
+        let mut host = host_with_recorder(store, recorder).await;
+        host.network_hosts = Arc::new(HashSet::from(["127.0.0.1".into()]));
+        let cancellation = host.invocations.lock().await["invocation"]
+            .cancellation
+            .clone();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("https://{}/stream", listener.local_addr().unwrap());
+        let (started, ready) = tokio::sync::oneshot::channel();
+        // A stalled TLS peer exercises real socket cancellation without trusting a test CA
+        // or weakening the production HTTPS/host permission checks.
+        let peer = async {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut bytes = [0; 4096];
+            assert!(socket.read(&mut bytes).await.unwrap() > 0);
+            started.send(()).unwrap();
+            loop {
+                match socket.read(&mut bytes).await {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => break,
+                    Err(error) => panic!("unexpected socket error: {error}"),
+                }
+            }
+        };
+        let cancel = async {
+            ready.await.unwrap();
+            cancellation.cancel();
+        };
+        let request = host.stream_open("invocation", serde_json::json!({"url":url}));
+        let (_, _, result) = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::join!(peer, cancel, request)
+        })
+        .await
+        .expect("cancel must close the upstream socket");
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert!(host.streams.lock().await.is_empty());
+    }
+
     #[test]
     fn recorded_plugin_request_omits_sensitive_headers() {
         let (headers, body) = recorded_network_request(&network_params()).unwrap();
