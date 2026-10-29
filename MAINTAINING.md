@@ -88,6 +88,16 @@ npm --prefix apps/desktop run tauri:build -- --debug --bundles nsis --config <�
 
 临时标识、签名覆盖、数据库和安装包不提交到仓库。正式 `tauri.conf.json` 保持实际应用标识与更新配置。
 
+### HTTPS 透传诊断
+
+`local_app::proxy` 的接收日志与 `api::cursor::proxy` 的转发日志通过 `request_id` 关联。阶段包含路由选择、等待上游响应头、收到响应头以及响应体完成；结束结果区分 `completed`、`cancelled`、`timeout`、`upstream_error` 和 `body_error`，并记录耗时与响应字节数。诊断标识不作为会话身份，也不会发送给上游；新增日志不记录查询参数、鉴权头或正文。
+
+看到模型请求已完成、Cursor 工具仍等待时，应检查对应官方 RPC 的 HTTPS 透传阶段。只测试本地 HTTP 服务不能覆盖 CONNECT/TLS 入口。隔离回归使用临时 CA、数据库和本地上游代理，不安装证书或读取正式账号：
+
+```sh
+cargo test -p cursor-server --lib local_app::proxy::transport_tests
+```
+
 截图采用纯前端演示模式，生成步骤见[资产说明](./docs/ASSETS.md)；不需要启动真实账号或模型服务。
 
 ## 提交与发布

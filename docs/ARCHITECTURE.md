@@ -201,7 +201,9 @@ Cursor 原生 WebSearch
 
 ## 其他功能与边界
 
-- TAB 默认官方直连，自定义地址仍由 `cursor/services/tab.rs` 转发。
+- Cursor HTTPS 接管列表内的模型与账号接口进入本地 HTTP 路由；其他普通 HTTP/Connect RPC 直接复用 `NetworkClients` 出站，不进入管理路由，也不再使用代理库独立的默认 HTTP 连接池。两条路径共用系统或自定义代理配置、连接缓存失效和响应等待边界。WebSocket Upgrade 与非 Cursor 域名保留原有代理处理。
+- 官方转发的连接建立上限为 10 秒、响应头等待上限为 60 秒、响应体无数据上限为 90 秒；持续有数据的响应流没有总时长截断。HTTP/2 连接使用保活探测清理不再响应的连接。超时与流中断明确失败，不自动重试或重复交付响应。
+- TAB 默认仍访问官方服务，自定义地址仍由 `cursor/services/tab.rs` 转发。
 - Commit 生成仍是独立单次模型调用，使用自己的提交信息模板。
 - MCP 的连接、定义和执行由 Cursor 提供。
 - WebFetch 使用原生实现；WebSearch 的接入边界见上文。

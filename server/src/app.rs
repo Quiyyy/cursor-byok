@@ -61,7 +61,7 @@ impl App {
             )),
         );
         let services = CursorServices::new(store.clone(), provider.clone(), Some(plugins.clone()));
-        let harness = CursorHarness::new(store.clone())?;
+        let harness = CursorHarness::new(store.clone(), clients.clone())?;
         let control = control::ControlState::new(
             store.clone(),
             provider.clone(),
