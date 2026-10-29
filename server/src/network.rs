@@ -83,6 +83,10 @@ impl NetworkClients {
         let client = client_builder(&self.store)
             .await?
             .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(10))
+            .http2_keep_alive_interval(Duration::from_secs(30))
+            .http2_keep_alive_timeout(Duration::from_secs(10))
+            .http2_keep_alive_while_idle(true)
             .build()?;
         cache.cursor = Some(client.clone());
         Ok(client)

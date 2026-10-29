@@ -108,7 +108,7 @@ async fn raw_and_translated_requests_share_configuration_and_keep_explicit_optio
         runtime,
         plugins.clone(),
         clients.clone(),
-        cursor_server::local_app::CursorHarness::new(store.clone()).unwrap(),
+        cursor_server::local_app::CursorHarness::new(store.clone(), clients.clone()).unwrap(),
     );
     let router = byok::router(
         store.clone(),
@@ -485,13 +485,14 @@ async fn setup() -> (
     .unwrap();
     let provider = fake_provider::FakeProvider::default();
     let shared_provider = Arc::new(provider.clone());
+    let clients = NetworkClients::new(store.clone());
     let control = control::ControlState::new(
         store.clone(),
         shared_provider.clone(),
         runtime,
         plugins.clone(),
-        NetworkClients::new(store.clone()),
-        cursor_server::local_app::CursorHarness::new(store.clone()).unwrap(),
+        clients.clone(),
+        cursor_server::local_app::CursorHarness::new(store.clone(), clients).unwrap(),
     );
     let router = byok::router(store.clone(), plugins, shared_provider, None)
         .merge(control::api_router(control));
