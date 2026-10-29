@@ -30,6 +30,12 @@ pub struct ProviderDefinition {
     pub native_responses: NativeResponses,
     #[serde(default)]
     pub supports_fast: bool,
+    #[serde(default = "default_true")]
+    pub supports_max_output_tokens: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -176,6 +182,7 @@ pub struct PluginModelDescriptor {
     pub images: bool,
     pub enabled: bool,
     pub supports_fast: bool,
+    pub supports_max_output_tokens: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -360,6 +367,7 @@ impl PluginModelDescriptor {
             images: model.images,
             enabled: model.enabled,
             supports_fast: provider.supports_fast,
+            supports_max_output_tokens: provider.supports_max_output_tokens,
         }
     }
 }

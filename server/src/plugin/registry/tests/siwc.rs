@@ -93,7 +93,12 @@ impl Upstream {
                                 } else {
                                     let outputs = body["input"].as_array().unwrap().iter().filter(|i| i["type"] == "function_call_output" || i["type"] == "custom_tool_call_output").count();
                                     let search = body["tools"].as_array().is_some_and(|tools| tools.iter().any(|tool| tool["type"] == "web_search"));
-                                    let item = if search {
+                                    let item = if body["input"].to_string().contains("diff --git a/commit-fixture.txt") {
+                                        assert!(body.get("max_output_tokens").is_none());
+                                        assert_eq!(body["store"], false);
+                                        assert_eq!(body["stream"], true);
+                                        json!({"id":"commit","type":"message","role":"assistant","content":[{"type":"output_text","text":"fix: update fixture"}]})
+                                    } else if search {
                                         json!({"id":"search-answer","type":"message","role":"assistant","content":[{"type":"output_text","text":"Search answer","annotations":[{"type":"url_citation","title":"Source","url":"https://example.test/source"}]}]})
                                     } else if body["input"].to_string().contains("after-stop") || outputs >= 2 {
                                         json!({"id":"msg","type":"message","role":"assistant","content":[{"type":"output_text","text":"complete"}]})
@@ -125,12 +130,10 @@ impl Upstream {
     }
 }
 
-#[tokio::test]
-#[ignore = "requires DENO_TEST_EXECUTABLE"]
-async fn native_gateway_runs_siwc_tool_replay_and_cancellation_through_the_production_worker() {
+async fn siwc_fixture() -> (tempfile::TempDir, PluginRegistry, Store, Upstream) {
     let (root, mut registry, store, previous_provider) = invocation_fixture().await;
     drop(previous_provider);
-    let mut upstream = Upstream::start().await;
+    let upstream = Upstream::start().await;
     let clients =
         NetworkClients::with_plugin_client_for_test(store.clone(), upstream.client.clone()).await;
     Arc::get_mut(&mut registry.inner).unwrap().clients = clients.clone();
@@ -148,6 +151,127 @@ async fn native_gateway_runs_siwc_tool_replay_and_cancellation_through_the_produ
     registry.inner.state.upsert_resources(&id, "chatgpt-account", vec![ResourceDraft {
         key: "oaiapp_fixture".into(), private_data: json!({"clientId":"oaiapp_fixture","hostId":"urn:uuid:fixture","subject":"fixture","accessToken":"fixture-access","scopes":["chatgpt.tokens.use.direct"],"expiresAtMs":super::super::super::state::now_ms()+3_600_000}), state: None,
     }]).await.unwrap();
+    (root, registry, store, upstream)
+}
+
+async fn post_commit_rpc(registry: &PluginRegistry, store: &Store, model_id: String) -> String {
+    use crate::cursor::{
+        protocol::{connect, proto::aiserver::v1 as ai},
+        services::CursorServices,
+    };
+    store
+        .set_commit_settings(crate::store::CommitSettings {
+            model_id,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let clients = registry.inner.clients.clone();
+    let provider = Arc::new(crate::provider::ProviderRouter::new(
+        store.clone(),
+        registry.clone(),
+        clients.clone(),
+        Duration::from_secs(10),
+        Duration::from_secs(10),
+    ));
+    let router = crate::api::cursor::router(
+        CursorServices::new(store.clone(), provider, Some(registry.clone())),
+        clients,
+    )
+    .unwrap();
+    let request = ai::WriteGitCommitMessageRequest {
+        diffs: vec!["diff --git a/commit-fixture.txt b/commit-fixture.txt\n+updated".into()],
+        ..Default::default()
+    };
+    let response = router
+        .oneshot(
+            Request::post("/aiserver.v1.AiService/WriteGitCommitMessage")
+                .header("content-type", "application/proto")
+                .body(Body::from(connect::encode_message(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = to_bytes(response.into_body(), 65536).await.unwrap();
+    assert_eq!(
+        status,
+        axum::http::StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let decoded: ai::WriteGitCommitMessageResponse = prost::Message::decode(&body[..]).unwrap();
+    decoded.commit_message
+}
+
+#[tokio::test]
+#[ignore = "requires DENO_TEST_EXECUTABLE"]
+async fn commit_rpc_generates_through_siwc_without_an_output_limit() {
+    let (_root, registry, store, mut upstream) = siwc_fixture().await;
+    let run = async {
+        let id = "dev.cursorbyok.chatgpt-auth";
+        registry.sync_models(id, "chatgpt").await.unwrap();
+        registry
+            .set_model_enabled(id, "chatgpt", "gpt-test", true)
+            .await
+            .unwrap();
+        assert_eq!(
+            post_commit_rpc(&registry, &store, format!("plugin:{id}/chatgpt/gpt-test")).await,
+            "fix: update fixture",
+        );
+        let sent = upstream
+            .requests
+            .try_recv()
+            .expect("Commit must reach the SIWC upstream");
+        assert!(sent.get("max_output_tokens").is_none());
+        assert_eq!(sent["model"], "gpt-test");
+        let calls = store.llm_calls(10).await.unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].status, "completed");
+    };
+    let result = std::panic::AssertUnwindSafe(run).catch_unwind().await;
+    stop_workers(&registry).await;
+    if let Err(error) = result {
+        std::panic::resume_unwind(error);
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires DENO_TEST_EXECUTABLE"]
+async fn commit_rpc_keeps_default_output_limit_for_plugins_without_a_capability_override() {
+    let (root, registry, store, _provider) = invocation_fixture().await;
+    // Observe the actual request delivered to an existing-style plugin, with no capability flag.
+    std::fs::write(root.path().join("installed/test/main.ts"), r#"
+      import {defineProviderPlugin} from 'cursor-byok:plugin';
+      defineProviderPlugin({
+        providers:[{id:'fake',displayName:'fake',providerType:'test',resourceType:'account',
+          invoke:async(input,output)=>{
+            output.emit({type:'text-delta',text:`test: output limit ${input.request.maxOutputTokens}`});
+            output.emit({type:'done',reason:'stop'});
+            return {status:'completed'};
+          }}],
+        resources:[{type:'account',displayName:'account',present:()=>({displayName:'test'}),prepare:()=>null}]
+      });
+    "#).unwrap();
+    let run = async {
+        assert_eq!(
+            post_commit_rpc(&registry, &store, "plugin:dev.refresh/fake/retry".into()).await,
+            "test: output limit 30000",
+        );
+    };
+    let result = std::panic::AssertUnwindSafe(run).catch_unwind().await;
+    stop_workers(&registry).await;
+    if let Err(error) = result {
+        std::panic::resume_unwind(error);
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires DENO_TEST_EXECUTABLE"]
+async fn native_gateway_runs_siwc_tool_replay_and_cancellation_through_the_production_worker() {
+    let (root, registry, store, mut upstream) = siwc_fixture().await;
+    let clients = registry.inner.clients.clone();
+    let id = "dev.cursorbyok.chatgpt-auth".to_owned();
     let run = async {
         assert_eq!(registry.sync_models(&id, "chatgpt").await.unwrap(), 1);
         let provider = Arc::new(crate::provider::ProviderRouter::new(

@@ -19,6 +19,7 @@ export const chatgptProvider: ProviderSupport = {
   },
   resourceType: RESOURCE_TYPE,
   nativeResponses: "always",
+  supportsMaxOutputTokens: false,
   models: chatgptModels,
   async invoke(input, output, context) {
     try {

@@ -77,6 +77,7 @@ export function __descriptor(definition: ProviderPluginDefinition) {
       hasModels: provider.models !== undefined,
       nativeResponses: provider.nativeResponses ?? false,
       supportsFast: provider.supportsFast === true,
+      supportsMaxOutputTokens: provider.supportsMaxOutputTokens !== false,
     })),
     resources: (definition.resources ?? []).map((resource) => ({
       type: resource.type,

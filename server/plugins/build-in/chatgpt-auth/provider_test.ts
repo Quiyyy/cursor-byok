@@ -185,4 +185,9 @@ Deno.test("SIWC rejects unsupported parameters before contacting the provider", 
     const result = await run([], 200, request);
     assert(result.result.status === "request-error" && result.sent === undefined);
   }
+  const projected = input();
+  projected.request.nativeResponses = null;
+  projected.request.maxOutputTokens = 30000;
+  const result = await run([], 200, projected);
+  assert(result.result.status === "request-error" && result.sent === undefined);
 });

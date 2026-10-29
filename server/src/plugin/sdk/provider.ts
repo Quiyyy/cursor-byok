@@ -117,6 +117,8 @@ export type ProviderResult =
   | { status: "request-error"; message: string; patch?: ResourcePatch };
 
 export type ProviderSupport = {
+  /** Accepts an output token limit; defaults to true. Internal callers omit their default when false. */
+  supportsMaxOutputTokens?: boolean;
   /** 支持通过 latency 请求优先处理。 */
   supportsFast?: boolean;
   /** true supports hosted-tool passthrough; "always" requires raw Responses for every HTTP call
