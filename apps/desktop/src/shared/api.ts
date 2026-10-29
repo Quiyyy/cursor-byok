@@ -207,6 +207,8 @@ export interface PluginResourceView {
   description: PluginLocalizedText | null;
   metrics: PluginResourceMetric[];
   createdAtMs: number;
+  selected?: boolean;
+  links?: { label: PluginLocalizedText; url: string }[];
 }
 
 export interface PluginAddMethod {
@@ -215,6 +217,7 @@ export interface PluginAddMethod {
   displayName: PluginLocalizedText;
   description: PluginLocalizedText | null;
   callback?: { port: number | null; path: string | null };
+  canRegister?: boolean;
 }
 
 export interface PluginImportDescriptor {
@@ -458,7 +461,8 @@ export const api = {
   cursorHarness: () => request<CursorHarnessStatus>("/harness/cursor/status"),
   initializeCursorCa: () => request<CursorHarnessStatus>("/harness/cursor/ca/initialize", { method: "POST" }),
   plugins: () => request<PluginDescriptor[]>("/plugins"),
-  pluginOAuthBegin: (pluginId: string, resourceType: string, methodId: string) => request<PluginOAuthBegin>(`/plugins/${encodeURIComponent(pluginId)}/resources/${encodeURIComponent(resourceType)}/add/${encodeURIComponent(methodId)}/begin`, { method: "POST" }),
+  pluginOAuthBegin: (pluginId: string, resourceType: string, methodId: string, resourceId?: string) => request<PluginOAuthBegin>(`/plugins/${encodeURIComponent(pluginId)}/resources/${encodeURIComponent(resourceType)}/add/${encodeURIComponent(methodId)}/begin${resourceId ? `?resource_id=${encodeURIComponent(resourceId)}` : ""}`, { method: "POST" }),
+  pluginOAuthCancel: (sessionId: string) => request<void>(`/plugins/oauth/${encodeURIComponent(sessionId)}`, { method: "DELETE" }),
   pluginOAuthPoll: (sessionId: string, signal?: AbortSignal) => request<PluginOAuthPoll>(`/plugins/oauth/${encodeURIComponent(sessionId)}/poll`, { method: "POST", signal }),
   importPluginResources: (pluginId: string, resourceType: string, files: PluginImportFile[]) => request<PluginImportResult>(`/plugins/${encodeURIComponent(pluginId)}/resources/${encodeURIComponent(resourceType)}/import`, { method: "POST", body: JSON.stringify(files) }),
   refreshPluginResource: (pluginId: string, resourceType: string, resourceId: string) => request<void>(`/plugins/${encodeURIComponent(pluginId)}/resources/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceId)}/refresh`, { method: "POST" }),

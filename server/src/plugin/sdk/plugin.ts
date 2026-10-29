@@ -75,7 +75,7 @@ export function __descriptor(definition: ProviderPluginDefinition) {
       providerType: provider.providerType,
       resourceType: provider.resourceType ?? null,
       hasModels: provider.models !== undefined,
-      nativeResponses: provider.nativeResponses === true,
+      nativeResponses: provider.nativeResponses ?? false,
       supportsFast: provider.supportsFast === true,
     })),
     resources: (definition.resources ?? []).map((resource) => ({
@@ -86,6 +86,7 @@ export function __descriptor(definition: ProviderPluginDefinition) {
         id: method.id,
         displayName: method.displayName,
         description: method.description ?? null,
+        canRegister: method.type === "oauth2.authorization-code" && method.register !== undefined,
         callback: method.type === "oauth2.authorization-code"
           ? {
             port: method.callback?.port ?? null,

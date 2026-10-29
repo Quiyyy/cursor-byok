@@ -88,6 +88,7 @@ export type ResourceView = {
   displayName: string;
   description?: LocalizedText;
   metrics?: ResourceMetric[];
+  links?: { label: LocalizedText; url: string }[];
 };
 
 /**
@@ -134,6 +135,9 @@ export type OAuth2AuthorizationCodeAddMethod = {
       redirectUri: string;
       state: string;
       codeChallenge: string;
+      hostId: string;
+      /** Selected saved registration, or null for a new account. */
+      resource: ResourceSnapshot | null;
     },
     context: PluginContext,
   ): Promise<OAuth2AuthorizationCodeBegin>;
@@ -143,9 +147,16 @@ export type OAuth2AuthorizationCodeAddMethod = {
       code: string;
       redirectUri: string;
       codeVerifier: string;
+      clientId: string | null;
     },
     context: PluginContext,
   ): Promise<ResourceDraft[]>;
+  /** Persist a newly issued client registration before code exchange. Existing credentials stay intact. */
+  register?(
+    session: JsonValue,
+    input: { clientId: string | null },
+    context: PluginContext,
+  ): Promise<ResourceDraft | null>;
 };
 
 export type OAuth2AuthorizationCodeBegin = {

@@ -27,9 +27,36 @@ pub struct ProviderDefinition {
     pub resource_type: Option<String>,
     pub has_models: bool,
     #[serde(default)]
-    pub native_responses: bool,
+    pub native_responses: NativeResponses,
     #[serde(default)]
     pub supports_fast: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum NativeResponses {
+    Supported(bool),
+    Mode(NativeResponsesMode),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NativeResponsesMode {
+    Always,
+}
+
+impl Default for NativeResponses {
+    fn default() -> Self {
+        Self::Supported(false)
+    }
+}
+impl NativeResponses {
+    pub fn supported(&self) -> bool {
+        !matches!(self, Self::Supported(false))
+    }
+    pub fn always(&self) -> bool {
+        matches!(self, Self::Mode(NativeResponsesMode::Always))
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -74,6 +101,8 @@ pub struct AddMethodDefinition {
     pub description: LocalizedText,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callback: Option<OAuthCallbackDefinition>,
+    #[serde(default)]
+    pub can_register: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -173,6 +202,15 @@ pub struct PluginResourceView {
     pub description: LocalizedText,
     pub metrics: Vec<ResourceMetric>,
     pub created_at_ms: i64,
+    pub selected: bool,
+    pub links: Vec<ResourceLink>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ResourceLink {
+    pub label: LocalizedText,
+    pub url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -195,6 +233,8 @@ pub struct ResourcePresentation {
     pub description: LocalizedText,
     #[serde(default)]
     pub metrics: Vec<ResourceMetric>,
+    #[serde(default)]
+    pub links: Vec<ResourceLink>,
 }
 
 /// 插件资源操作返回的安全详情;patch 只在核心内部应用,不会回传给桌面端。
@@ -261,6 +301,18 @@ impl PluginResourceView {
             description: presentation.description,
             metrics: presentation.metrics,
             created_at_ms: record.created_at_ms,
+            selected: false,
+            links: presentation
+                .links
+                .into_iter()
+                .filter(|link| {
+                    url::Url::parse(&link.url).is_ok_and(|url| {
+                        url.scheme() == "https"
+                            && url.username().is_empty()
+                            && url.password().is_none()
+                    })
+                })
+                .collect(),
         }
     }
 }

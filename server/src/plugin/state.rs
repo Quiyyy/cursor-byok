@@ -254,6 +254,41 @@ impl PluginStateStore {
         }
     }
 
+    pub async fn oauth_host_id(&self, plugin_id: &str) -> Result<String> {
+        let _mutation = self.mutations.lock().await;
+        let saved = self.data.read(plugin_id, "oauth-host").await?;
+        if let Some(id) = saved.as_str() {
+            return Ok(id.to_owned());
+        }
+        let id = format!("urn:uuid:{}", uuid::Uuid::new_v4());
+        self.data
+            .update(plugin_id, "oauth-host", &serde_json::json!(id))
+            .await?;
+        Ok(id)
+    }
+
+    pub async fn selected_resource(&self, plugin_id: &str, kind: &str) -> Result<Option<String>> {
+        Ok(self
+            .data
+            .read(plugin_id, "selected-resources")
+            .await?
+            .get(kind)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned))
+    }
+
+    pub async fn select_resource(&self, plugin_id: &str, kind: &str, id: &str) -> Result<()> {
+        let _mutation = self.mutations.lock().await;
+        let mut selected = self.data.read(plugin_id, "selected-resources").await?;
+        if selected.is_null() {
+            selected = serde_json::json!({});
+        }
+        selected[kind] = id.into();
+        self.data
+            .update(plugin_id, "selected-resources", &selected)
+            .await
+    }
+
     pub async fn resources(
         &self,
         plugin_id: &str,

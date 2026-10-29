@@ -119,8 +119,9 @@ export type ProviderResult =
 export type ProviderSupport = {
   /** 支持通过 latency 请求优先处理。 */
   supportsFast?: boolean;
-  /** 支持原样传输 Responses 请求与 response.* 事件,包括服务端内置工具。 */
-  nativeResponses?: boolean;
+  /** true supports hosted-tool passthrough; "always" requires raw Responses for every HTTP call
+   * and advertises Responses as the sole native transport. */
+  nativeResponses?: boolean | "always";
   id: string;
   displayName: LocalizedText;
   description?: LocalizedText;

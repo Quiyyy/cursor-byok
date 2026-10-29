@@ -175,7 +175,47 @@ const ANTIGRAVITY_AUTH: &[(&str, &str)] = &[
     ),
 ];
 
+const CHATGPT_AUTH: &[(&str, &str)] = &[
+    (
+        "plugin.json",
+        include_str!("../../plugins/build-in/chatgpt-auth/plugin.json"),
+    ),
+    (
+        "main.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/main.ts"),
+    ),
+    (
+        "auth.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/auth.ts"),
+    ),
+    (
+        "oauth.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/oauth.ts"),
+    ),
+    (
+        "resources.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/resources.ts"),
+    ),
+    (
+        "models.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/models.ts"),
+    ),
+    (
+        "request.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/request.ts"),
+    ),
+    (
+        "provider.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/provider.ts"),
+    ),
+    (
+        "icon.svg",
+        include_str!("../../plugins/build-in/chatgpt-auth/icon.svg"),
+    ),
+];
+
 const PLUGINS: &[(&str, &[(&str, &str)])] = &[
+    ("chatgpt-auth", CHATGPT_AUTH),
     ("codex-auth", CODEX_AUTH),
     ("grok-auth", GROK_AUTH),
     ("antigravity-auth", ANTIGRAVITY_AUTH),
