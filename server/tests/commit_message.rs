@@ -116,6 +116,7 @@ async fn commit_message_is_generated_through_configured_model() {
 
     let requests = provider.requests();
     assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].model.max_output_tokens, Some(30_000));
     assert_eq!(
         requests[0].prompt.instructions,
         DEFAULT_COMMIT_PROMPT_ZH_CN.trim()

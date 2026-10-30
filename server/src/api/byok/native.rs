@@ -55,7 +55,13 @@ async fn lookup(state: &ApiState, id: &str) -> Result<(ListedModel, Value)> {
         crate::model::ProviderType::Anthropic => vec!["anthropic_messages"],
         crate::model::ProviderType::OpenAiResponses => vec!["openai_responses"],
         crate::model::ProviderType::OpenAiChat => vec!["openai_chat"],
-        crate::model::ProviderType::Plugin => vec!["openai_chat", "openai_responses"],
+        crate::model::ProviderType::Plugin => {
+            if state.plugins.preserves_responses(&model.id).await? {
+                vec!["openai_responses"]
+            } else {
+                vec!["openai_chat", "openai_responses"]
+            }
+        }
     };
     let (model_id, name, context, output, images, efforts) = (
         model.model_id,

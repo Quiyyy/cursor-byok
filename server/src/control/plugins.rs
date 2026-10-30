@@ -1,6 +1,6 @@
 //! Exposes plugin discovery, resource lifecycle, model sync, and runtime endpoints.
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
@@ -30,13 +30,24 @@ pub async fn remove(
 pub async fn oauth_begin(
     State(service): State<ControlState>,
     Path((plugin_id, resource_type, method_id)): Path<(String, String, String)>,
+    Query(query): Query<OAuthSelection>,
 ) -> Result<Json<OAuthBeginResponse>> {
     Ok(Json(
         service
             .plugins
-            .oauth_begin(&plugin_id, &resource_type, &method_id)
+            .oauth_begin(
+                &plugin_id,
+                &resource_type,
+                &method_id,
+                query.resource_id.as_deref(),
+            )
             .await?,
     ))
+}
+
+#[derive(serde::Deserialize)]
+pub struct OAuthSelection {
+    resource_id: Option<String>,
 }
 
 pub async fn oauth_poll(
@@ -44,6 +55,14 @@ pub async fn oauth_poll(
     Path(session_id): Path<String>,
 ) -> Result<Json<OAuthPollResponse>> {
     Ok(Json(service.plugins.oauth_poll(&session_id).await?))
+}
+
+pub async fn oauth_cancel(
+    State(service): State<ControlState>,
+    Path(session_id): Path<String>,
+) -> StatusCode {
+    service.plugins.oauth_cancel(&session_id).await;
+    StatusCode::NO_CONTENT
 }
 
 pub async fn import(

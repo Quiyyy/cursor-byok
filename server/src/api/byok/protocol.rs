@@ -46,9 +46,21 @@ pub(super) fn requires_native_responses(body: &Value) -> bool {
 }
 
 pub(super) fn parse(protocol: Protocol, body: &Value) -> Result<ParsedRequest> {
-    let public_model_id = required_string(body, "model")?.to_owned();
     let native_responses =
         matches!(protocol, Protocol::Responses) && requires_native_responses(body);
+    parse_request(protocol, body, native_responses)
+}
+
+pub(super) fn parse_raw_responses(body: &Value) -> Result<ParsedRequest> {
+    parse_request(Protocol::Responses, body, true)
+}
+
+fn parse_request(
+    protocol: Protocol,
+    body: &Value,
+    native_responses: bool,
+) -> Result<ParsedRequest> {
+    let public_model_id = required_string(body, "model")?.to_owned();
     let stream = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
     let mut prompt = PromptSpec {
         instructions: String::new(),

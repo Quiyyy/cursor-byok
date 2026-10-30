@@ -65,6 +65,13 @@ struct OAuthSession {
     poll_interval_ms: i64,
     next_poll_at_ms: i64,
     flow: OAuthFlow,
+    cancellation: CancellationToken,
+}
+
+impl Drop for OAuthSession {
+    fn drop(&mut self) {
+        self.cancellation.cancel();
+    }
 }
 
 enum OAuthFlow {

@@ -145,6 +145,10 @@ impl PluginRegistry {
                 "plugin '{plugin_id}' resource action '{action_id}' has an invalid target"
             )));
         }
+        let lock = self
+            .preparation_lock(plugin_id, resource_type, resource_id)
+            .await;
+        let _guard = lock.lock().await;
         let record = self
             .find_record(plugin_id, resource_type, resource_id)
             .await?;
@@ -181,6 +185,10 @@ impl PluginRegistry {
         let executable = self.executable()?;
         let entry = self.find_entry(&executable, plugin_id).await?;
         let resource = find_resource(&entry, resource_type)?;
+        let lock = self
+            .preparation_lock(plugin_id, resource_type, resource_id)
+            .await;
+        let _guard = lock.lock().await;
         let record = self
             .find_record(plugin_id, resource_type, resource_id)
             .await?;
@@ -215,6 +223,19 @@ impl PluginRegistry {
         resource_type: &str,
     ) -> Result<ResourceRecord> {
         let records = self.inner.state.resources(plugin_id, resource_type).await?;
+        if let Some(selected) = self
+            .inner
+            .state
+            .selected_resource(plugin_id, resource_type)
+            .await?
+        {
+            return records
+                .into_iter()
+                .find(|record| record.id == selected)
+                .ok_or_else(|| {
+                    Error::Config("Selected account was removed; sign in to another account".into())
+                });
+        }
         if records.is_empty() {
             return Err(Error::Provider(format!(
                 "plugin '{plugin_id}' has no '{resource_type}' resource; add one first"

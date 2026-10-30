@@ -73,9 +73,19 @@ impl PluginRegistry {
                 .resources(plugin_id, &definition.resource_type)
                 .await
                 .unwrap_or_default();
-            let views = self
+            let mut views = self
                 .present_resources(entry, executable, definition, &records)
                 .await;
+            if let Ok(Some(selected)) = self
+                .inner
+                .state
+                .selected_resource(plugin_id, &definition.resource_type)
+                .await
+            {
+                for view in &mut views {
+                    view.selected = view.id == selected;
+                }
+            }
             resources.push(PluginResourceDescriptor {
                 resource_type: definition.resource_type.clone(),
                 display_name: definition.display_name.clone(),
@@ -142,6 +152,7 @@ impl PluginRegistry {
                             display_name: record.key.clone(),
                             description: serde_json::Value::Null,
                             metrics: Vec::new(),
+                            links: Vec::new(),
                         },
                     )
                 })
