@@ -33,6 +33,8 @@ pub enum Error {
     MigrationTimeout { stage: String, timeout_seconds: u64 },
     #[error("http error: {0}")]
     Http(#[from] reqwest::Error),
+    #[error("Cursor upstream timed out waiting for {0}")]
+    UpstreamTimeout(&'static str),
     #[error("protobuf decode error: {0}")]
     Decode(#[from] prost::DecodeError),
     #[error("protobuf encode error: {0}")]
@@ -52,6 +54,7 @@ impl IntoResponse for Error {
             Self::RunNotFound(_) => StatusCode::NOT_FOUND,
             Self::Provider(_) | Self::ProviderRefusal(_) | Self::Http(_) => StatusCode::BAD_GATEWAY,
             Self::Cancelled => StatusCode::CONFLICT,
+            Self::UpstreamTimeout(_) => StatusCode::GATEWAY_TIMEOUT,
             Self::Store(_)
             | Self::Database(_)
             | Self::Migration(_)
@@ -66,6 +69,7 @@ impl IntoResponse for Error {
             StatusCode::NOT_FOUND => "not_found",
             StatusCode::CONFLICT => "aborted",
             StatusCode::BAD_GATEWAY => "unavailable",
+            StatusCode::GATEWAY_TIMEOUT => "deadline_exceeded",
             _ => "internal",
         };
         (

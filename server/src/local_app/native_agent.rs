@@ -320,6 +320,7 @@ mod lifecycle_tests {
                 backend_addr: RwLock::new(Some("127.0.0.1:1".parse().unwrap())),
                 tab_mode: Arc::new(RwLock::new(Default::default())),
                 proxy: Mutex::new(ProxyRuntime::default()),
+                clients: crate::network::NetworkClients::new(store.clone()),
             }),
         };
         for _ in 0..2 {

@@ -84,10 +84,11 @@ struct Inner {
     backend_addr: RwLock<Option<SocketAddr>>,
     tab_mode: Arc<RwLock<TabMode>>,
     proxy: Mutex<ProxyRuntime>,
+    clients: crate::network::NetworkClients,
 }
 
 impl CursorHarness {
-    pub fn new(store: Store) -> Result<Self> {
+    pub fn new(store: Store, clients: crate::network::NetworkClients) -> Result<Self> {
         Ok(Self {
             inner: Arc::new(Inner {
                 native: NativeAgent::managed()?,
@@ -98,6 +99,7 @@ impl CursorHarness {
                 backend_addr: RwLock::new(None),
                 tab_mode: Arc::new(RwLock::new(TabMode::default())),
                 proxy: Mutex::new(ProxyRuntime::default()),
+                clients,
             }),
         })
     }
@@ -232,6 +234,7 @@ impl CursorHarness {
                 ca,
                 requested_port,
                 self.inner.tab_mode.clone(),
+                crate::api::cursor::proxy::CursorProxy::cursor(self.inner.clients.clone()),
             )
             .await?;
         if let Err(error) = self.inner.store.set_proxy_port(actual_port).await {

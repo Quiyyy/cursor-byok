@@ -89,7 +89,7 @@ async fn configured_default_reaches_cursor_and_disables_auto_nudges() {
         runtime,
         plugins.clone(),
         clients.clone(),
-        cursor_server::local_app::CursorHarness::new(store.clone()).unwrap(),
+        cursor_server::local_app::CursorHarness::new(store.clone(), clients.clone()).unwrap(),
     );
     let router = control::api_router(control).merge(
         cursor_server::api::cursor::router(

@@ -1,5 +1,7 @@
 //! Configures the local application proxy.
-use std::{net::SocketAddr, sync::Arc};
+use axum::response::IntoResponse;
+use futures_util::{Stream, StreamExt};
+use std::{net::SocketAddr, pin::Pin, sync::Arc};
 
 use hudsucker::{
     certificate_authority::RcgenAuthority,
@@ -12,7 +14,9 @@ use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
 use parking_lot::RwLock;
 
 use crate::{
-    api::cursor::proxy::UPSTREAM_URL_HEADER, cursor::services::tab::is_tab_path, store::TabMode,
+    api::cursor::proxy::{self as forwarding, CursorProxy, TRACE_ID_HEADER, UPSTREAM_URL_HEADER},
+    cursor::services::tab::is_tab_path,
+    store::TabMode,
     Error, Result,
 };
 
@@ -47,6 +51,7 @@ impl ProxyRuntime {
         ca: LoadedCa,
         requested_port: u16,
         tab_mode: Arc<RwLock<TabMode>>,
+        upstream: CursorProxy,
     ) -> Result<(String, u16)> {
         if let Some(url) = self.url() {
             return Ok((url, self.port.unwrap_or_default()));
@@ -59,7 +64,11 @@ impl ProxyRuntime {
             .with_listener(listener)
             .with_ca(authority)
             .with_rustls_connector(aws_lc_rs::default_provider())
-            .with_http_handler(CursorRelay { backend, tab_mode })
+            .with_http_handler(CursorRelay {
+                backend,
+                tab_mode,
+                upstream,
+            })
             .with_graceful_shutdown(async move {
                 let _ = done.await;
             })
@@ -104,20 +113,41 @@ async fn bind_proxy_listener(requested_port: u16) -> Result<TcpListener> {
 struct CursorRelay {
     backend: SocketAddr,
     tab_mode: Arc<RwLock<TabMode>>,
+    upstream: CursorProxy,
 }
 
 impl HttpHandler for CursorRelay {
     async fn handle_request(
         &mut self,
-        _ctx: &HttpContext,
+        ctx: &HttpContext,
         mut request: Request<Body>,
     ) -> RequestOrResponse {
         let original = request.uri().clone();
+        if request.method() == hudsucker::hyper::Method::CONNECT
+            || !is_cursor_host(original.host().unwrap_or_default())
+        {
+            return request.into();
+        }
+        // WebSocket upgrades stay with the proxy's existing upgrade handler.
+        if request
+            .headers()
+            .contains_key(hudsucker::hyper::header::UPGRADE)
+        {
+            return request.into();
+        }
+        let id = uuid::Uuid::new_v4();
         let locally_routed = should_route_locally(original.path(), *self.tab_mode.read());
-        if is_cursor_host(original.host().unwrap_or_default()) && locally_routed {
-            if let Ok(value) = original.to_string().parse() {
-                request.headers_mut().insert(UPSTREAM_URL_HEADER, value);
-            }
+        tracing::info!(request_id = %id, method = %request.method(), host = original.host().unwrap_or_default(),
+            path = original.path(), client_addr = %ctx.client_addr,
+            route = if locally_routed { "local" } else { "upstream" }, "Cursor HTTPS proxy request received");
+        request.headers_mut().insert(
+            TRACE_ID_HEADER,
+            id.to_string().parse().expect("UUID is a valid header"),
+        );
+        if let Ok(value) = original.to_string().parse() {
+            request.headers_mut().insert(UPSTREAM_URL_HEADER, value);
+        }
+        if locally_routed {
             let path = original
                 .path_and_query()
                 .map(|value| value.as_str())
@@ -125,8 +155,24 @@ impl HttpHandler for CursorRelay {
             if let Ok(uri) = format!("http://{}{}", self.backend, path).parse::<Uri>() {
                 *request.uri_mut() = uri;
             }
+            return request.into();
         }
-        request.into()
+        // Keep official RPCs out of the management router. Share its configured
+        // outbound transport instead of Hudsucker's independent, unbounded pool.
+        let request = request.map(axum::body::Body::new);
+        let response =
+            forwarding::forward(axum::extract::Extension(self.upstream.clone()), request)
+                .await
+                .unwrap_or_else(IntoResponse::into_response);
+        let (parts, body) = response.into_parts();
+        let stream = parking_lot::Mutex::new(body.into_data_stream());
+        let stream =
+            futures_util::stream::poll_fn(move |cx| Pin::new(&mut *stream.lock()).poll_next(cx))
+                .map(|result| result.map_err(std::io::Error::other));
+        RequestOrResponse::Response(hudsucker::hyper::Response::from_parts(
+            parts,
+            Body::from_stream(stream),
+        ))
     }
 
     async fn should_intercept_connect(
@@ -184,6 +230,10 @@ fn is_local_path(path: &str) -> bool {
 fn should_route_locally(path: &str, tab_mode: TabMode) -> bool {
     is_local_path(path) || (is_tab_path(path) && tab_mode == TabMode::Custom)
 }
+
+#[cfg(test)]
+#[path = "proxy_tests.rs"]
+mod transport_tests;
 
 #[cfg(test)]
 mod tests {
