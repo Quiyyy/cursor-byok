@@ -1,5 +1,7 @@
 use super::*;
 use crate::store::Store;
+mod authorization;
+mod siwc;
 mod streaming;
 #[test]
 fn authentication_retries_once_and_never_after_output() {

@@ -117,10 +117,13 @@ export type ProviderResult =
   | { status: "request-error"; message: string; patch?: ResourcePatch };
 
 export type ProviderSupport = {
+  /** Accepts an output token limit; defaults to true. Internal callers omit their default when false. */
+  supportsMaxOutputTokens?: boolean;
   /** 支持通过 latency 请求优先处理。 */
   supportsFast?: boolean;
-  /** 支持原样传输 Responses 请求与 response.* 事件,包括服务端内置工具。 */
-  nativeResponses?: boolean;
+  /** true supports hosted-tool passthrough; "always" requires raw Responses for every HTTP call
+   * and advertises Responses as the sole native transport. */
+  nativeResponses?: boolean | "always";
   id: string;
   displayName: LocalizedText;
   description?: LocalizedText;

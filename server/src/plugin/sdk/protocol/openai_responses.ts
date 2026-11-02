@@ -18,6 +18,8 @@ export type OpenAiResponsesCall = {
   headers?: Record<string, string>;
   /** 最后合并进请求体,如 { store: false }。 */
   extraBody?: Record<string, JsonValue>;
+  /** Providers whose contract requires response.completed, rather than a partial result. */
+  requireCompleted?: boolean;
 };
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -420,6 +422,7 @@ export async function streamOpenAiResponses(
         break;
       }
       case "response.incomplete": {
+        if (call.requireCompleted) throw new Error("OpenAI Responses did not complete");
         closeThinking();
         closeText();
         endStartedTools();
@@ -433,7 +436,7 @@ export async function streamOpenAiResponses(
     if (terminal) break;
   }
 
-  if (!terminal && sawCompletedItem) {
+  if (!terminal && sawCompletedItem && !call.requireCompleted) {
     closeThinking();
     closeText();
     for (const tool of tools.values()) {

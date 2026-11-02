@@ -157,6 +157,15 @@ async function dispatch(message: { id: string; method: string; params?: JsonValu
         result = await method.poll(params.session ?? null, context);
         break;
       }
+      case "oauth.register": {
+        const support = resourceSupport(params.resourceType);
+        const method = addMethod(support, params.methodId);
+        if (method.type !== "oauth2.authorization-code" || !method.register) {
+          throw new Error("OAuth registration is not supported");
+        }
+        result = await method.register(params.session ?? null, params.authorization as never, context);
+        break;
+      }
       case "oauth.complete": {
         const support = resourceSupport(params.resourceType);
         const method = addMethod(support, params.methodId);

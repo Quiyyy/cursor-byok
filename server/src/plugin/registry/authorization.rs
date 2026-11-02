@@ -7,6 +7,7 @@ impl PluginRegistry {
         plugin_id: &str,
         resource_type: &str,
         method_id: &str,
+        resource_id: Option<&str>,
     ) -> Result<OAuthBeginResponse> {
         let executable = self.executable()?;
         let entry = self.find_entry(&executable, plugin_id).await?;
@@ -20,6 +21,17 @@ impl PluginRegistry {
                     "plugin '{plugin_id}' does not define OAuth method '{method_id}'"
                 ))
             })?;
+        let selected = match resource_id {
+            Some(id) if method.can_register => {
+                Some(self.find_record(plugin_id, resource_type, id).await?)
+            }
+            Some(_) => {
+                return Err(Error::Config(
+                    "This login method does not reuse registrations".into(),
+                ))
+            }
+            None => None,
+        };
         // 同一添加入口只有一个活跃生命周期。重新开始时先丢弃旧会话，
         // Drop 授权码会话中的 CallbackHandle 会立即释放 loopback listener。
         self.inner.oauth_sessions.lock().await.retain(|_, session| {
@@ -62,6 +74,11 @@ impl PluginRegistry {
                 )
             }
             OAUTH2_AUTHORIZATION_CODE_ADD_METHOD => {
+                let host_id = if method.can_register {
+                    self.inner.state.oauth_host_id(plugin_id).await?
+                } else {
+                    String::new()
+                };
                 let state = oauth_random_secret();
                 let code_verifier = oauth_random_secret();
                 let code_challenge =
@@ -89,6 +106,8 @@ impl PluginRegistry {
                                 "redirectUri": redirect_uri,
                                 "state": state,
                                 "codeChallenge": code_challenge,
+                                "hostId": host_id,
+                                "resource": selected.as_ref().map(|record| record.snapshot(resource_type)),
                             },
                         }),
                         CancellationToken::new(),
@@ -133,6 +152,7 @@ impl PluginRegistry {
                 poll_interval_ms,
                 next_poll_at_ms: now_ms() + poll_interval_ms,
                 flow,
+                cancellation: CancellationToken::new(),
             },
         );
         let cleanup = self.clone();
@@ -264,6 +284,10 @@ impl PluginRegistry {
         }
     }
 
+    pub async fn oauth_cancel(&self, session_id: &str) {
+        self.inner.oauth_sessions.lock().await.remove(session_id);
+    }
+
     pub(super) async fn poll_device_code(
         &self,
         session_id: &str,
@@ -273,6 +297,15 @@ impl PluginRegistry {
         session: serde_json::Value,
         poll_interval_ms: i64,
     ) -> Result<OAuthPollResponse> {
+        let cancellation = self
+            .inner
+            .oauth_sessions
+            .lock()
+            .await
+            .get(session_id)
+            .ok_or(Error::Cancelled)?
+            .cancellation
+            .clone();
         let executable = self.executable()?;
         let entry = self.find_entry(&executable, &plugin_id).await?;
         let value = self
@@ -285,10 +318,13 @@ impl PluginRegistry {
                     "methodId": method_id,
                     "session": session,
                 }),
-                CancellationToken::new(),
+                cancellation.clone(),
             )
             .await?;
         let poll: OAuth2Poll = serde_json::from_value(value)?;
+        if cancellation.is_cancelled() {
+            return Err(Error::Cancelled);
+        }
         match poll {
             OAuth2Poll::Pending { session } => {
                 self.update_session(session_id, session, None).await;
@@ -311,6 +347,7 @@ impl PluginRegistry {
                         &plugin_id,
                         &resource_type,
                         resources,
+                        false,
                     )
                     .await?;
                 self.inner.oauth_sessions.lock().await.remove(session_id);
@@ -340,7 +377,7 @@ impl PluginRegistry {
         callback_request: CallbackRequest,
     ) -> Result<OAuthPollResponse> {
         let CallbackRequest { result, response } = callback_request;
-        let code = match result {
+        let authorization = match result {
             Ok(code) => code,
             Err(message) => {
                 self.inner.oauth_sessions.lock().await.remove(session_id);
@@ -355,8 +392,52 @@ impl PluginRegistry {
         };
 
         let result = async {
+            let cancellation = self
+                .inner
+                .oauth_sessions
+                .lock()
+                .await
+                .get(session_id)
+                .ok_or(Error::Cancelled)?
+                .cancellation
+                .clone();
             let executable = self.executable()?;
             let entry = self.find_entry(&executable, &plugin_id).await?;
+            let registration = find_resource(&entry, &resource_type)?
+                .add
+                .iter()
+                .find(|method| method.id == method_id)
+                .is_some_and(|method| method.can_register);
+            if registration {
+                let value = self
+                    .worker(&entry, &executable)
+                    .await
+                    .invoke(
+                        "oauth.register",
+                        serde_json::json!({"resourceType":resource_type,"methodId":method_id,
+                        "session":session,"authorization":{"clientId":authorization.client_id}}),
+                        cancellation.clone(),
+                    )
+                    .await?;
+                if let Some(draft) = serde_json::from_value::<Option<ResourceDraft>>(value)? {
+                    if self
+                        .inner
+                        .state
+                        .resources(&plugin_id, &resource_type)
+                        .await?
+                        .iter()
+                        .any(|record| record.key == draft.key)
+                    {
+                        return Err(Error::Config(
+                            "This registration already exists; select it when signing in".into(),
+                        ));
+                    }
+                    self.inner
+                        .state
+                        .upsert_resources(&plugin_id, &resource_type, vec![draft])
+                        .await?;
+                }
+            }
             let value = self
                 .worker(&entry, &executable)
                 .await
@@ -367,17 +448,28 @@ impl PluginRegistry {
                         "methodId": method_id,
                         "session": session,
                         "authorization": {
-                            "code": code,
+                            "code": authorization.code,
+                            "clientId": authorization.client_id,
                             "redirectUri": redirect_uri,
                             "codeVerifier": code_verifier,
                         },
                     }),
-                    CancellationToken::new(),
+                    cancellation.clone(),
                 )
                 .await?;
             let resources: Vec<ResourceDraft> = serde_json::from_value(value)?;
-            self.persist_oauth_resources(&entry, &executable, &plugin_id, &resource_type, resources)
-                .await
+            if cancellation.is_cancelled() {
+                return Err(Error::Cancelled);
+            }
+            self.persist_oauth_resources(
+                &entry,
+                &executable,
+                &plugin_id,
+                &resource_type,
+                resources,
+                registration,
+            )
+            .await
         }
         .await;
 
@@ -408,12 +500,37 @@ impl PluginRegistry {
         plugin_id: &str,
         resource_type: &str,
         resources: Vec<ResourceDraft>,
+        select_account: bool,
     ) -> Result<OAuthPollResponse> {
+        let selected_key = if select_account {
+            if resources.len() != 1 {
+                return Err(Error::Protocol(
+                    "Registration must complete with one account".into(),
+                ));
+            }
+            Some(resources[0].key.clone())
+        } else {
+            None
+        };
         let outcome = self
             .inner
             .state
             .upsert_resources(plugin_id, resource_type, resources)
             .await?;
+        if let Some(key) = selected_key {
+            let record = self
+                .inner
+                .state
+                .resources(plugin_id, resource_type)
+                .await?
+                .into_iter()
+                .find(|record| record.key == key)
+                .ok_or_else(|| Error::Store("Authorized account was not saved".into()))?;
+            self.inner
+                .state
+                .select_resource(plugin_id, resource_type, &record.id)
+                .await?;
+        }
         let model_sync_error = self
             .sync_provider_models_for_resource(entry, executable, resource_type)
             .await;

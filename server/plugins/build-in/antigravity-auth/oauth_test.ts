@@ -42,6 +42,8 @@ Deno.test("authorization URL uses Core-owned state, callback, and PKCE challenge
       redirectUri: "http://127.0.0.1:51121/oauth-callback",
       state: "core-state",
       codeChallenge: "core-challenge",
+      hostId: "",
+      resource: null,
     },
     context([]),
   );
@@ -66,6 +68,7 @@ Deno.test("authorization completion exchanges the code with the Core PKCE verifi
       code: "authorization-code",
       redirectUri: "http://127.0.0.1:51121/oauth-callback",
       codeVerifier: "core-verifier",
+      clientId: null,
     },
     context(requests),
   );

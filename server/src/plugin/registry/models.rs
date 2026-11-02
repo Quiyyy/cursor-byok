@@ -65,7 +65,18 @@ impl PluginRegistry {
         let (plugin_id, provider_id, _) = parse_model_id(model_id)
             .ok_or_else(|| Error::Protocol("invalid plugin model ID".into()))?;
         let entry = self.find_entry(&self.executable()?, plugin_id).await?;
-        Ok(find_provider(&entry, provider_id)?.native_responses)
+        Ok(find_provider(&entry, provider_id)?
+            .native_responses
+            .supported())
+    }
+
+    pub async fn preserves_responses(&self, model_id: &str) -> Result<bool> {
+        let (plugin_id, provider_id, _) = parse_model_id(model_id)
+            .ok_or_else(|| Error::Protocol("invalid plugin model ID".into()))?;
+        let entry = self.find_entry(&self.executable()?, plugin_id).await?;
+        Ok(find_provider(&entry, provider_id)?
+            .native_responses
+            .always())
     }
 
     pub async fn sync_models(&self, plugin_id: &str, provider_id: &str) -> Result<usize> {

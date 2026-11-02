@@ -88,8 +88,13 @@ async fn generate_local(
         return Err(Error::Protocol("diffs are required".into()));
     }
     let model_id = settings.model_id.trim();
-    ensure_configured_model(registry, model_id).await?;
-    let invocation = build_invocation(&settings, model_id, build_user_content(&request, &diffs));
+    let max_output_tokens = commit_output_limit(registry, model_id).await?;
+    let invocation = build_invocation(
+        &settings,
+        model_id,
+        max_output_tokens,
+        build_user_content(&request, &diffs),
+    );
     let provider = registry.provider().clone();
     let generated = generate(
         provider,
@@ -111,16 +116,18 @@ async fn generate_local(
     Ok(response)
 }
 
-async fn ensure_configured_model(registry: &CursorServices, model_id: &str) -> Result<()> {
+async fn commit_output_limit(registry: &CursorServices, model_id: &str) -> Result<Option<u64>> {
     if model_id.starts_with(ADAPTER_ID_PREFIX) {
         let plugins = registry.plugins().ok_or_else(|| {
             Error::Provider(format!("commit plugin model {model_id} is unavailable"))
         })?;
-        plugins.model_descriptor(model_id).await?;
-        return Ok(());
+        let model = plugins.model_descriptor(model_id).await?;
+        return Ok(model
+            .supports_max_output_tokens
+            .then_some(COMMIT_MAX_OUTPUT_TOKENS));
     }
     if registry.store().model(model_id).await?.is_some() {
-        return Ok(());
+        return Ok(Some(COMMIT_MAX_OUTPUT_TOKENS));
     }
     Err(Error::Provider(format!(
         "commit model {model_id} is not configured; select a configured model in the commit settings"
@@ -130,6 +137,7 @@ async fn ensure_configured_model(registry: &CursorServices, model_id: &str) -> R
 fn build_invocation(
     settings: &CommitSettings,
     model_id: &str,
+    max_output_tokens: Option<u64>,
     user_content: String,
 ) -> ModelInvocation {
     let call_id = format!("commit-message-{}", uuid::Uuid::new_v4());
@@ -144,7 +152,7 @@ fn build_invocation(
                 tools: Vec::new(),
             },
             model: ModelSpec {
-                max_output_tokens: Some(COMMIT_MAX_OUTPUT_TOKENS),
+                max_output_tokens,
                 ..ModelSpec::new(model_id.to_owned())
             },
             history: vec![ProjectedMessage {

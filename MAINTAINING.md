@@ -45,6 +45,7 @@ node server/native-agent/build.mjs --check
 node --test server/native-agent/*.test.mjs
 deno test --config server/plugins/build-in/grok-auth/deno.json server/plugins/build-in/grok-auth/
 deno test --config server/plugins/build-in/codex-auth/deno.json server/plugins/build-in/codex-auth/
+deno test --config server/plugins/build-in/chatgpt-auth/deno.json server/plugins/build-in/chatgpt-auth/
 deno test --config server/plugins/build-in/antigravity-auth/deno.json server/plugins/build-in/antigravity-auth/
 deno test --import-map server/src/plugin/sdk/import-map.json server/src/plugin/sdk/oauth_test.ts
 ```

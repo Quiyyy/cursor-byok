@@ -1,6 +1,7 @@
 @use "../../styles/typography" as type;
 
 .root {
+  position: relative;
   width: fit-content;
   display: inline-flex;
   align-items: center;

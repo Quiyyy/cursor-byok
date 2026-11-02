@@ -17,8 +17,13 @@ use crate::{Error, Result};
 const CALLBACK_RESPONSE_TIMEOUT: Duration = Duration::from_secs(120);
 
 pub(super) struct CallbackRequest {
-    pub result: std::result::Result<String, String>,
+    pub result: std::result::Result<AuthorizationCode, String>,
     pub response: oneshot::Sender<CallbackOutcome>,
+}
+
+pub(super) struct AuthorizationCode {
+    pub code: String,
+    pub client_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -52,6 +57,7 @@ struct CallbackState {
 #[derive(Deserialize)]
 struct CallbackQuery {
     code: Option<String>,
+    client_id: Option<String>,
     state: Option<String>,
     error: Option<String>,
     error_description: Option<String>,
@@ -123,8 +129,14 @@ async fn handle_callback(
         ));
     }
 
-    let result = match query.code.filter(|code| !code.trim().is_empty()) {
-        Some(code) => Ok(code),
+    let result = match query
+        .code
+        .filter(|code| !code.trim().is_empty() && query.error.is_none())
+    {
+        Some(code) => Ok(AuthorizationCode {
+            code,
+            client_id: query.client_id,
+        }),
         None => Err(query.error_description.or(query.error).unwrap_or_else(|| {
             localized(locale, "授权被取消。", "Authorization was cancelled.").to_owned()
         })),
@@ -325,7 +337,9 @@ mod tests {
         let redirect_uri = callback.redirect_uri.clone();
         let browser = tokio::spawn(async move {
             client
-                .get(format!("{redirect_uri}?state=expected&code=accepted"))
+                .get(format!(
+                    "{redirect_uri}?state=expected&code=accepted&client_id=oaiapp_registered"
+                ))
                 .send()
                 .await
                 .unwrap()
@@ -334,7 +348,12 @@ mod tests {
                 .unwrap()
         });
         let request = (&mut callback.receiver).await.unwrap();
-        assert_eq!(request.result.unwrap(), "accepted");
+        let authorization = request.result.unwrap();
+        assert_eq!(authorization.code, "accepted");
+        assert_eq!(
+            authorization.client_id.as_deref(),
+            Some("oaiapp_registered")
+        );
         request
             .response
             .send(CallbackOutcome {

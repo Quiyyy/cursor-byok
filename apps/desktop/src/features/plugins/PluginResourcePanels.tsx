@@ -46,15 +46,17 @@ function ResourceAddSection({ plugin, resource, onConfigured }: {
       key={method.id}
       pluginId={plugin.id}
       resourceType={resource.type}
+      resources={resource.resources}
       method={method}
       onConfigured={onConfigured}
     />)}
   </>;
 }
 
-function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
+function OAuthMethodCard({ pluginId, resourceType, resources, method, onConfigured }: {
   pluginId: string;
   resourceType: string;
+  resources: PluginResourceView[];
   method: PluginAddMethod;
   onConfigured: (syncError?: string) => void;
 }) {
@@ -63,6 +65,7 @@ function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
   const [begun, setBegun] = useState<PluginOAuthBegin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [resourceId, setResourceId] = useState("");
   const stopped = useRef(false);
 
   const copyCode = async (code: string) => {
@@ -75,6 +78,11 @@ function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
     stopped.current = false;
     return () => { stopped.current = true; };
   }, []);
+
+  useEffect(() => {
+    if (!begun) return;
+    return () => { void api.pluginOAuthCancel(begun.sessionId).catch(() => undefined); };
+  }, [begun]);
 
   useEffect(() => {
     if (!begun || status !== "polling") return;
@@ -98,6 +106,7 @@ function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
         }
         setStatus("error");
         setError(result.message || t("授权被拒绝或已失败。"));
+        await pluginsStore.refreshPlugins();
       } catch (cause) {
         if (stopped.current || controller.signal.aborted) return;
         setError(errorText(cause));
@@ -112,8 +121,8 @@ function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
     setStatus("starting");
     setError(null);
     try {
-      const next = await api.pluginOAuthBegin(pluginId, resourceType, method.id);
-      if (stopped.current) return;
+      const next = await api.pluginOAuthBegin(pluginId, resourceType, method.id, resourceId || undefined);
+      if (stopped.current) { await api.pluginOAuthCancel(next.sessionId); return; }
       setBegun(next);
       setStatus("polling");
       if (next.userCode) await api.copyCursorText(next.userCode).catch(() => undefined);
@@ -128,6 +137,13 @@ function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
   return <Card className={styles.methodCard}>
     <strong>{pluginText(method.displayName, locale)}</strong>
     {method.description && <span>{pluginText(method.description, locale)}</span>}
+    {method.canRegister && resources.length > 0 && <Select
+      ariaLabel={t("授权账号")}
+      value={resourceId}
+      disabled={status === "starting" || status === "polling"}
+      onChange={setResourceId}
+      options={[{ value: "", label: t("添加另一个账号或工作区") }, ...resources.map(item => ({ value: item.id, label: item.displayName }))]}
+    />}
     {userCode && status === "polling" && <div className={styles.deviceCode}>
       <small>{t("设备验证码")}</small>
       <button type="button" onClick={() => void copyCode(userCode)}>{userCode}</button>
@@ -137,9 +153,10 @@ function OAuthMethodCard({ pluginId, resourceType, method, onConfigured }: {
     </div>}
     <div className={styles.actions}>
       <Button variant="primary" disabled={status === "starting" || status === "polling"} onClick={() => void start()}>
-        {status === "starting" ? t("正在申请授权码…") : status === "polling" ? t("等待网页端确认授权中…") : t("开始登录")}
+        {status === "starting" ? t("正在申请授权码…") : status === "polling" ? t("等待网页端确认授权中…") : method.canRegister ? pluginText(method.displayName, locale) : t("开始登录")}
       </Button>
       {begun && status === "polling" && <Button onClick={() => void api.openExternalUrl(begun.verificationUrlComplete || begun.verificationUrl)}>{t("打开授权网页")}</Button>}
+      {begun && status === "polling" && <Button onClick={() => { setStatus("idle"); setBegun(null); }}>{t("取消")}</Button>}
     </div>
     {status === "success" && <span className={styles.success}>{t("账号已保存，模型目录已同步。")}</span>}
     {error && <span className={styles.error} role="alert">{error}</span>}
@@ -304,12 +321,14 @@ function ResourceRow({ item, actions, canRefresh, disabled, onAction, onRefresh,
   return <Card className={styles.resourceRow}>
     <div>
       <div className={styles.resourceIdentity}><strong title={item.displayName}>{item.displayName}</strong><StateBadge state={item.state} /></div>
+      {item.selected && <small>{t("当前账号")}</small>}
       {item.description && <span>{pluginText(item.description, locale)}</span>}
       {item.metrics.map((metric) => <span key={metric.id}>
         {metric.unit === "percent"
           ? t("{label} 剩余 {percent}%", { label: pluginText(metric.label, locale), percent: Math.round(metric.value) })
           : `${pluginText(metric.label, locale)}: ${metric.value}`}
       </span>)}
+      {item.links?.map(link => <Button key={link.url} size="small" onClick={() => void api.openExternalUrl(link.url)}>{pluginText(link.label, locale)}</Button>)}
     </div>
     <div className={styles.actions}>
       {confirmRemove ? <>
@@ -344,7 +363,7 @@ function ResourceActionModal({ action, cardAction, result, busy, error, onClose,
         {result?.description && <span className={styles.actionDescription}>{pluginText(result.description, locale)}</span>}
         {busy && <span className={styles.empty}>{t("正在加载…")}</span>}
         {error && <span className={styles.error} role="alert">{error}</span>}
-        {!busy && !error && result && result.cards.length === 0 && <span className={styles.empty}>{t("没有可用的重置卡。")}</span>}
+        {!busy && !error && result && !result.description && result.cards.length === 0 && <span className={styles.empty}>{t("没有可用的重置卡。")}</span>}
         {!busy && !error && result && <div className={styles.actionCardList}>
         {result.cards.map((card) => <Card key={card.id} className={styles.actionCard}>
           <div className={styles.actionCardMain}>

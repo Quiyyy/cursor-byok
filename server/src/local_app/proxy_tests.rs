@@ -252,19 +252,11 @@ impl Drop for Fixture {
 
 #[derive(Clone)]
 struct LogBuffer(Arc<std::sync::Mutex<Vec<u8>>>);
-impl Write for LogBuffer {
-    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        self.0.lock().unwrap().extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
 
-impl tracing::field::Visit for LogBuffer {
+struct EventFields(Vec<u8>);
+impl tracing::field::Visit for EventFields {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        let _ = write!(self, "{}={value:?} ", field.name());
+        let _ = write!(self.0, "{}={value:?} ", field.name());
     }
 }
 
@@ -272,11 +264,42 @@ struct CaptureEvents(LogBuffer);
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for CaptureEvents {
     fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
         if event.metadata().target().starts_with("cursor_server") {
-            let mut buffer = self.0.clone();
+            let mut buffer = EventFields(Vec::new());
             event.record(&mut buffer);
-            let _ = buffer.write_all(b"\n");
+            buffer.0.push(b'\n');
+            self.0 .0.lock().unwrap().extend_from_slice(&buffer.0);
         }
     }
+}
+
+#[test]
+fn concurrent_log_events_remain_separate() {
+    struct SplitValue(Arc<std::sync::Barrier>);
+    impl std::fmt::Debug for SplitValue {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("begin")?;
+            self.0.wait();
+            f.write_str("end")
+        }
+    }
+    let logs = LogBuffer(Arc::new(std::sync::Mutex::new(Vec::new())));
+    let dispatch =
+        tracing::Dispatch::new(tracing_subscriber::registry().with(CaptureEvents(logs.clone())));
+    let barrier = Arc::new(std::sync::Barrier::new(2));
+    std::thread::scope(|scope| {
+        for _ in 0..2 {
+            let (dispatch, barrier) = (dispatch.clone(), barrier.clone());
+            scope.spawn(move || {
+                tracing::dispatcher::with_default(&dispatch, || {
+                    tracing::info!(probe = ?SplitValue(barrier));
+                });
+            });
+        }
+    });
+    assert_eq!(
+        String::from_utf8(logs.0.lock().unwrap().clone()).unwrap(),
+        "probe=beginend \nprobe=beginend \n"
+    );
 }
 
 #[tokio::test]

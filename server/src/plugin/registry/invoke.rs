@@ -17,7 +17,7 @@ impl PluginRegistry {
             let executable = registry.executable()?;
             let entry = registry.find_entry(&executable, &plugin_id).await?;
             let provider = find_provider(&entry, &provider_id)?.clone();
-            if invocation.request.native_responses.is_some() && !provider.native_responses {
+            if invocation.request.native_responses.is_some() && !provider.native_responses.supported() {
                 Err(Error::Protocol("this account provider does not support native Responses tools".into()))?;
             }
             let stored = registry.inner.state.models(&plugin_id, &provider_id).await?

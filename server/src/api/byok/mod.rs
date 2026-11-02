@@ -237,7 +237,28 @@ async fn invoke(
             Err(error) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, error),
         }
     }
-    let parsed = match protocol::parse(protocol, &body) {
+    let preserve = if model
+        .internal_id
+        .starts_with(crate::plugin::ADAPTER_ID_PREFIX)
+    {
+        match state.plugins.preserves_responses(&model.internal_id).await {
+            Ok(value) => value,
+            Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
+        }
+    } else {
+        false
+    };
+    if preserve && !matches!(protocol, Protocol::Responses) {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "This account connection requires the Responses API; use /v1/responses",
+        );
+    }
+    let parsed = match if preserve {
+        protocol::parse_raw_responses(&body)
+    } else {
+        protocol::parse(protocol, &body)
+    } {
         Ok(parsed) => parsed,
         Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
     };

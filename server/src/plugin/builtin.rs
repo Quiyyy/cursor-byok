@@ -175,7 +175,47 @@ const ANTIGRAVITY_AUTH: &[(&str, &str)] = &[
     ),
 ];
 
+const CHATGPT_AUTH: &[(&str, &str)] = &[
+    (
+        "plugin.json",
+        include_str!("../../plugins/build-in/chatgpt-auth/plugin.json"),
+    ),
+    (
+        "main.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/main.ts"),
+    ),
+    (
+        "auth.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/auth.ts"),
+    ),
+    (
+        "oauth.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/oauth.ts"),
+    ),
+    (
+        "resources.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/resources.ts"),
+    ),
+    (
+        "models.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/models.ts"),
+    ),
+    (
+        "request.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/request.ts"),
+    ),
+    (
+        "provider.ts",
+        include_str!("../../plugins/build-in/chatgpt-auth/provider.ts"),
+    ),
+    (
+        "icon.svg",
+        include_str!("../../plugins/build-in/chatgpt-auth/icon.svg"),
+    ),
+];
+
 const PLUGINS: &[(&str, &[(&str, &str)])] = &[
+    ("chatgpt-auth", CHATGPT_AUTH),
     ("codex-auth", CODEX_AUTH),
     ("grok-auth", GROK_AUTH),
     ("antigravity-auth", ANTIGRAVITY_AUTH),
@@ -276,6 +316,7 @@ mod tests {
             ("codex-auth", "0.1.11"),
             ("grok-auth", "0.1.12"),
             ("antigravity-auth", "0.1.11"),
+            ("chatgpt-auth", "0.1.0"),
         ] {
             let directory = root.path().join(name);
             std::fs::create_dir_all(&directory).unwrap();
@@ -299,6 +340,11 @@ mod tests {
             std::fs::read_to_string(root.path().join("codex-auth/provider.ts"))
                 .unwrap()
                 .contains("supportsFast: true")
+        );
+        assert!(
+            std::fs::read_to_string(root.path().join("chatgpt-auth/provider.ts"))
+                .unwrap()
+                .contains("supportsMaxOutputTokens: false")
         );
     }
 
