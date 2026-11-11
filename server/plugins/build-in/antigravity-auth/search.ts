@@ -34,10 +34,20 @@ export class GeminiSearch {
       "max_output_tokens",
       "include",
       "store",
+      "reasoning",
     ]);
     for (const key of Object.keys(request)) {
       if (!allowed.has(key)) {
         throw new Error(`Gemini WebSearch does not support Responses field: ${key}`);
+      }
+    }
+    if (request.reasoning !== undefined) {
+      const reasoning = object(request.reasoning);
+      if (
+        !reasoning || Object.keys(reasoning).some((key) => key !== "effort") ||
+        (reasoning.effort !== undefined && typeof reasoning.effort !== "string")
+      ) {
+        throw new Error("Gemini WebSearch supports only reasoning.effort");
       }
     }
     if (typeof request.input !== "string" || !request.input.trim()) {

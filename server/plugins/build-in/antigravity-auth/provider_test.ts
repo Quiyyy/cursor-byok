@@ -59,7 +59,7 @@ function request(): LlmRequest {
     instructions: "You are an AI coding assistant.",
     messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
     tools: [],
-    reasoning: { enabled: true, effort: "medium" },
+    reasoning: { enabled: true, effort: null },
     latency: "standard",
     maxOutputTokens: 65536,
     cacheKey: "conv-1",
@@ -80,6 +80,91 @@ function searchInput(): LlmRequest {
   };
 }
 
+Deno.test("Google resolves selectable efforts to discovered IDs for generation and search", async () => {
+  const [model] = parseAntigravityModels({
+    models: {
+      "gemini-test-high": {
+        displayName: "Gemini Test (High)",
+        supportsThinking: true,
+        thinkingLevel: 3,
+        maxOutputTokens: 64000,
+      },
+      "gemini-test-low": {
+        displayName: "Gemini Test (Low)",
+        supportsThinking: true,
+        thinkingLevel: 1,
+        maxOutputTokens: 32000,
+      },
+    },
+    agentModelSorts: [{ groups: [{ modelIds: ["gemini-test-high", "gemini-test-low"] }] }],
+  });
+  for (const search of [false, true]) {
+    for (const effort of [null, "low", "high"]) {
+      const req = search ? searchInput() : request();
+      req.reasoning = { enabled: true, effort };
+      req.maxOutputTokens = 40000;
+      if (req.nativeResponses) {
+        req.nativeResponses.max_output_tokens = 40000;
+        if (effort) req.nativeResponses.reasoning = { effort };
+      }
+      const events: ModelEvent[] = [];
+      const before = JSON.stringify(req);
+      const result = await antigravityProvider.invoke(
+        { model, resource: searchResource(), request: req },
+        { emit: (e) => events.push(e) },
+        context({
+          stream: (_url, init) => {
+            const sent = JSON.parse(init?.body ?? "{}");
+            assertEquals(sent.model, effort === "low" ? "gemini-test-low" : "gemini-test-high");
+            assertEquals(
+              sent.request.generationConfig.maxOutputTokens,
+              effort === "low" ? 32000 : 40000,
+            );
+            return {
+              status: 200,
+              headers: {},
+              lines: sse([
+                'data: {"response":{"candidates":[{"content":{"parts":[{"text":"OK"}]},"groundingMetadata":{"webSearchQueries":["query"]},"finishReason":"STOP"}]}}',
+              ]),
+            };
+          },
+        }),
+      );
+      assertEquals(result.status, "completed");
+      assertEquals(JSON.stringify(req), before);
+      if (search) {
+        const complete = events.find((e) =>
+          e.type === "responses-event" &&
+          (e.event as Record<string, JsonValue>).type === "response.completed"
+        );
+        assert(complete?.type === "responses-event");
+        assertEquals(
+          ((complete.event as Record<string, JsonValue>).response as Record<string, JsonValue>)
+            .model,
+          "gemini-test",
+        );
+      }
+    }
+  }
+  for (const effort of ["medium", "xhigh", "none"]) {
+    const req = request();
+    req.reasoning.effort = effort;
+    let calls = 0;
+    const result = await antigravityProvider.invoke(
+      { model, resource: searchResource(), request: req },
+      { emit() {} },
+      context({
+        stream: () => {
+          calls++;
+          throw new Error("must not call upstream");
+        },
+      }),
+    );
+    assertEquals(result.status, "request-error");
+    assertEquals(calls, 0);
+  }
+});
+
 Deno.test("Google generation uses each upstream catalog ID without legacy alias rewriting", async () => {
   for (
     const id of [
@@ -88,9 +173,14 @@ Deno.test("Google generation uses each upstream catalog ID without legacy alias 
       "gemini-2.5-flash-lite",
       "claude-3-7-sonnet",
       "gpt-4o",
+      "gemini-4-carbon-medium",
+      "gemini-4-argon-high",
     ]
   ) {
-    const [model] = parseAntigravityModels({ models: { [id]: { displayName: id } } });
+    const [model] = parseAntigravityModels({
+      models: { [id]: { displayName: id } },
+      agentModelSorts: [{ groups: [{ modelIds: [id] }] }],
+    });
     const result = await antigravityProvider.invoke(
       { model, resource: searchResource(), request: request() },
       { emit() {} },
@@ -113,7 +203,10 @@ Deno.test("Google generation uses each upstream catalog ID without legacy alias 
 
 Deno.test("Gemini search uses the exact upstream model ID", async () => {
   const id = "gemini-3-flash", events: ModelEvent[] = [];
-  const [model] = parseAntigravityModels({ models: { [id]: {} } });
+  const [model] = parseAntigravityModels({
+    models: { [id]: {} },
+    agentModelSorts: [{ groups: [{ modelIds: [id] }] }],
+  });
   const result = await antigravityProvider.invoke(
     { model, resource: searchResource(), request: searchInput() },
     {

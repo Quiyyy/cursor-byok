@@ -5,6 +5,41 @@ import { createServer } from "vite";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+test("plugin catalog refresh loads context controls for newly synchronized or enabled models", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  globalThis.window = { location: {protocol:"http:",hostname:"127.0.0.1"} };
+  const id = "plugin:google/antigravity/gemini-4-carbon";
+  let enabled = false;
+  const requests = [];
+  globalThis.fetch = async (url) => {
+    const path = new URL(String(url), "http://127.0.0.1").pathname.replace("/__byok-api__/api", "");
+    requests.push(path);
+    if (path === "/plugins") return Response.json([{id:"google",providers:[{id:"antigravity",models:enabled?[{id,enabled:true}]:[]}]}]);
+    if (path === "/model-settings") return Response.json(enabled ? {[id]:{context_window_tokens:null,default_context_window_tokens:1048576}} : {});
+    throw new Error(`Unexpected request: ${path}`);
+  };
+  const server = await createServer({root:fileURLToPath(new URL("../",import.meta.url)),configFile:false,server:{middlewareMode:true,watch:null},appType:"custom"});
+  try {
+    const {pluginsStore} = await server.ssrLoadModule("/src/features/plugins/state.ts");
+    const {modelsStore} = await server.ssrLoadModule("/src/features/models/state.ts");
+    await pluginsStore.refreshPlugins();
+    assert.equal(modelsStore.getSnapshot().modelSettings[id], undefined);
+    enabled = true;
+    await pluginsStore.refreshPlugins();
+    assert.equal(pluginsStore.getSnapshot().plugins[0].providers[0].models[0].id,id);
+    assert.equal(modelsStore.getSnapshot().modelSettings[id]?.default_context_window_tokens,1048576);
+    enabled = false;
+    await pluginsStore.refreshPlugins();
+    assert.equal(modelsStore.getSnapshot().modelSettings[id],undefined);
+    assert(requests.every(path=>["/plugins","/model-settings"].includes(path)));
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.window = originalWindow;
+    await server.close();
+  }
+});
+
 test("feature failures are isolated and model mutations never query takeover", async () => {
   const originals = Object.fromEntries(["fetch","localStorage","window","document","t"].map(key=>[key,globalThis[key]]));
   const timers = new Set();

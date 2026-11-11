@@ -1,6 +1,7 @@
 import { api } from "../../shared/api";
 import { createStore } from "../../shared/store/createStore";
 import type { PluginDescriptor, PluginRuntimeStatus } from "../../shared/api";
+import { modelsStore } from "../models/state";
 type PluginsState = {
   plugins: PluginDescriptor[];
   pluginRuntime: PluginRuntimeStatus | null;
@@ -63,10 +64,7 @@ export const pluginsStore = {
         pluginRuntime
       });
       if (!wasReady && pluginRuntime.state === "ready") {
-        const plugins = await api.plugins();
-        update({
-          plugins
-        });
+        await pluginsStore.refreshPlugins();
       }
       return pluginRuntime;
     } catch (cause) {
@@ -92,8 +90,10 @@ export const pluginsStore = {
   },
   async refreshPlugins() {
     try {
+      const plugins = await api.plugins();
+      await modelsStore.refreshModelSettings();
       update({
-        plugins: await api.plugins()
+        plugins
       });
     } catch (cause) {
       update({
@@ -104,9 +104,7 @@ export const pluginsStore = {
   async removePluginConfiguration(pluginId: string) {
     await perform(async () => {
       await api.removePluginConfiguration(pluginId);
-      update({
-        plugins: await api.plugins()
-      });
+      await pluginsStore.refreshPlugins();
     });
   }
 };
