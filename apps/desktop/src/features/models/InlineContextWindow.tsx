@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Button } from "../../shared/ui/Button";
 import { TextInput } from "../../shared/ui/FormControls";
 import { Select } from "../../shared/ui/Select";
+import { formatCompactInteger } from "../../shared/utils/numberFormat";
 import styles from "./InlineContextWindow.module.scss";
 
 const PRESETS = [128000, 200000, 256000, 500000, 1000000];
-const format = (n: number) => n >= 1000000 ? `${n / 1000000}m` : `${n / 1000}k`;
+const format = (n: number) => formatCompactInteger(n).toLowerCase();
 
 export function InlineContextWindow({ value, defaultTokens, disabled, onChange }: {
   value: number | null;

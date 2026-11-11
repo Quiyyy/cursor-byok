@@ -36,6 +36,11 @@ async function perform(task: () => Promise<void>) {
 }
 export const modelsStore = {
   getSnapshot: state.getSnapshot,
+  async refreshModelSettings() {
+    await perform(async () => {
+      update({ modelSettings: await api.allModelSettings() });
+    });
+  },
   async refresh() {
     const previousDefault = state.getSnapshot().cursorModelSettings;
     update({

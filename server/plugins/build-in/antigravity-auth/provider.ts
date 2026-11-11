@@ -15,6 +15,7 @@ import {
   ANTIGRAVITY_ENDPOINTS,
   ANTIGRAVITY_USER_AGENT,
   antigravityModels,
+  resolveAntigravityModel,
 } from "./models.ts";
 import { type AccountData, accountData, quotaExhaustedPatch, RESOURCE_TYPE } from "./resources.ts";
 
@@ -241,14 +242,14 @@ function convertToCloudCodeContents(
 async function streamCloudCode(
   accessToken: string,
   projectId: string,
-  modelId: string,
+  selectedModel: { id: string; maxOutputTokens: number },
   input: ProviderInvokeInput,
   output: ProviderOutput,
   context: PluginContext,
 ): Promise<void> {
-  const actualModel = modelId;
+  const actualModel = selectedModel.id;
   const search = input.request.nativeResponses
-    ? new GeminiSearch(input.request.nativeResponses, actualModel)
+    ? new GeminiSearch(input.request.nativeResponses, input.model.id)
     : undefined;
   const { contents, systemInstruction } = convertToCloudCodeContents(
     search ? search.instructions : input.request.instructions,
@@ -290,7 +291,10 @@ async function streamCloudCode(
       ...(tools ? { tools } : {}),
       ...(toolConfig ? { toolConfig } : {}),
       generationConfig: {
-        maxOutputTokens: search?.maxOutputTokens ?? 65536,
+        maxOutputTokens: Math.min(
+          search?.maxOutputTokens ?? input.request.maxOutputTokens ?? selectedModel.maxOutputTokens,
+          selectedModel.maxOutputTokens,
+        ),
       },
     },
   };
@@ -586,7 +590,8 @@ async function invoke(
   const projectId = data.projectId ?? "bamboo-precept-lgxtn";
 
   try {
-    await streamCloudCode(data.accessToken, projectId, input.model.id, input, output, context);
+    const selectedModel = resolveAntigravityModel(input.model, input.request.reasoning.effort);
+    await streamCloudCode(data.accessToken, projectId, selectedModel, input, output, context);
     return { status: "completed" };
   } catch (error) {
     if (error instanceof HttpError) {

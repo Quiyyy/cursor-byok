@@ -315,7 +315,7 @@ mod tests {
         for (name, version) in [
             ("codex-auth", "0.1.11"),
             ("grok-auth", "0.1.12"),
-            ("antigravity-auth", "0.1.11"),
+            ("antigravity-auth", "0.1.12"),
             ("chatgpt-auth", "0.1.0"),
         ] {
             let directory = root.path().join(name);
@@ -336,6 +336,14 @@ mod tests {
             );
         }
         assert!(root.path().join("antigravity-auth/search.ts").is_file());
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("antigravity-auth/models.ts")).unwrap(),
+            ANTIGRAVITY_AUTH
+                .iter()
+                .find(|(name, _)| *name == "models.ts")
+                .unwrap()
+                .1
+        );
         assert!(
             std::fs::read_to_string(root.path().join("codex-auth/provider.ts"))
                 .unwrap()
