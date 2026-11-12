@@ -65,10 +65,24 @@ export const modelsStore = {
     }
   },
   async deleteModel(modelHash: string) {
-    await perform(async () => {
+    update({
+      saving: true,
+      error: null
+    });
+    try {
       await api.deleteModel(modelHash);
       await modelsStore.refresh();
-    });
+      return true;
+    } catch (cause) {
+      update({
+        error: cause instanceof Error ? cause.message : String(cause)
+      });
+      return false;
+    } finally {
+      update({
+        saving: false
+      });
+    }
   },
   async setModelContext(id: string, context_window_tokens: number | null) {
     if (state.getSnapshot().savingModelSettings.has(id)) return false;

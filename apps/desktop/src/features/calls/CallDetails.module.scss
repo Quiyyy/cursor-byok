@@ -2,7 +2,17 @@
 
 .root {
   section { min-width: 0; }
-  h4 { margin: 12px 0 6px; color: var(--vscode-descriptionForeground); font-size: type.$font-size-xs; font-weight: 500; }
+  h4 { margin: 12px 0 6px; color: var(--vscode-descriptionForeground); font-size: type.$font-size-xs; font-weight: 600; }
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.group {
+  h4 { margin: 0 0 6px; }
 }
 
 .details {
@@ -15,10 +25,14 @@
   background: var(--vscode-sideBar-border);
   border-radius: 6px;
 
+  @media (max-width: 680px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   > div {
     min-width: 0;
     display: grid;
-    grid-template-columns: 132px minmax(0, 1fr);
+    grid-template-columns: 124px minmax(0, 1fr);
     gap: 10px;
     padding: 8px 10px;
     background: var(--vscode-editorWidget-background);
@@ -35,4 +49,14 @@
 .empty {
   color: var(--vscode-descriptionForeground);
   font-size: type.$font-size-xs;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px;
+  border: 1px dashed var(--vscode-sideBar-border);
+  border-radius: 6px;
 }

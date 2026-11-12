@@ -70,10 +70,12 @@ export const cursorStore = {
       update({
         cursorHarness: await api.setCursorEnabled(enabled)
       });
+      return true;
     } catch (cause) {
       update({
         error: cause instanceof Error ? cause.message : String(cause)
       });
+      return false;
     } finally {
       update({
         cursorBusy: false

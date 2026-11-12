@@ -18,7 +18,7 @@ import { Select } from "../../shared/ui/Select";
 import styles from "./PluginManagementPage.module.scss";
 
 export function PluginManagementPage() {
-  const { pluginRuntime, plugins } = usePluginsStore();
+  const { pluginRuntime, plugins, busy, error } = usePluginsStore();
   const { locale } = useI18n();
   const message = useMessage();
   const [progressOpen, setProgressOpen] = useState(false);
@@ -76,6 +76,8 @@ export function PluginManagementPage() {
     setStarting(false);
     if (!status) {
       setProgressOpen(false);
+      const failure = pluginsStore.getSnapshot().error;
+      if (failure) message(failure, { duration: 5000 });
     } else if (cancelRequested.current && status.state === "initializing") {
       void pluginsStore.cancelPluginRuntimeInitialization();
     }
@@ -111,10 +113,21 @@ export function PluginManagementPage() {
     <PageContent
       title={t("账号连接")}
       sections={pluginRuntime?.state !== "ready"
-        ? [{ key: "runtime", estimatedHeight: 250, content: <RuntimeGate status={pluginRuntime} starting={starting} onInitialize={() => void initialize()} /> }]
+        ? [{ key: "runtime", estimatedHeight: 250, content: <RuntimeGate status={pluginRuntime} error={error} starting={starting} onInitialize={() => void initialize()} /> }]
         : visiblePlugins.length
           ? visiblePlugins.map((plugin) => ({ key: plugin.id, estimatedHeight: 96, content: <PluginCard plugin={plugin} onOpen={(pluginId, mode) => setSelected({ pluginId, mode })} /> }))
-          : [{ key: "empty", estimatedHeight: 180, content: <div className={styles.empty}><strong>{plugins.length ? t("没有匹配的服务或账号") : t("还没有安装插件")}</strong>{plugins.length > 0 && <Button onClick={() => { setQuery(""); setFilter("all"); }}>{t("清除筛选")}</Button>}</div> }]}
+          : [{ key: "empty", estimatedHeight: 180, content: <div className={styles.empty}>
+            {plugins.length === 0 && busy ? <strong>{t("正在加载服务列表…")}</strong>
+              : plugins.length === 0 && error ? <>
+                <strong>{t("加载服务列表失败")}</strong>
+                <span>{error}</span>
+                <Button variant="primary" onClick={() => void pluginsStore.refresh()}>{t("重试")}</Button>
+              </>
+              : <>
+                <strong>{plugins.length ? t("没有匹配的服务或账号") : t("还没有安装插件")}</strong>
+                {plugins.length > 0 && <Button onClick={() => { setQuery(""); setFilter("all"); }}>{t("清除筛选")}</Button>}
+              </>}
+          </div> }]}
     />
     <RuntimeProgressModal
       open={progressOpen}
@@ -142,10 +155,10 @@ export function PluginManagementPage() {
   </>;
 }
 
-function RuntimeGate({ status, starting, onInitialize }: { status: PluginRuntimeStatus | null; starting: boolean; onInitialize: () => void }) {
-  const checking = status === null;
+function RuntimeGate({ status, error, starting, onInitialize }: { status: PluginRuntimeStatus | null; error: string | null; starting: boolean; onInitialize: () => void }) {
+  const checking = status === null && !error;
   const initializing = starting || status?.state === "initializing";
-  const failed = status?.state === "failed";
+  const failed = status?.state === "failed" || (status === null && Boolean(error));
   const unsupported = status?.state === "unsupported";
   const title = checking
     ? t("正在检查插件运行时")
@@ -155,7 +168,7 @@ function RuntimeGate({ status, starting, onInitialize }: { status: PluginRuntime
         ? t("当前系统不支持插件运行时")
         : t("准备账号连接");
   const description = failed
-    ? t("请重试初始化")
+    ? status?.error || error || t("请重试初始化")
     : unsupported
       ? status.error ?? t("当前操作系统或 CPU 架构暂不受支持")
       : t("首次使用需下载运行组件。");
@@ -338,7 +351,7 @@ function RuntimeProgressModal({ open, status, starting, onClose }: { open: boole
           {total ? t("已下载 {downloaded} / {total}", { downloaded: formatBytes(downloaded), total: formatBytes(total) }) : t("已下载 {downloaded}", { downloaded: formatBytes(downloaded) })}
         </span>
       </>}
-      {status?.state === "failed" && <span className={styles.error}>{t("请重试初始化")}</span>}
+      {status?.state === "failed" && <span className={styles.error}>{status.error || t("请重试初始化")}</span>}
       {status?.state === "ready" && <span>{t("插件运行时 {version} 已安装，可以开始使用插件。", { version: status.version })}</span>}
     </div>
   </Modal>;

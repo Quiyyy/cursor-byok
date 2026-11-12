@@ -39,9 +39,12 @@ function focusableElements(root: HTMLElement) {
     .filter((element) => element.getClientRects().length > 0);
 }
 
+let openModalCount = 0;
+
 export function Modal({ id, open, title, children, banner, busy, wide, compact, fullHeight, role = "dialog", ariaDescribedBy, initialFocus = "first", onClose, onSubmit, secondaryAction, closeLabel = t("取消"), submitLabel = t("保存"), submitDisabled = false }: ModalProps) {
   const dialog = useRef<HTMLDivElement>(null);
   const submitButton = useRef<HTMLButtonElement>(null);
+  const backdropPressed = useRef(false);
   const closeRef = useRef(onClose);
   const busyRef = useRef(Boolean(busy));
   const titleId = useId();
@@ -49,6 +52,10 @@ export function Modal({ id, open, title, children, banner, busy, wide, compact, 
   busyRef.current = Boolean(busy);
   useEffect(() => {
     if (!open) return;
+    openModalCount += 1;
+    if (typeof document !== "undefined") {
+      document.getElementById("root")?.setAttribute("inert", "");
+    }
     const previous = document.activeElement as HTMLElement | null;
     const onKey = (event: KeyboardEvent) => {
       // Only the top dialog owns keyboard dismissal and focus trapping.
@@ -87,18 +94,31 @@ export function Modal({ id, open, title, children, banner, busy, wide, compact, 
     return () => {
       cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", onKey);
+      openModalCount = Math.max(0, openModalCount - 1);
+      if (openModalCount === 0 && typeof document !== "undefined") {
+        document.getElementById("root")?.removeAttribute("inert");
+      }
       if (previous && document.contains(previous)) previous.focus();
     };
   }, [initialFocus, open]);
   if (!open) return null;
-  return createPortal(<div className={styles.mask}>
+  return createPortal(<div
+    className={styles.mask}
+    onMouseDown={(event) => { backdropPressed.current = event.target === event.currentTarget; }}
+    onClick={(event) => {
+      if (backdropPressed.current && event.target === event.currentTarget && !busy && !onSubmit && role !== "alertdialog") {
+        onClose();
+      }
+      backdropPressed.current = false;
+    }}
+  >
     <div className={styles.dragLayer} data-tauri-drag-region aria-hidden="true" />
     <div id={id} ref={dialog} className={[styles.dialog, wide && styles.wide, compact && styles.compact, fullHeight && styles.fullHeight].filter(Boolean).join(" ")} role={role} aria-modal="true" aria-labelledby={titleId} aria-describedby={ariaDescribedBy} tabIndex={-1}>
       <header id={titleId}>{title}</header>
       {banner && <div className={styles.banner}>{banner}</div>}
       <ScrollableContent alwaysShowVertical className={styles.body} contentClassName={styles.bodyContent}>{children}</ScrollableContent>
       <footer>
-        <button type="button" className={onSubmit || secondaryAction ? controls.secondary : controls.primary} disabled={busy} onClick={onClose}>{closeLabel}</button>
+        <button type="button" className={controls.secondary} disabled={busy} onClick={onClose}>{closeLabel}</button>
         {secondaryAction}
         {onSubmit && <button ref={submitButton} type="button" className={controls.primary} disabled={busy || submitDisabled} onClick={onSubmit}>{busy ? t("处理中…") : submitLabel}</button>}
       </footer>

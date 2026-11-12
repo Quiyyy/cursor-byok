@@ -84,7 +84,7 @@ export function DailyTokenUsageChart({
   const option = useMemo<EChartsCoreOption>(() => ({
     animationDuration: 450,
     animationEasing: "cubicOut",
-    grid: { top: 44, right: 12, bottom: 30, left: 64 },
+    grid: { top: 54, right: 12, bottom: 30, left: 64 },
     legend: { top: 0, left: 0, textStyle: { color: axisColor }, itemWidth: 10, itemHeight: 10 },
     tooltip: {
       trigger: "axis",
@@ -129,6 +129,7 @@ export function DailyTokenUsageChart({
       type: "value",
       show: true,
       name: "Token",
+      nameGap: 10,
       nameTextStyle: { color: axisColor },
       axisLabel: { color: axisColor, hideOverlap: true, formatter: (value: number) => formatCompactInteger(value) },
       splitNumber: 3,

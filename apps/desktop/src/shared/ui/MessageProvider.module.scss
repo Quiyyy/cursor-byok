@@ -3,8 +3,8 @@
 .region {
   position: fixed;
   z-index: 16000;
-  top: calc(48px + env(safe-area-inset-top));
   right: 0;
+  bottom: max(20px, calc(14px + env(safe-area-inset-bottom)));
   left: 0;
   display: flex;
   justify-content: center;
@@ -34,13 +34,13 @@
 
 .leaving {
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(8px);
 }
 
 @keyframes enter {
   from {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(8px);
   }
 
   to {

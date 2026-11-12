@@ -9,6 +9,7 @@ const invalidation = createStore({
 export const invalidateOverview = () => invalidation.update({
   revision: invalidation.getSnapshot().revision + 1
 });
+export const useOverviewRevision = () => invalidation.useSnapshot().revision;
 const empty: Overview = {
   metrics: {
     llm_calls: 0,

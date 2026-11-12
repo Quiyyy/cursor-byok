@@ -36,15 +36,21 @@ test("settings refresh recovers the model picker after catalog failures", async 
   expect(harnessRequests).toEqual([]);
 });
 
-test("setting a default model persists across a page reload", async ({ page, app }) => {
+test("setting and clearing a default model persists across a page reload", async ({ page, app }) => {
   await page.goto(`${app.origin}/__byok-api__/#/models`);
   await page.getByRole("button", { name: "设为默认", exact: true }).click();
-  await expect(page.getByText("默认模型", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeVisible();
   const readDefault = async () => (await (await app.api.get("/__byok-api__/api/settings/cursor-model")).json()).model_id;
   await expect.poll(readDefault).toBe(app.model.model_hash);
   await page.reload();
-  await expect(page.getByText("默认模型", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "设为默认", exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "默认模型", exact: true }).click();
+  await expect(page.getByRole("button", { name: "设为默认", exact: true })).toBeVisible();
+  await expect.poll(readDefault).toBe("");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "设为默认", exact: true })).toBeVisible();
 });
 
 test("context window selection and reset persist through real settings endpoints", async ({ page, app }) => {

@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { api, type Overview } from "../../../shared/api";
 import { ContributionCalendarChart } from "../charts/ContributionCalendarChart";
+import { useOverviewRevision } from "../useOverview";
 import styles from "./OverviewActivity.module.scss";
 
 const DAY_MS = 86_400_000;
 
 /** Annual activity is fetched separately; a 30-day overview cannot describe a year. */
-export function OverviewActivity({ endMs, modelHashes }: { endMs: number; modelHashes: string[] }) {
+export function OverviewActivity({ endMs, modelHashes, refreshVersion = 0 }: { endMs: number; modelHashes: string[]; refreshVersion?: number }) {
+  const revision = useOverviewRevision();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const lastDayMs = Math.floor(Math.max(0, endMs - 1) / DAY_MS) * DAY_MS;
@@ -19,7 +21,7 @@ export function OverviewActivity({ endMs, modelHashes }: { endMs: number; modelH
     void api.overview({ startMs, endMs, modelHashes, bucketMs: DAY_MS }).then((next) => { if (active) setOverview(next); })
       .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : String(cause)); });
     return () => { active = false; };
-  }, [startMs, endMs, modelHashes]);
+  }, [startMs, endMs, modelHashes, refreshVersion, revision]);
   const byDay = new Map<string, number>();
   for (const bucket of overview?.token_usage_series ?? []) {
     const date = new Date(bucket.bucket_start_ms).toISOString().slice(0, 10);

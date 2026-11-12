@@ -3,10 +3,12 @@ import { createStore } from "../../shared/store/createStore";
 import type { LlmCall } from "../../shared/api";
 type CallsState = {
   calls: LlmCall[];
+  loaded: boolean;
   error: string | null;
 };
 const state = createStore<CallsState>({
   calls: [],
+  loaded: false,
   error: null
 });
 const update = state.update;
@@ -27,10 +29,13 @@ export const callsStore = {
   async refreshCalls() {
     try {
       update({
-        calls: await api.calls()
+        calls: await api.calls(),
+        loaded: true,
+        error: null
       });
     } catch (cause) {
       update({
+        loaded: true,
         error: cause instanceof Error ? cause.message : String(cause)
       });
     }

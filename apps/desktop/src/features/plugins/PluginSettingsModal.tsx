@@ -7,11 +7,12 @@ import { Checkbox } from "../../shared/ui/Checkbox";
 import { TextInput } from "../../shared/ui/FormControls";
 import { Modal } from "../../shared/ui/Modal";
 import { Select } from "../../shared/ui/Select";
+import { useMessage } from "../../shared/ui/message";
 import { PluginAccountsPanel } from "./PluginResourcePanels";
 import styles from "./PluginSettingsModal.module.scss";
 
 export type PluginSettingsTab = "accounts" | "models";
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 50;
 
 export function PluginSettingsModal({ plugin, initialTab, initialProviderId, onAdd, onClose }: {
   plugin: PluginDescriptor;
@@ -21,6 +22,7 @@ export function PluginSettingsModal({ plugin, initialTab, initialProviderId, onA
   onClose: () => void;
 }) {
   const { locale } = useI18n();
+  const message = useMessage();
   const [tab, setTab] = useState(initialTab);
   const [providerId, setProviderId] = useState(initialProviderId ?? "");
   const [query, setQuery] = useState("");
@@ -36,7 +38,9 @@ export function PluginSettingsModal({ plugin, initialTab, initialProviderId, onA
     resource.type === provider.resourceType && resource.resources.length > 0));
   const allModels = providers.flatMap((candidate) => candidate.models.map((model) => ({ provider: candidate, model })));
   const pending = allModels.filter(({ model }) => changes[model.id] !== undefined && changes[model.id] !== model.enabled);
-  const filtered = (provider?.models ?? []).filter((model) =>
+  const providerModels = provider?.models ?? [];
+  const enabledCount = providerModels.filter((model) => changes[model.id] ?? model.enabled).length;
+  const filtered = providerModels.filter((model) =>
     `${model.displayName} ${model.modelId}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -68,7 +72,10 @@ export function PluginSettingsModal({ plugin, initialTab, initialProviderId, onA
         await api.setPluginModelEnabled(plugin.id, target.id, model.modelId, changes[model.id]);
       }
     });
-    if (saved) setChanges({});
+    if (saved) {
+      setChanges({});
+      message(t("模型选择已保存"));
+    }
   };
   const setFiltered = (enabled: boolean) => {
     setChanges((current) => ({
@@ -84,7 +91,7 @@ export function PluginSettingsModal({ plugin, initialTab, initialProviderId, onA
     busy={busy}
     onClose={onClose}
     closeLabel={pending.length ? t("取消更改") : t("关闭")}
-    onSubmit={tab === "models" ? () => void save() : undefined}
+    onSubmit={tab === "models" || pending.length > 0 ? () => void save() : undefined}
     submitLabel={t("保存模型选择")}
     submitDisabled={pending.length === 0}
     secondaryAction={canAdd && <Button disabled={busy || pending.length > 0} onClick={onAdd}>{t("添加账号")}</Button>}
@@ -106,9 +113,16 @@ export function PluginSettingsModal({ plugin, initialTab, initialProviderId, onA
           <Button size="small" disabled={busy || !filtered.length} onClick={() => setFiltered(false)}>{t("移除筛选结果")}</Button>
         </div>
         <span className={styles.summary} aria-live="polite">
-          {pending.length ? t("{count} 项更改待保存", { count: pending.length }) : t("勾选要添加到模型管理的模型，保存后生效。")}
+          {pending.length
+            ? <><span>{t("{count} 项更改待保存", { count: pending.length })}</span>{" · "}<span>{t("已选 {enabled} / {total}", { enabled: enabledCount, total: providerModels.length })}</span></>
+            : providerModels.length > 0
+              ? t("已启用 {enabled} / {total} 个模型，勾选后保存生效。", { enabled: enabledCount, total: providerModels.length })
+              : t("勾选要添加到模型管理的模型，保存后生效。")}
         </span>
       </>}
+      {tab === "accounts" && pending.length > 0 && <span className={styles.summary} aria-live="polite">
+        {t("模型目录有 {count} 项未保存更改，可直接点击下方保存。", { count: pending.length })}
+      </span>}
       {error && <span className={styles.error} role="alert">{error}</span>}
     </div>}
   >

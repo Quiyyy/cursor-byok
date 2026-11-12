@@ -251,12 +251,14 @@ impl ControlState {
         model_id: &str,
     ) -> Result<crate::store::CursorModelSettings> {
         let model_id = model_id.trim();
-        crate::cursor::services::default_model::validate(
-            &self.store,
-            Some(&self.plugins),
-            model_id,
-        )
-        .await?;
+        if !model_id.is_empty() {
+            crate::cursor::services::default_model::validate(
+                &self.store,
+                Some(&self.plugins),
+                model_id,
+            )
+            .await?;
+        }
         self.store.set_cursor_default_model(model_id).await
     }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, type CallDetail } from "../../shared/api";
 import { callsStore } from "./state";
 import { Button } from "../../shared/ui/Button";
@@ -7,6 +8,7 @@ import { CallDetails } from "./CallDetails";
 import styles from "./CallsPage.module.scss";
 
 export function CallDetailDialog({ callId, onClose }: { callId: string | null; onClose: () => void }) {
+  const navigate = useNavigate();
   const [detail, setDetail] = useState<CallDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -22,6 +24,6 @@ export function CallDetailDialog({ callId, onClose }: { callId: string | null; o
   return <Modal fullHeight open={callId !== null} title={current?.call.display_name ?? t("调用详情")} onClose={onClose} closeLabel={t("关闭")}
     banner={current?.call.error_message ? <p role="alert" className={styles.detailError}>{t("错误：{error}", { error: current.call.error_message })}</p> : undefined}
     secondaryAction={<Button onClick={() => { if (callId) void callsStore.openCallDetails(callId); }}>{t("在独立窗口中打开")}</Button>}>
-    {error ? <p role="alert">{error}</p> : current ? <CallDetails detail={current} /> : <p>{t("正在加载调用详情…")}</p>}
+    {error ? <p role="alert">{error}</p> : current ? <CallDetails detail={current} onOpenSettings={() => { onClose(); navigate("/settings"); }} /> : <p>{t("正在加载调用详情…")}</p>}
   </Modal>;
 }

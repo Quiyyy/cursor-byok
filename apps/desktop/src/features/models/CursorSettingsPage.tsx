@@ -19,12 +19,25 @@ import { PageActions } from "../../shell/PageActions";
 import { usePluginsStore } from "../plugins/state";
 import { modelsStore, useModelsStore } from "./state";
 
+const GROUPING_STORAGE_KEY = "cursor-byok.models.grouping";
+
+function readInitialGrouping(): CursorModelGrouping {
+  try {
+    const stored = typeof localStorage !== "undefined" ? localStorage.getItem(GROUPING_STORAGE_KEY) : null;
+    if (stored === "provider" || stored === "type" || stored === "flat") return stored;
+  } catch {
+    // Ignore storage access errors in restricted environments.
+  }
+  return "provider";
+}
+
 export function CursorSettingsPage() {
-  const { models, busy, saving: cursorBusy, modelSettings, savingModelSettings, cursorModelSettings, savingCursorDefaultModel } = useModelsStore();
+  const { models, busy, saving: cursorBusy, error: modelsError, modelSettings, savingModelSettings, cursorModelSettings, savingCursorDefaultModel } = useModelsStore();
   const {plugins} = usePluginsStore();
   const navigate = useNavigate();
   const message = useMessage();
   const [draft, setDraft] = useState<CursorModelDraft | null>(null);
+  const [savedDraftKey, setSavedDraftKey] = useState<string | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Model | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
@@ -34,7 +47,8 @@ export function CursorSettingsPage() {
   const [modelTestResults, setModelTestResults] = useState<Map<string, CursorModelTestState>>(() => new Map());
   const [savingAndTesting, setSavingAndTesting] = useState(false);
   const [batchTesting, setBatchTesting] = useState(false);
-  const [grouping, setGrouping] = useState<CursorModelGrouping>("provider");
+  const [grouping, setGroupingState] = useState<CursorModelGrouping>(readInitialGrouping);
+  const [query, setQuery] = useState("");
   const [settingsGroup, setSettingsGroup] = useState<CursorModelGroup | null>(null);
   const [groupNameDraft, setGroupNameDraft] = useState("");
   const [groupBaseUrlDraft, setGroupBaseUrlDraft] = useState("");
@@ -42,32 +56,51 @@ export function CursorSettingsPage() {
   const [groupSettingsBusy, setGroupSettingsBusy] = useState(false);
   const activeModelTests = useRef(new Map<string, { testId: string; controller: AbortController; cancelling: boolean }>());
   const submitting = useRef(false);
+  const setGrouping = (next: CursorModelGrouping) => {
+    setGroupingState(next);
+    try {
+      localStorage.setItem(GROUPING_STORAGE_KEY, next);
+    } catch {
+      // Ignore storage access errors.
+    }
+  };
   const pluginModels = configuredPluginModels(plugins);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleModels = normalizedQuery
+    ? models.filter((model) => `${model.display_name} ${model.model_id} ${model.group_name ?? ""} ${model.base_url}`.toLocaleLowerCase().includes(normalizedQuery))
+    : models;
+  const visiblePluginModels = normalizedQuery
+    ? pluginModels.filter((model) => `${model.displayName} ${model.modelId} ${model.pluginName}`.toLocaleLowerCase().includes(normalizedQuery))
+    : pluginModels;
   const testTargets = [
     ...models.map((model) => ({ model_hash: model.model_hash, display_name: model.display_name })),
     ...pluginModels.map((model) => ({ model_hash: model.id, display_name: model.displayName })),
   ];
   const providerGroups = cursorModelGroups(models, "provider");
-  const typeGroups = cursorModelGroups(models, "type");
+  const visibleProviderGroups = cursorModelGroups(visibleModels, "provider");
+  const visibleTypeGroups = cursorModelGroups(visibleModels, "type");
   const openNew = () => {
     const next = emptyCursorModelDraft();
     next.model.sort_order = models.length + 1;
     setEditing(null);
+    setSavedDraftKey(null);
     setEditorError(null);
     setModelOptions([]);
     setDraft(next);
   };
   const openEdit = (model: Model) => {
-    setEditorError(null);
-    setEditing(model);
-    setModelOptions([model.model_id]);
-    setDraft({
+    const initialDraft: CursorModelDraft = {
       providerId: `builtin/${model.type}`,
       model: modelInput(model),
       openAIExtraParamsText: JSON.stringify(model.openai_extra_params, null, 2),
       customHeadersText: JSON.stringify(model.custom_headers, null, 2),
       anthropicExtraParamsText: JSON.stringify(model.anthropic_extra_params, null, 2),
-    });
+    };
+    setEditorError(null);
+    setEditing(model);
+    setSavedDraftKey(JSON.stringify(initialDraft));
+    setModelOptions([model.model_id]);
+    setDraft(initialDraft);
   };
   const discover = async (): Promise<boolean> => {
     if (!draft) return false;
@@ -92,17 +125,26 @@ export function CursorSettingsPage() {
   };
   const persist = async (): Promise<Model | null> => {
     if (!draft) return null;
+    const currentKey = JSON.stringify(draft);
+    if (editing && savedDraftKey === currentKey) {
+      return editing;
+    }
     const input = draftInput(draft);
     if (editing) {
       const saved = await modelsStore.updateCursorModel(editing.model_hash, input);
-      if (saved) setModelTestResults((current) => {
-        const next = new Map(current);
-        next.delete(editing.model_hash);
-        return next;
-      });
+      if (saved) {
+        setSavedDraftKey(currentKey);
+        setModelTestResults((current) => {
+          const next = new Map(current);
+          next.delete(editing.model_hash);
+          return next;
+        });
+      }
       return saved;
     }
-    return (await modelsStore.createModels([input]))?.[0] ?? null;
+    const created = (await modelsStore.createModels([input]))?.[0] ?? null;
+    if (created) setSavedDraftKey(currentKey);
+    return created;
   };
   const save = async () => {
     if (submitting.current) return;
@@ -112,6 +154,7 @@ export function CursorSettingsPage() {
       if (await persist()) {
         setDraft(null);
         setEditing(null);
+        setSavedDraftKey(null);
       } else {
         setEditorError(modelsStore.getSnapshot().error);
       }
@@ -180,7 +223,7 @@ export function CursorSettingsPage() {
       }
       setEditing(saved);
       setSavingAndTesting(false);
-      await testModel(saved);
+      await testModel(saved, false);
     } catch (cause) {
       setEditorError(errorText(cause));
     } finally {
@@ -217,6 +260,7 @@ export function CursorSettingsPage() {
     }
     openEdit(model);
     setEditing(null);
+    setSavedDraftKey(null);
     setDraft((current) => current && ({
       ...current,
       model: { ...current.model, sort_order: models.length + 1, display_name: displayName },
@@ -267,14 +311,31 @@ export function CursorSettingsPage() {
     }
   }, [message]);
 
-  const list = testTargets.length === 0 ? <div className={styles.empty}>
-    <strong>{t("还没有添加模型")}</strong>
-    <span>{t("添加 API 模型，或连接账号导入模型。")}</span>
-    <Button onClick={() => navigate("/providers")}>{t("连接账号")}</Button>
-  </div> : <CursorModelCards
-    models={models}
-    pluginModels={pluginModels}
+  const list = testTargets.length === 0 ? (
+    busy ? <div className={styles.empty}><span>{t("正在加载模型…")}</span></div>
+      : modelsError ? <div className={styles.empty}>
+        <strong>{t("加载模型失败")}</strong>
+        <span className={styles.error} role="alert">{modelsError}</span>
+        <Button onClick={() => void modelsStore.refresh()}>{t("重试")}</Button>
+      </div>
+      : <div className={styles.empty}>
+        <strong>{t("还没有添加模型")}</strong>
+        <span>{t("添加 API 模型，或连接账号导入模型。")}</span>
+        <div className={styles.emptyActions}>
+          <Button variant="primary" disabled={cursorBusy} onClick={openNew}><Icon icon={addIcon} size="1.1em" />{t("添加模型")}</Button>
+          <Button onClick={() => navigate("/providers")}>{t("连接账号")}</Button>
+        </div>
+      </div>
+  ) : visibleModels.length === 0 && visiblePluginModels.length === 0 ? (
+    <div className={styles.empty}>
+      <strong>{t("没有匹配的模型")}</strong>
+      <Button onClick={() => setQuery("")}>{t("清除筛选")}</Button>
+    </div>
+  ) : <CursorModelCards
+    models={visibleModels}
+    pluginModels={visiblePluginModels}
     grouping={grouping}
+    sortable={!normalizedQuery}
     disabled={cursorBusy}
     testingModelHashes={testingModelHashes}
     testResults={modelTestResults}
@@ -282,12 +343,15 @@ export function CursorSettingsPage() {
     onEdit={openEdit}
     modelSettings={modelSettings}
     savingModelSettings={savingModelSettings}
-    defaultModelId={cursorModelSettings?.model_id ?? null}
+    defaultModelId={cursorModelSettings?.model_id || null}
     defaultModelDisabled={busy || !cursorModelSettings || savingCursorDefaultModel !== null}
     savingDefaultModelId={savingCursorDefaultModel}
     onSetDefault={async (id) => {
-      if (await modelsStore.setCursorDefaultModel(id)) message(t("默认模型已保存，重载 Cursor 窗口后生效"));
-      else message(modelsStore.getSnapshot().error || t("保存失败"));
+      if (await modelsStore.setCursorDefaultModel(id)) {
+        message(id ? t("默认模型已更新，新建 Cursor 对话时生效") : t("已取消默认模型，恢复由 Cursor 管理"));
+      } else {
+        message(modelsStore.getSnapshot().error || t("保存失败"));
+      }
     }}
     onContextChange={async (id, value) => {
       const saved = await modelsStore.setModelContext(id, value);
@@ -304,21 +368,31 @@ export function CursorSettingsPage() {
 
   const editorTestState = editing ? modelTestResults.get(editing.model_hash) : undefined;
   const editorTesting = Boolean(editing && testingModelHashes.has(editing.model_hash));
-  const activeGroups = grouping === "provider" ? providerGroups : typeGroups;
-  const pluginSectionHeight = pluginModels.length > 0 ? 60 + pluginModels.length * 56 : 0;
+  const editorUnchangedAfterSave = Boolean(editing && draft && savedDraftKey === JSON.stringify(draft));
+  const activeGroups = grouping === "provider" ? visibleProviderGroups : visibleTypeGroups;
+  const pluginSectionHeight = visiblePluginModels.length > 0 ? 60 + visiblePluginModels.length * 56 : 0;
   const estimatedModelHeight = grouping === "flat"
-    ? Math.max(380, Math.ceil(models.length / 3) * 196 + pluginSectionHeight)
+    ? Math.max(380, Math.ceil(visibleModels.length / 2) * 196 + pluginSectionHeight)
     : Math.max(380, activeGroups.reduce((height, group) => height + 60 + group.models.length * 56, 0) + Math.max(0, activeGroups.length - 1) * 20 + pluginSectionHeight);
 
   return <>
     <PageActions position="left">
       <Button variant="ghost" disabled={cursorBusy || (!batchTesting && (!testTargets.length || testingModelHashes.size > 0))} onClick={() => void (batchTesting ? cancelAllModelTests() : testAllModels())}>{batchTesting ? t("取消全部测试") : t("测试全部")}</Button>
     </PageActions>
+    {(testTargets.length > 4 || query.length > 0) && <PageActions position="filters"><div className={styles.filterBar}>
+      <TextInput
+        aria-label={t("搜索模型名称、ID 或来源")}
+        placeholder={t("搜索模型名称、ID 或来源")}
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+      />
+      {query && <Button size="small" onClick={() => setQuery("")}>{t("清除筛选")}</Button>}
+    </div></PageActions>}
     <PageActions>
       <ActionMenu iconOnly label={t("更多")} disabled={cursorBusy} items={[
-        { id: "group-provider", label: t("按来源分组"), disabled: grouping === "provider", onSelect: () => setGrouping("provider") },
-        { id: "group-type", label: t("按协议分组"), disabled: grouping === "type", onSelect: () => setGrouping("type") },
-        { id: "group-flat", label: t("平铺与排序"), disabled: grouping === "flat", onSelect: () => setGrouping("flat") },
+        { id: "group-provider", label: t("按来源分组"), checked: grouping === "provider", onSelect: () => setGrouping("provider") },
+        { id: "group-type", label: t("按协议分组"), checked: grouping === "type", onSelect: () => setGrouping("type") },
+        { id: "group-flat", label: t("平铺与排序"), checked: grouping === "flat", onSelect: () => setGrouping("flat") },
         { id: "accounts", label: t("连接账号"), onSelect: () => navigate("/providers") },
       ]} />
       <Button variant="primary" disabled={cursorBusy} onClick={openNew}><Icon icon={addIcon} size="1.1em" />{t("添加模型")}</Button>
@@ -326,7 +400,19 @@ export function CursorSettingsPage() {
     <PageContent title={t("模型管理")} sections={[
       { key: "cursor-settings", estimatedHeight: estimatedModelHeight, content: list },
     ]} />
-    <Modal fullHeight open={draft !== null} title={editing ? t("编辑模型") : t("添加 API 模型")} banner={editorError ? <span className={styles.error} role="alert">{editorError}</span> : draft && (editorTesting || editorTestState) ? <CursorModelTestResult state={editorTestState} testing={editorTesting} /> : undefined} busy={cursorBusy || savingAndTesting} submitDisabled={editorTesting} onClose={() => { if (editing && editorTesting) void cancelModelTest(editing.model_hash); setDraft(null); setEditing(null); }} onSubmit={() => void save()} submitLabel={t("保存")} secondaryAction={<button type="button" className={controls.secondary} disabled={cursorBusy || savingAndTesting} onClick={() => void (editorTesting && editing ? cancelModelTest(editing.model_hash) : saveAndTest())}>{savingAndTesting ? t("处理中…") : editorTesting ? t("取消测试") : t("保存并测试")}</button>}>
+    <Modal
+      fullHeight
+      open={draft !== null}
+      title={editing ? t("编辑模型") : t("添加 API 模型")}
+      banner={editorError ? <span className={styles.error} role="alert">{editorError}</span> : draft && (editorTesting || editorTestState) ? <CursorModelTestResult state={editorTestState} testing={editorTesting} /> : undefined}
+      busy={cursorBusy || savingAndTesting}
+      submitDisabled={editorTesting}
+      closeLabel={editorUnchangedAfterSave ? t("关闭") : t("取消")}
+      onClose={() => { if (editing && editorTesting) void cancelModelTest(editing.model_hash); setDraft(null); setEditing(null); setSavedDraftKey(null); }}
+      onSubmit={() => void save()}
+      submitLabel={t("保存")}
+      secondaryAction={<button type="button" className={controls.secondary} disabled={cursorBusy || savingAndTesting} onClick={() => void (editorTesting && editing ? cancelModelTest(editing.model_hash) : saveAndTest())}>{savingAndTesting ? t("处理中…") : editorTesting ? t("取消测试") : t("保存并测试")}</button>}
+    >
       {draft && <>
         <CursorModelEditor draft={draft} modelOptions={modelOptions} discovering={discovering} onChange={setDraft} onDiscover={discover} />
       </>}
@@ -344,7 +430,24 @@ export function CursorSettingsPage() {
         </FormField>
       </div>}
     </Modal>
-    <ConfirmDialog open={deleting !== null} title={t("删除模型")} cancelLabel={t("取消")} confirmLabel={t("删除")} onCancel={() => setDeleting(null)} onConfirm={() => { if (deleting) void modelsStore.deleteModel(deleting.model_hash); setDeleting(null); }}><p>{t("确定删除这个模型吗？")}</p></ConfirmDialog>
+    <ConfirmDialog
+      open={deleting !== null}
+      title={t("删除模型")}
+      cancelLabel={t("取消")}
+      confirmLabel={t("删除")}
+      onCancel={() => setDeleting(null)}
+      onConfirm={() => {
+        const target = deleting;
+        setDeleting(null);
+        if (target) {
+          void modelsStore.deleteModel(target.model_hash).then((removed) => {
+            if (!removed) message(modelsStore.getSnapshot().error || t("删除失败"), { duration: 5000 });
+          });
+        }
+      }}
+    >
+      <p>{t("确定删除这个模型吗？")}</p>
+    </ConfirmDialog>
   </>;
 }
 
