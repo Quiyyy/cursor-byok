@@ -66,6 +66,7 @@ export function HomePage() {
   const selectedRange = useMemo(() => preset === "custom" ? customRange : presetRange(preset), [preset, customRange, refreshVersion]);
 
   const { overview: filteredOverview, busy: rangeBusy } = useOverview(selectedRange, appliedModels, refreshVersion);
+  const { overview: unfilteredOverview, loaded: unfilteredLoaded, busy: unfilteredBusy } = useOverview(null, undefined, refreshVersion);
   const dailyTokenUsage = filteredOverview.token_usage_series.map((bucket) => ({
     bucketStartMs: bucket.bucket_start_ms,
     inputTokens: bucket.input_tokens,
@@ -128,8 +129,8 @@ export function HomePage() {
   const modelOptions = configuredModelOptions(models, plugins, locale);
   const hasModels = modelOptions.length > 0;
   const takeoverActive = cursorHarness?.integration === "enabled";
-  const hasSuccessfulCalls = metrics.successfulCalls > 0;
-  const showOnboarding = !onboardingDismissed && (!hasModels || !takeoverActive || !hasSuccessfulCalls);
+  const hasSuccessfulCalls = unfilteredOverview.metrics.successful_calls > 0;
+  const showOnboarding = !onboardingDismissed && unfilteredLoaded && (!hasModels || !takeoverActive || !hasSuccessfulCalls);
 
   const sections: VirtualPageSection[] = [
     ...(showOnboarding ? [{
@@ -198,7 +199,7 @@ export function HomePage() {
       customEnd={customEnd}
       modelOptions={modelOptions}
       selectedModels={appliedModels}
-      busy={rangeBusy}
+      busy={rangeBusy || unfilteredBusy}
       onSelect={selectPreset}
       onQuickSelect={selectQuick}
       onCustomOpenChange={openCustom}
