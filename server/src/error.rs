@@ -11,6 +11,8 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum Error {
     #[error("configuration error: {0}")]
     Config(String),
+    #[error("{0}")]
+    Busy(String),
     #[error("protocol error: {0}")]
     Protocol(String),
     #[error("provider error: {0}")]
@@ -53,7 +55,7 @@ impl IntoResponse for Error {
             }
             Self::RunNotFound(_) => StatusCode::NOT_FOUND,
             Self::Provider(_) | Self::ProviderRefusal(_) | Self::Http(_) => StatusCode::BAD_GATEWAY,
-            Self::Cancelled => StatusCode::CONFLICT,
+            Self::Cancelled | Self::Busy(_) => StatusCode::CONFLICT,
             Self::UpstreamTimeout(_) => StatusCode::GATEWAY_TIMEOUT,
             Self::Store(_)
             | Self::Database(_)

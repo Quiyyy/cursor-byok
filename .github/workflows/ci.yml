@@ -166,6 +166,10 @@ jobs:
       - name: Run platform Clippy
         run: cargo clippy --package cursor-byok-desktop --all-targets -- -D warnings
 
+      - name: Test managed Cursor process lifecycle
+        if: runner.os == 'Windows'
+        run: cargo test --package cursor-server --lib local_app::update::windows::tests
+
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.9.6

@@ -76,6 +76,20 @@
         }
       ]
     },
+    "03ea8b6462049483": {
+      "source": "已验证组合：Cursor {version} · 内置 Harness",
+      "kind": "template",
+      "placeholders": [
+        "version"
+      ],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 52,
+          "column": 49
+        }
+      ]
+    },
     "03ff62ab4b818492": {
       "source": "缓存写入：{tokens} × ${price}/1M = {cost}",
       "kind": "template",
@@ -89,6 +103,20 @@
           "file": "features/home/metrics/HomeMetrics.tsx",
           "line": 125,
           "column": 5
+        }
+      ]
+    },
+    "04d69d468e0a3508": {
+      "source": "当前 Cursor 版本 {version}",
+      "kind": "template",
+      "placeholders": [
+        "version"
+      ],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 51,
+          "column": 45
         }
       ]
     },
@@ -114,7 +142,7 @@
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 232,
+          "line": 234,
           "column": 84
         },
         {
@@ -175,12 +203,12 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 172,
+          "line": 173,
           "column": 35
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 281,
+          "line": 283,
           "column": 67
         }
       ]
@@ -285,8 +313,8 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 157,
-          "column": 84
+          "line": 158,
+          "column": 104
         }
       ]
     },
@@ -304,6 +332,18 @@
           "file": "features/plugins/PluginResourcePanels.tsx",
           "line": 278,
           "column": 34
+        }
+      ]
+    },
+    "0b4e6e7fc9d53122": {
+      "source": "正在启动 Cursor…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 23,
+          "column": 29
         }
       ]
     },
@@ -400,7 +440,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 106,
+          "line": 107,
           "column": 38
         }
       ]
@@ -424,7 +464,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 298,
+          "line": 300,
           "column": 28
         }
       ]
@@ -465,6 +505,18 @@
           "file": "features/settings/PricingSettingsCard.tsx",
           "line": 145,
           "column": 24
+        }
+      ]
+    },
+    "0f1c055a0ae62508": {
+      "source": "正在读取 Cursor 更新状态…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 48,
+          "column": 125
         }
       ]
     },
@@ -574,12 +626,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 116,
+          "line": 117,
           "column": 90
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 151,
+          "line": 152,
           "column": 94
         }
       ]
@@ -613,6 +665,18 @@
         }
       ]
     },
+    "14513b5f2730c7e1": {
+      "source": "开始更新",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 86,
+          "column": 108
+        }
+      ]
+    },
     "146da2e2a991493e": {
       "source": "获取中…",
       "kind": "text",
@@ -639,6 +703,18 @@
           "file": "features/models/CursorModelEditor.tsx",
           "line": 148,
           "column": 124
+        }
+      ]
+    },
+    "16080ec0b4b5292a": {
+      "source": "未找到受支持的 Cursor 安装",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 51,
+          "column": 112
         }
       ]
     },
@@ -680,7 +756,7 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 211,
+          "line": 212,
           "column": 25
         },
         {
@@ -823,7 +899,7 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 165,
+          "line": 166,
           "column": 51
         }
       ]
@@ -847,7 +923,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 302,
+          "line": 304,
           "column": 86
         }
       ]
@@ -885,12 +961,12 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 169,
+          "line": 170,
           "column": 29
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 179,
+          "line": 180,
           "column": 67
         }
       ]
@@ -902,17 +978,17 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 75,
+          "line": 76,
           "column": 42
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 237,
+          "line": 239,
           "column": 24
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 264,
+          "line": 266,
           "column": 60
         }
       ]
@@ -938,6 +1014,18 @@
           "file": "features/plugins/PluginResourcePanels.tsx",
           "line": 397,
           "column": 14
+        }
+      ]
+    },
+    "1d3016fb2d907e76": {
+      "source": "恢复接管",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 60,
+          "column": 96
         }
       ]
     },
@@ -1018,7 +1106,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 191,
+          "line": 192,
           "column": 45
         }
       ]
@@ -1042,7 +1130,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 131,
+          "line": 132,
           "column": 15
         }
       ]
@@ -1054,7 +1142,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 327,
+          "line": 329,
           "column": 24
         }
       ]
@@ -1099,6 +1187,18 @@
         }
       ]
     },
+    "2735abc0a7c64d84": {
+      "source": "官方新版本尚未通过验收，未下载或安装",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 13,
+          "column": 31
+        }
+      ]
+    },
     "27a431ad62844288": {
       "source": "可用 {ready} · 冷却 {cooling} · 失效 {invalid}",
       "kind": "template",
@@ -1112,6 +1212,18 @@
           "file": "features/plugins/PluginManagementPage.tsx",
           "line": 287,
           "column": 70
+        }
+      ]
+    },
+    "282370191ffd8ba9": {
+      "source": "正在验证安装包…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 16,
+          "column": 30
         }
       ]
     },
@@ -1274,6 +1386,21 @@
           "column": 21
         },
         {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 77,
+          "column": 82
+        },
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 80,
+          "column": 137
+        },
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 86,
+          "column": 85
+        },
+        {
           "file": "features/settings/PricingSettingsCard.tsx",
           "line": 90,
           "column": 64
@@ -1285,12 +1412,12 @@
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 228,
+          "line": 230,
           "column": 83
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 319,
+          "line": 321,
           "column": 22
         },
         {
@@ -1321,6 +1448,21 @@
           "file": "features/home/metrics/HomeMetrics.tsx",
           "line": 79,
           "column": 5
+        }
+      ]
+    },
+    "2e0ab0344c96fc84": {
+      "source": "已下载 {downloaded} / {total} MB",
+      "kind": "template",
+      "placeholders": [
+        "downloaded",
+        "total"
+      ],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 71,
+          "column": 40
         }
       ]
     },
@@ -1369,7 +1511,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 155,
+          "line": 156,
           "column": 15
         }
       ]
@@ -1550,7 +1692,7 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 140,
+          "line": 141,
           "column": 20
         }
       ]
@@ -1644,7 +1786,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 329,
+          "line": 331,
           "column": 42
         }
       ]
@@ -1678,6 +1820,18 @@
           "file": "features/plugins/PluginResourcePanels.tsx",
           "line": 347,
           "column": 53
+        }
+      ]
+    },
+    "38c68a43c1c4c17b": {
+      "source": "当前版本未经验证；启用管理后会暂停原生接管，账号、模型管理和外部 API 仍可使用。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 53,
+          "column": 96
         }
       ]
     },
@@ -1744,7 +1898,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 309,
+          "line": 311,
           "column": 16
         }
       ]
@@ -1770,6 +1924,18 @@
           "file": "features/calls/CallDetails.tsx",
           "line": 87,
           "column": 41
+        }
+      ]
+    },
+    "3b44c08cd9b78d3c": {
+      "source": "正在准备兼容性检查…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 17,
+          "column": 31
         }
       ]
     },
@@ -1847,7 +2013,7 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 166,
+          "line": 167,
           "column": 107
         }
       ]
@@ -1859,12 +2025,12 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 183,
+          "line": 184,
           "column": 24
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 189,
+          "line": 190,
           "column": 28
         }
       ]
@@ -1931,12 +2097,12 @@
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 128,
+          "line": 129,
           "column": 19
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 155,
+          "line": 156,
           "column": 80
         },
         {
@@ -1997,7 +2163,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 162,
+          "line": 163,
           "column": 66
         }
       ]
@@ -2009,7 +2175,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 209,
+          "line": 210,
           "column": 54
         }
       ]
@@ -2067,8 +2233,8 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 157,
-          "column": 95
+          "line": 158,
+          "column": 115
         }
       ]
     },
@@ -2120,6 +2286,47 @@
         }
       ]
     },
+    "4545fb7f71c3af86": {
+      "source": "Cursor 更新未完成",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 25,
+          "column": 27
+        }
+      ]
+    },
+    "45ce1c8ab0ded349": {
+      "source": "更新并重启 Cursor",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 65,
+          "column": 166
+        },
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 86,
+          "column": 53
+        }
+      ]
+    },
+    "45d508771ada7f6d": {
+      "source": "将检查上次安装状态。尚未完成的安装会使用已验证安装包重试；已完成的安装只恢复接管并启动 Cursor。请先保存工作。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 78,
+          "column": 11
+        }
+      ]
+    },
     "45ea3f8fe96373e8": {
       "source": "正在加载调用记录…",
       "kind": "text",
@@ -2129,6 +2336,18 @@
           "file": "features/calls/CallsPage.tsx",
           "line": 44,
           "column": 7
+        }
+      ]
+    },
+    "46084a8f52caf1b5": {
+      "source": "确认并应用",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 80,
+          "column": 160
         }
       ]
     },
@@ -2343,6 +2562,18 @@
         }
       ]
     },
+    "49c4f9f958113fd8": {
+      "source": "Cursor 更新完成",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 24,
+          "column": 29
+        }
+      ]
+    },
     "4a861200ad513a3c": {
       "source": "初始化插件运行时",
       "kind": "text",
@@ -2417,6 +2648,18 @@
           "file": "features/plugins/PluginSettingsModal.tsx",
           "line": 136,
           "column": 112
+        }
+      ]
+    },
+    "4d761bdef85f56ea": {
+      "source": "取消检查",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 62,
+          "column": 108
         }
       ]
     },
@@ -2592,6 +2835,18 @@
         }
       ]
     },
+    "51e44d56ec9021f8": {
+      "source": "确认恢复",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 77,
+          "column": 105
+        }
+      ]
+    },
     "5228358a6db59fe7": {
       "source": "如：现在、2026-08-23 18:00",
       "kind": "text",
@@ -2611,7 +2866,7 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 156,
+          "line": 157,
           "column": 51
         }
       ]
@@ -2635,7 +2890,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 226,
+          "line": 228,
           "column": 28
         }
       ]
@@ -2661,7 +2916,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 148,
+          "line": 149,
           "column": 100
         }
       ]
@@ -2760,7 +3015,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 135,
+          "line": 136,
           "column": 20
         }
       ]
@@ -2774,6 +3029,18 @@
           "file": "features/plugins/PluginSettingsModal.tsx",
           "line": 99,
           "column": 61
+        }
+      ]
+    },
+    "576ce92fe2db6937": {
+      "source": "正在安装 Cursor 更新…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 21,
+          "column": 31
         }
       ]
     },
@@ -2880,7 +3147,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 168,
+          "line": 169,
           "column": 25
         },
         {
@@ -2959,7 +3226,7 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 150,
+          "line": 151,
           "column": 119
         },
         {
@@ -2998,7 +3265,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 164,
+          "line": 165,
           "column": 7
         }
       ]
@@ -3144,7 +3411,7 @@
       "refs": [
         {
           "file": "shared/api.ts",
-          "line": 489,
+          "line": 510,
           "column": 23
         }
       ]
@@ -3221,7 +3488,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 125,
+          "line": 126,
           "column": 25
         }
       ]
@@ -3257,12 +3524,12 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 171,
+          "line": 172,
           "column": 29
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 224,
+          "line": 226,
           "column": 67
         }
       ]
@@ -3288,7 +3555,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 302,
+          "line": 304,
           "column": 33
         }
       ]
@@ -3317,7 +3584,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 106,
+          "line": 107,
           "column": 55
         }
       ]
@@ -3382,6 +3649,18 @@
           "file": "shell/WindowControls.tsx",
           "line": 45,
           "column": 14
+        }
+      ]
+    },
+    "6b13eb773b9bb573": {
+      "source": "请先保存 Cursor 中的工作。若 Cursor 正在运行，会请求正常退出并重新打开，以应用编辑器和 Harness 更新设置；取消退出将保留原配置。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 83,
+          "column": 11
         }
       ]
     },
@@ -3452,8 +3731,20 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 145,
+          "line": 146,
           "column": 95
+        }
+      ]
+    },
+    "7178511a5aa9bd6d": {
+      "source": "正在下载官方安装包…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 15,
+          "column": 32
         }
       ]
     },
@@ -3466,6 +3757,23 @@
           "file": "features/calls/CallDetails.tsx",
           "line": 23,
           "column": 10
+        }
+      ]
+    },
+    "734975b673c6ecf5": {
+      "source": "由 BYOK 管理 Cursor 更新",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 43,
+          "column": 20
+        },
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 46,
+          "column": 24
         }
       ]
     },
@@ -3493,7 +3801,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 287,
+          "line": 289,
           "column": 18
         }
       ]
@@ -3529,7 +3837,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 201,
+          "line": 202,
           "column": 28
         }
       ]
@@ -3555,7 +3863,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 165,
+          "line": 166,
           "column": 7
         }
       ]
@@ -3572,6 +3880,18 @@
         }
       ]
     },
+    "79cf07910580584c": {
+      "source": "请先保存 Cursor 中的工作。应用会请求 Cursor 正常退出，更新并恢复接管后再启动一次；如果你取消退出，更新也会停止。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 89,
+          "column": 11
+        }
+      ]
+    },
     "7a2229f6a6d330a5": {
       "source": "请在桌面应用中打开终端安装 CA",
       "kind": "text",
@@ -3579,7 +3899,7 @@
       "refs": [
         {
           "file": "shared/api.ts",
-          "line": 479,
+          "line": 500,
           "column": 43
         }
       ]
@@ -3603,7 +3923,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 320,
+          "line": 322,
           "column": 23
         }
       ]
@@ -3670,7 +3990,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 149,
+          "line": 150,
           "column": 83
         }
       ]
@@ -3708,6 +4028,11 @@
           "file": "features/settings/AppLifecycleSettingsCard.tsx",
           "line": 162,
           "column": 37
+        },
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 64,
+          "column": 125
         }
       ]
     },
@@ -3718,8 +4043,20 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 147,
+          "line": 148,
           "column": 97
+        }
+      ]
+    },
+    "7f9d8293d88e7049": {
+      "source": "正在等待 Cursor 正常退出…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 20,
+          "column": 28
         }
       ]
     },
@@ -3757,7 +4094,7 @@
       "refs": [
         {
           "file": "shared/api.ts",
-          "line": 424,
+          "line": 445,
           "column": 21
         }
       ]
@@ -3898,6 +4235,18 @@
         }
       ]
     },
+    "863c07b83ac50fde": {
+      "source": "请在系统设置的「Cursor 版本管理」中查看已验证版本和更新配置。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/cursor/CursorTakeover.tsx",
+          "line": 145,
+          "column": 49
+        }
+      ]
+    },
     "864597982c308d72": {
       "source": "已开启静默启动",
       "kind": "text",
@@ -3989,7 +4338,7 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 166,
+          "line": 167,
           "column": 96
         }
       ]
@@ -4057,6 +4406,20 @@
         }
       ]
     },
+    "8bf731b6c3356298": {
+      "source": "已下载 {downloaded} MB",
+      "kind": "template",
+      "placeholders": [
+        "downloaded"
+      ],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 71,
+          "column": 158
+        }
+      ]
+    },
     "8c1935935600e336": {
       "source": "模型测试",
       "kind": "text",
@@ -4117,12 +4480,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 103,
+          "line": 104,
           "column": 36
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 119,
+          "line": 120,
           "column": 64
         }
       ]
@@ -4146,7 +4509,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 139,
+          "line": 140,
           "column": 20
         }
       ]
@@ -4254,7 +4617,7 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 146,
+          "line": 147,
           "column": 51
         }
       ]
@@ -4410,6 +4773,18 @@
         }
       ]
     },
+    "97acc83c1016a05a": {
+      "source": "正在恢复并验证接管…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 22,
+          "column": 29
+        }
+      ]
+    },
     "9845c165151daee3": {
       "source": "已使用",
       "kind": "text",
@@ -4436,6 +4811,18 @@
         }
       ]
     },
+    "98a28788258eed4a": {
+      "source": "检测到中断的更新。先恢复接管，再进行新的更新。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 75,
+          "column": 45
+        }
+      ]
+    },
     "997ec8201c2adeda": {
       "source": "打开终端安装 CA",
       "kind": "text",
@@ -4443,7 +4830,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 148,
+          "line": 149,
           "column": 83
         }
       ]
@@ -4549,7 +4936,7 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 151,
+          "line": 152,
           "column": 92
         },
         {
@@ -4660,7 +5047,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 180,
+          "line": 181,
           "column": 28
         }
       ]
@@ -4696,7 +5083,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 68,
+          "line": 69,
           "column": 34
         }
       ]
@@ -4780,6 +5167,20 @@
         }
       ]
     },
+    "a1fe0d0612582b4e": {
+      "source": "未提供安装的新版本：{version}",
+      "kind": "template",
+      "placeholders": [
+        "version"
+      ],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 54,
+          "column": 51
+        }
+      ]
+    },
     "a25188ae35e60138": {
       "source": "移除筛选结果",
       "kind": "text",
@@ -4839,7 +5240,7 @@
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 229,
+          "line": 231,
           "column": 135
         },
         {
@@ -4861,7 +5262,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 148,
+          "line": 149,
           "column": 38
         }
       ]
@@ -4904,6 +5305,18 @@
           "file": "features/models/CursorModelEditor.tsx",
           "line": 166,
           "column": 17
+        }
+      ]
+    },
+    "a44be431fc1a48cb": {
+      "source": "恢复 Cursor 更新",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 77,
+          "column": 50
         }
       ]
     },
@@ -4952,7 +5365,7 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 141,
+          "line": 142,
           "column": 109
         }
       ]
@@ -4997,6 +5410,18 @@
           "file": "features/models/CursorSettingsPage.tsx",
           "line": 414,
           "column": 281
+        }
+      ]
+    },
+    "a69a79ffca1195d7": {
+      "source": "正在检查 Cursor 更新…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 14,
+          "column": 29
         }
       ]
     },
@@ -5135,7 +5560,7 @@
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 125,
+          "line": 126,
           "column": 45
         }
       ]
@@ -5217,7 +5642,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 132,
+          "line": 133,
           "column": 42
         }
       ]
@@ -5269,7 +5694,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 117,
+          "line": 118,
           "column": 10
         },
         {
@@ -5291,6 +5716,20 @@
           "file": "shell/AppLayout.tsx",
           "line": 67,
           "column": 125
+        }
+      ]
+    },
+    "af6212711d13a390": {
+      "source": "候选版本 {version}",
+      "kind": "template",
+      "placeholders": [
+        "version"
+      ],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 55,
+          "column": 42
         }
       ]
     },
@@ -5317,6 +5756,18 @@
           "file": "features/settings/CommitSettingsCard.tsx",
           "line": 60,
           "column": 63
+        }
+      ]
+    },
+    "b06e379b242586d4": {
+      "source": "目前仅支持 Windows x64 稳定渠道的用户安装版。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 56,
+          "column": 119
         }
       ]
     },
@@ -5387,6 +5838,18 @@
           "file": "features/calls/CallDetails.tsx",
           "line": 57,
           "column": 10
+        }
+      ]
+    },
+    "b4d218c80f0e9122": {
+      "source": "Cursor 安装包下载进度",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 70,
+          "column": 33
         }
       ]
     },
@@ -5467,7 +5930,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 162,
+          "line": 163,
           "column": 45
         }
       ]
@@ -5539,7 +6002,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 301,
+          "line": 303,
           "column": 24
         }
       ]
@@ -5582,6 +6045,11 @@
           "file": "features/plugins/PluginManagementPage.tsx",
           "line": 124,
           "column": 88
+        },
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 48,
+          "column": 97
         }
       ]
     },
@@ -5592,7 +6060,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 155,
+          "line": 156,
           "column": 103
         }
       ]
@@ -5633,12 +6101,12 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 170,
+          "line": 171,
           "column": 28
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 218,
+          "line": 219,
           "column": 67
         }
       ]
@@ -5711,8 +6179,20 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 209,
+          "line": 210,
           "column": 42
+        }
+      ]
+    },
+    "bbe2606eb7a40f44": {
+      "source": "关闭 Cursor 版本管理",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 80,
+          "column": 103
         }
       ]
     },
@@ -6005,6 +6485,18 @@
         }
       ]
     },
+    "cdde2d04b8ae0dd4": {
+      "source": "启用 Cursor 版本管理",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 80,
+          "column": 81
+        }
+      ]
+    },
     "cdf04d177367ecf5": {
       "source": "结束原因",
       "kind": "text",
@@ -6014,6 +6506,18 @@
           "file": "features/calls/CallDetails.tsx",
           "line": 25,
           "column": 10
+        }
+      ]
+    },
+    "ce68a990ed940b90": {
+      "source": "固定编辑器和内置 Harness，仅安装经过验收的官方版本。关闭后恢复原来的更新配置。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 44,
+          "column": 19
         }
       ]
     },
@@ -6041,12 +6545,12 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 285,
+          "line": 287,
           "column": 24
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 291,
+          "line": 293,
           "column": 22
         }
       ]
@@ -6058,7 +6562,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 251,
+          "line": 253,
           "column": 23
         }
       ]
@@ -6175,6 +6679,11 @@
           "column": 241
         },
         {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 56,
+          "column": 61
+        },
+        {
           "file": "shared/ui/Modal.tsx",
           "line": 123,
           "column": 153
@@ -6200,7 +6709,7 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 160,
+          "line": 161,
           "column": 73
         }
       ]
@@ -6243,6 +6752,18 @@
           "file": "features/models/CursorModelEditor.tsx",
           "line": 174,
           "column": 122
+        }
+      ]
+    },
+    "d691cfcb7473a141": {
+      "source": "尚无待安装的已验证更新",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 12,
+          "column": 25
         }
       ]
     },
@@ -6327,7 +6848,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 157,
+          "line": 158,
           "column": 18
         }
       ]
@@ -6491,7 +7012,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 354,
+          "line": 356,
           "column": 25
         }
       ]
@@ -6520,7 +7041,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 341,
+          "line": 343,
           "column": 69
         }
       ]
@@ -6714,7 +7235,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 81,
+          "line": 82,
           "column": 17
         }
       ]
@@ -6800,7 +7321,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 282,
+          "line": 284,
           "column": 28
         }
       ]
@@ -6836,7 +7357,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 158,
+          "line": 159,
           "column": 16
         }
       ]
@@ -6874,7 +7395,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 155,
+          "line": 156,
           "column": 53
         }
       ]
@@ -6898,7 +7419,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 270,
+          "line": 272,
           "column": 18
         }
       ]
@@ -6946,6 +7467,18 @@
         }
       ]
     },
+    "f01a1a5ad34c8b13": {
+      "source": "正在检查接管兼容性…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 18,
+          "column": 31
+        }
+      ]
+    },
     "f01fb1c0e55d248c": {
       "source": "加载模型失败",
       "kind": "text",
@@ -6965,12 +7498,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 104,
+          "line": 105,
           "column": 45
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 108,
+          "line": 109,
           "column": 25
         }
       ]
@@ -6982,8 +7515,20 @@
       "refs": [
         {
           "file": "features/home/HomePage.tsx",
-          "line": 147,
+          "line": 148,
           "column": 86
+        }
+      ]
+    },
+    "f3e1bac9e2b8e0fd": {
+      "source": "此操作不会安装或降级 Cursor。新版本仍需单独检查并确认安装。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 84,
+          "column": 11
         }
       ]
     },
@@ -7074,6 +7619,18 @@
         }
       ]
     },
+    "f6e84d3b47c76239": {
+      "source": "Cursor 版本管理",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 39,
+          "column": 29
+        }
+      ]
+    },
     "f76dd8b0d8452bde": {
       "source": "添加另一个账号或工作区",
       "kind": "text",
@@ -7095,7 +7652,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 184,
+          "line": 185,
           "column": 23
         }
       ]
@@ -7198,7 +7755,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 238,
+          "line": 240,
           "column": 23
         }
       ]
@@ -7360,6 +7917,18 @@
         }
       ]
     },
+    "febbd572e29239fc": {
+      "source": "已验证版本已准备好，可以更新",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/settings/CursorUpdateSettingsCard.tsx",
+          "line": 19,
+          "column": 26
+        }
+      ]
+    },
     "fec7210590309465": {
       "source": "清理全部统计数据",
       "kind": "text",
@@ -7367,7 +7936,7 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 330,
+          "line": 332,
           "column": 38
         }
       ]
@@ -7409,7 +7978,7 @@
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 229,
+          "line": 231,
           "column": 123
         },
         {
@@ -7426,17 +7995,17 @@
       "refs": [
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 76,
+          "line": 77,
           "column": 46
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 250,
+          "line": 252,
           "column": 24
         },
         {
           "file": "features/settings/SettingsPage.tsx",
-          "line": 265,
+          "line": 267,
           "column": 60
         }
       ]

@@ -17,6 +17,7 @@
 | 重试记录详情和并发凭据刷新 | 既有 `plugin::worker::network::tests`、`plugin::registry::tests` | 复用详细/普通日志、并发刷新及取消后凭据落盘回归 |
 | 设置刷新、默认模型、上下文交互 | `apps/desktop/tests/ui/settings.spec.mjs` | 生产前端与真实 Rust 管理服务；实际点击、保存、重新加载后核对界面及持久化数据 |
 | 功能失败隔离 | `apps/desktop/tests/state.test.mjs` | 复用已有状态测试，页面测试只补交互接线与真实服务闭环 |
+| Cursor 版本管理 | `server/src/local_app/update/`、`apps/desktop/tests/ui/cursor-updates.spec.mjs` | 已验收组合筛选、恢复记录、隐藏窗口正常退出与拒绝退出；Windows 设置用例使用真实服务及隔离文件，安装进度界面模拟 OS 更新边界，不执行官方安装器 |
 | 子任务、搜索、Steer、新对话入口 | `server/native-agent/*.test.mjs` | 接入模块与合成私有边界的契约；不等于真实 Cursor 执行器验收 |
 
 网关测试只设置隔离数据库中的接管状态，以测试鉴权和模型路由，不执行系统接管。页面测试只对初始目录 GET 注入 503；恢复后的读取、保存及持久化均使用真实服务。插件重试使用本地测试插件返回认证错误，不代表真实服务商授权测试。
@@ -57,7 +58,7 @@ npm run test:ui
 目前的主要限制：
 
 - Node 原生接入测试使用合成的私有边界，未启动真实 Cursor。网关测试设置隔离数据库中的接管状态，不验证实际安装、模型菜单和 Host 的动作投递。
-- 页面测试使用 Chromium 和独立 Rust 服务，仅覆盖设置页目录恢复、默认模型及上下文保存。它不是 Tauri WebView、桌面宿主或整套管理界面的验收。
+- 页面测试使用 Chromium 和独立 Rust 服务，覆盖设置页目录恢复、默认模型、上下文保存及版本管理交互。Windows 设置保存和恢复用例在 Windows 本地执行；Linux UI job 跳过该项。它不是 Tauri WebView 或真实官方安装升级的验收。
 - 插件取消已覆盖 TLS 等待、响应流读取、接收器关闭及显式取消，但使用测试插件和本地 HTTPS 上游。真实服务商的事件格式、认证、代理兼容性，以及未设置用例的断流/超时场景，需要分别判断。
 - CI 的平台编译与插件测试不覆盖对应系统上的证书信任、代理、安装恢复和桌面交互。历史验收记录也不自动证明新构建、新 Cursor/Harness 或新账号组合通过。
 

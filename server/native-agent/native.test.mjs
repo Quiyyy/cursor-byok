@@ -9,8 +9,8 @@ import http from 'node:http';
 import {once} from 'node:events';
 import { createRequire } from 'node:module';
 import { patchAgentHost } from './patch.mjs';
-import { install } from './install.mjs';
-import { install as installBundled } from './install.bundle.mjs';
+import { install, check, verify } from './install.mjs';
+import { install as installBundled, check as checkBundled, verify as verifyBundled } from './install.bundle.mjs';
 import { catalogEntry } from './catalog.mjs';
 import { workbench } from './workbench.fixture.mjs';
 import { hostControl, localControl } from './control.fixture.mjs';
@@ -37,12 +37,12 @@ function registerControl(sandbox) {
   vm.runInNewContext(exposeHostSearch(patchHostControl(`globalThis.controlModules={${hostControl},${searchModule}};`).source).source,sandbox);
 }
 const inlineHost = host.replace('const modules={73', `const modules={${hostControl},${searchModule},73`);
-const runtime = `(()=>{class Model{constructor(p){Object.assign(this,p)}static fromBinary(p){return p}}${localControl};
+const runtime = `(()=>{class Model{constructor(p){Object.assign(this,p)}static fromBinary(p){return p}toBinary(){return new Uint8Array([1])}}${localControl};
 function taskModels(o){const provider=o.localProvider;return {parentRequestedModelName:o.modelId,subagentModels:[],requireServerSideSubagent:false,getTaskToolConfig:id=>({id,provider})}}
 function providerSearch(config){return async(ctx,args)=>({answer:await request({path:"/responses",input:args.searchTerm}),documents:[]})}
 function tools(options){return {webSearch:providerSearch({modelId:options.modelId})}}
 const modules={12(e,t,r){r.d(t,{LocalAgentClient:()=>Client,buildBottlerocketPickerModels:()=>null,fetchLocalProviderModels:()=>null});}};
-function __webpack_require__(id){return id===12?{LocalAgentClient:Client}:{Type:Model}}
+function __webpack_require__(id){return id===12?{LocalAgentClient:Client,buildBottlerocketPickerModels:models=>models.map(m=>new Model(m)),fetchLocalProviderModels:async endpoint=>({allModelIds:(await (await endpoint.fetchImpl()).json()).data.map(m=>m.id)})}:{Type:Model}}
 const __webpack_exports__={};(()=>{const p=__webpack_require__(34);function decode(input){return p.Type.fromBinary(input.defaultModel)}})();
 const __webpack_export_target__=exports;Object.assign(__webpack_export_target__,__webpack_exports__);})();`;
 function temp(t) {
@@ -254,7 +254,7 @@ for (const shadow of ['local', 'parameter']) test(`Host control and search use t
   const router=sandbox.createRouter({managedAgentToolsClient:{runWebSearch:async()=>({answer:'native search',documents:[]})}});
   assert.equal((await router.__byokCreateWebSearch('gpt-5.4')({signal:new AbortController().signal},{searchTerm:'query'},{})).answer,'native search');
 });
-for (const [name, installer] of [['source', install], ['bundle', installBundled]]) test(`${name} installation is idempotent, reversible and never restores an old version over an update`, async t => {
+for (const [name, installer, preflight, verifyInstalled] of [['source', install, check, verify], ['bundle', installBundled, checkBundled, verifyBundled]]) test(`${name} installation is idempotent, reversible and never restores an old version over an update`, async t => {
   const directory = temp(t),
     app = path.join(directory, 'app'),
     data = path.join(directory, 'data');
@@ -271,7 +271,12 @@ for (const [name, installer] of [['source', install], ['bundle', installBundled]
     checksums: {'vs/workbench/workbench.desktop.main.js':'original-checksum'}
   }));
   const originalProduct = fs.readFileSync(path.join(app, 'product.json'), 'utf8');
+  const checked = await preflight(app, data);
+  assert.equal(checked.files.length, 5);
+  assert.equal(fs.existsSync(data), false, 'preflight must not write a backup or installation');
+  for(const [i,file] of files.entries()) assert.equal(fs.readFileSync(path.join(app,file),'utf8'),[host,runtime,workbench,controlChunk][i]);
   assert.equal(installer(app, data).changed, true);
+  assert.deepEqual(verifyInstalled(app, data), checked);
   assert.match(fs.readFileSync(path.join(app, files[3]),'utf8'),/__byokControl/);
   const context = {fn:()=>Symbol('aiService')};
   vm.runInNewContext(fs.readFileSync(path.join(app, files[2]), 'utf8'), context);

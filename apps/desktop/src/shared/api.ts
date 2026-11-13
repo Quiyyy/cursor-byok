@@ -83,6 +83,27 @@ export interface CursorHarnessStatus {
   settings_applied: boolean;
   proxy_url: string | null;
   ca_install_command: string | null;
+  compatibility_error?: string | null;
+}
+
+export type CursorUpdatePhase = "idle" | "unverified" | "checking" | "downloading" | "verifying" | "extracting" | "validating" | "ready" | "closing" | "installing" | "patching" | "starting" | "complete" | "failed";
+export interface CursorUpdateStatus {
+  supported: boolean;
+  unsupported_reason: string | null;
+  enabled: boolean;
+  current_version: string | null;
+  current_commit: string | null;
+  verified_release: { version: string; commit: string; harness: "builtin" } | null;
+  current_verified: boolean;
+  unverified_version: string | null;
+  phase: CursorUpdatePhase;
+  busy: boolean;
+  can_cancel: boolean;
+  downloaded_bytes: number;
+  total_bytes: number | null;
+  candidate: { id: string; version: string; commit: string } | null;
+  error: string | null;
+  recovery_required: boolean;
 }
 
 export interface PortSettings {
@@ -492,6 +513,12 @@ export const api = {
     await writeText(text);
   },
   setCursorEnabled: (enabled: boolean) => request<CursorHarnessStatus>("/harness/cursor/enabled", { method: "PUT", body: JSON.stringify({ enabled }) }),
+  cursorUpdateStatus: () => request<CursorUpdateStatus>("/cursor-update"),
+  configureCursorUpdates: (enabled: boolean) => request<CursorUpdateStatus>("/cursor-update", { method: "PUT", body: JSON.stringify({ enabled }) }),
+  checkCursorUpdate: () => request<CursorUpdateStatus>("/cursor-update/check", { method: "POST" }),
+  cancelCursorUpdateCheck: () => request<CursorUpdateStatus>("/cursor-update/cancel", { method: "POST" }),
+  installCursorUpdate: (candidate_id: string) => request<CursorUpdateStatus>("/cursor-update/install", { method: "POST", body: JSON.stringify({ candidate_id }) }),
+  recoverCursorUpdate: () => request<CursorUpdateStatus>("/cursor-update/recover", { method: "POST" }),
   calls: () => request<LlmCall[]>("/llm-calls?limit=200"),
   call: (id: string) => request<CallDetail>(`/llm-calls/${encodeURIComponent(id)}`),
   openCallDetails: async (id: string) => {

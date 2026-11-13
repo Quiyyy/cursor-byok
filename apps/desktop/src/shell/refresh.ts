@@ -3,6 +3,7 @@ import { pluginsStore } from "../features/plugins/state";
 import { cursorStore } from "../features/cursor/state";
 import { callsStore } from "../features/calls/state";
 import { settingsStore } from "../features/settings/state";
+import { cursorUpdateStore } from "../features/cursor/updateState";
 export async function initializeApp() {
   await Promise.allSettled([modelsStore.refresh(), pluginsStore.refresh(), cursorStore.refresh(), settingsStore.refresh()]);
 }
@@ -18,7 +19,7 @@ export async function refreshPage(path: string) {
       await callsStore.refreshCalls();
       break;
     case "/settings":
-      await Promise.allSettled([settingsStore.refresh(), modelsStore.refresh(), pluginsStore.refresh()]);
+      await Promise.allSettled([settingsStore.refresh(), modelsStore.refresh(), pluginsStore.refresh(), cursorUpdateStore.refresh()]);
       break;
   }
 }

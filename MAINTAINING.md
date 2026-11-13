@@ -60,6 +60,21 @@ cargo test --package cursor-server --lib plugin:: -- --include-ignored
 
 CI 包含前端类型与生产构建检查、Linux Rust 检查和测试、Windows/macOS 桌面 Rust 检查，以及插件凭据生命周期测试。原生网关、取消、重试及管理页面的自动化覆盖与运行方式见[自动化验收](./docs/testing.md)。
 
+## 维护 Cursor 已验收组合
+
+Windows 更新管理的组合目录位于 `server/src/local_app/update/verified.rs`，新组合放在前面；平台范围、构建 commit 和内置 Harness 必须与实际验收环境一致。保留仍受支持的旧组合。新增版本前，在隔离安装和用户目录中完成模型运行、原生工具、Stop、Steer、关闭后首次调用与同进程重新开启回归，并在[维护状态](./docs/MAINTENANCE_STATUS.md)记录范围与证据。单独通过原生结构预检不能作为加入目录的依据。
+
+官方更新接口提供的安装包标识可能不同于 `product.json` 的 commit；以解包后的产品构建为准，不从下载 URL 推导产品 commit。应用先筛选已验收版本，再校验官方签名、实际构建及生产补丁结构。尚未验收的官方新版本不下载、不自动升级，也不以结构匹配替代验收。
+
+更新管理回归：
+
+```sh
+cargo test --package cursor-server --lib local_app::update
+npm --prefix apps/desktop run test:ui -- cursor-updates.spec.mjs
+```
+
+Windows 进程测试编译并启动临时目录内的隐藏窗口夹具，验证正常关闭、参数保留和用户拒绝退出；不会操作日常 Cursor。签名安装包只读测试默认忽略，设置 `CURSOR_UPDATE_TEST_INSTALLER` 后显式运行 `real_installer_read_only_extraction -- --ignored`，验证签名、解包与预检，不执行安装。真实升级验收仍须使用隔离的 Windows 用户环境，避免官方安装器修改日常安装登记。
+
 ## 本地打包与 UI 调试
 
 只编译桌面程序：
