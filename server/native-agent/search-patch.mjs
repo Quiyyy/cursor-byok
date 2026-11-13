@@ -27,7 +27,7 @@ export function exposeHostSearch(source) {
   return {moduleId:module.key.value,source:source.slice(0,start)+registration+source.slice(start)};
 }
 export function patchHostSearch(source, routerName, moduleId) {
-  let construction, network, privateInference, loader;
+  let construction, network, privateInference, loader, loaderCapture;
   traverse(parse(source), {
     NewExpression(p) {
       if(p.node.callee.name!==routerName)return;
@@ -35,8 +35,12 @@ export function patchHostSearch(source, routerName, moduleId) {
       if(binding?.type!=='ClassDeclaration'||!source.slice(binding.start,binding.end).includes('Selected Agent Host turn runtime'))return;
       if(construction)unsupported();
       construction=p.node;
-      const ownerModule=p.findParent(v=>v.isObjectMethod()&&v.node.key.type==='NumericLiteral')?.node;
-      if(ownerModule?.params.length===3&&ownerModule.params[2].type==='Identifier')loader=ownerModule.params[2].name;
+      const ownerModule=p.findParent(v=>v.isObjectMethod()&&v.node.key.type==='NumericLiteral');
+      if(ownerModule?.node.params.length===3&&ownerModule.node.params[2].type==='Identifier') {
+        loader=ownerModule.scope.generateUid('byokRequire');
+        const start=ownerModule.node.body.directives.at(-1)?.end??ownerModule.node.body.start+1;
+        loaderCapture={start,end:start,code:`const ${loader}=${ownerModule.node.params[2].name};`};
+      }
       const owner=p.getFunctionParent();
       owner?.traverse({ObjectProperty(property) {
         if(property.node.key.name==='privateInference') {
@@ -53,7 +57,7 @@ export function patchHostSearch(source, routerName, moduleId) {
   });
   if(!construction||!network||!privateInference||!loader)unsupported();
   const wrapped=`Object.assign(${code(construction)},{__byokCreateWebSearch:modelId=>void 0===${privateInference}&&${network}.managedAgentToolsClient?${loader}(${moduleId}).__byokWebSearch(${network}.managedAgentToolsClient,{modelId}):undefined})`;
-  return apply(source,[{start:construction.start,end:construction.end,code:wrapped}]);
+  return apply(source,[loaderCapture,{start:construction.start,end:construction.end,code:wrapped}]);
 }
 export function patchLocalSearch(source, searchPath) {
   const matches=[];

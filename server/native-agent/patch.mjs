@@ -25,14 +25,20 @@ export function patchTaskModels(source, bridgePath) {
 export function patchAgentHost(source, bridgePath, control) {
   const routers = [],
     adapters = [];
-  let loader;
+  let loader, loaderCapture;
   traverse(parse(source), {
     Class(p) {
       const code = source.slice(p.node.start, p.node.end);
       if (code.includes('Selected Agent Host turn runtime') && p.node.body.body.some(m => m.key?.name === 'run')) {
         routers.push(p.node);
-        const module = p.findParent(v => v.isObjectMethod() && v.node.key.type === 'NumericLiteral')?.node;
-        if (module?.params.length === 3 && module.params[2].type === 'Identifier') loader = module.params[2].name;
+        const module = p.findParent(v => v.isObjectMethod() && v.node.key.type === 'NumericLiteral');
+        if (module?.node.params.length === 3 && module.node.params[2].type === 'Identifier') {
+          loader = module.scope.generateUid('byokRequire');
+          loaderCapture = {
+            start: module.node.body.directives.at(-1)?.end ?? module.node.body.start + 1,
+            code: `const ${loader}=${module.node.params[2].name};`,
+          };
+        }
       }
       if (code.includes('this.mintLlmGatewayCredential') && code.includes('this.client.run(')) adapters.push(p.node);
     }
@@ -46,7 +52,8 @@ export function patchAgentHost(source, bridgePath, control) {
   const patched = source.slice(0, method.start) + generate(method, {
     compact: true
   }).code + source.slice(method.end);
-  return patchHostSearch(patched, routers[0].id.name, control.searchModuleId);
+  const captured = patched.slice(0, loaderCapture.start) + loaderCapture.code + patched.slice(loaderCapture.start);
+  return patchHostSearch(captured, routers[0].id.name, control.searchModuleId);
 }
 export function exposeNativeClient(source) {
   source = patchLocalControl(source);

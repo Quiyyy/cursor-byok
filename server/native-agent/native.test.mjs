@@ -230,6 +230,30 @@ test('each patched Host router retains its own authenticated search client', asy
   assert.equal(sandbox.createRouter({}).__byokCreateWebSearch('grok-4.6'),undefined);
   assert.equal(sandbox.createRouter({managedAgentToolsClient:{}},{enabled:true}).__byokCreateWebSearch('grok-4.6'),undefined);
 });
+
+for (const shadow of ['local', 'parameter']) test(`Host control and search use the module loader despite ${shadow} shadowing`, async () => {
+  const shadowed = host
+    .replace('async run(t){', shadow === 'local'
+      ? 'async run(t){const load=null,_byokRequire=null,_byokRequire2=null;'
+      : 'async run(load){const _byokRequire=null,_byokRequire2=null;')
+    .replace('function createRouter(network,privateInference){', 'function createRouter(network,privateInference){const load=null,_byokRequire=null,_byokRequire2=null;');
+  const sandbox = {
+    log(){}, loadedChunks:[],
+    require:()=>({run:async(turn,load,privacy,search,loadControl)=>{
+      const factory=await loadControl();
+      const control=factory({},()=>{},'generation',2,()=>{});
+      control.push('steer');
+      assert.equal(control.receiver.action.action,'steer');
+      return 'native';
+    }}),
+  };
+  registerControl(sandbox);
+  vm.runInNewContext(patchAgentHost(shadowed,'/test/route.cjs',hostControlLocation),sandbox);
+  assert.equal(await new sandbox.Router().run({modelDetails:{modelId:'byok:fixture'},runOptions:{}}),'native');
+  assert.deepEqual(sandbox.loadedChunks,[11,900]);
+  const router=sandbox.createRouter({managedAgentToolsClient:{runWebSearch:async()=>({answer:'native search',documents:[]})}});
+  assert.equal((await router.__byokCreateWebSearch('gpt-5.4')({signal:new AbortController().signal},{searchTerm:'query'},{})).answer,'native search');
+});
 for (const [name, installer] of [['source', install], ['bundle', installBundled]]) test(`${name} installation is idempotent, reversible and never restores an old version over an update`, async t => {
   const directory = temp(t),
     app = path.join(directory, 'app'),
