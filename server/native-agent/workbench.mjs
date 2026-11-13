@@ -8,11 +8,32 @@ const unsupported = () => {throw Error('Unsupported Cursor new-conversation mode
 // Installed only while takeover is enabled. Keep Cursor's remote-workspace policy;
 // the Host still chooses the original backend route for ordinary official models.
 export function patchHostEnablement(source) {
-  const matches=[...source.matchAll(/this\._agentHostEnabled\s*=\s*([^;,]+)/g)];
+  const matches=[...source.matchAll(/this\.(_agentHostEnabled|_topologyEnabled)\s*=\s*([^;,}]+)/g)];
   if(matches.length!==1)throw Error('Unsupported Cursor Agent Host enablement boundary');
-  const match=matches[0], expression=parseExpression(match[1]);
-  if(expression.type!=='LogicalExpression'||expression.operator!=='&&'||expression.left.type!=='LogicalExpression'||expression.left.operator!=='||'||expression.right.type!=='Identifier')throw Error('Unsupported Cursor Agent Host enablement policy');
-  const replacement=`this._agentHostEnabled=/*__byokHostEnabled*/${expression.right.name}`;
+  const match=matches[0], field=match[1], expression=parseExpression(match[2]);
+  const invalid=()=>{throw Error('Unsupported Cursor Agent Host enablement policy');};
+  let enabled;
+  if(field==='_agentHostEnabled'){
+    if(expression.type!=='LogicalExpression'||expression.operator!=='&&'||expression.left.type!=='LogicalExpression'||expression.left.operator!=='||'||expression.right.type!=='Identifier')invalid();
+    enabled=expression.right;
+  }else{
+    // Newer Cursor separates rollout/topology from its lazy workspace decision.
+    // Remove only the rollout gate, keeping Orbit restrictions and the original query.
+    const queries=[...source.matchAll(/isCursorAgentHostEnabled\(\)\{return ([^;{}]+);?\}/g)];
+    if(queries.length!==1)invalid();
+    const query=parseExpression(queries[0][1]);
+    const member=(node,name)=>node?.type==='MemberExpression'&&!node.computed&&node.object.type==='ThisExpression'&&node.property.name===name;
+    const policy=query.right?.right;
+    if(query.type!=='LogicalExpression'||query.operator!=='&&'||!member(query.left,field)||
+       query.right.type!=='LogicalExpression'||query.right.operator!=='||'||!member(query.right.left,'_isGlass')||
+       policy?.type!=='BinaryExpression'||policy.operator!=='!=='||policy.right.type!=='StringLiteral'||policy.right.value!=='denied'||
+       policy.left.type!=='CallExpression'||!member(policy.left.callee,'_readPolicy')||policy.left.arguments.length!==0)invalid();
+    if(expression.type!=='LogicalExpression'||expression.operator!=='||'||expression.right.type!=='Identifier'||
+       expression.left.type!=='LogicalExpression'||expression.left.operator!=='&&'||expression.left.left.type!=='Identifier'||
+       expression.left.right.type!=='UnaryExpression'||expression.left.right.operator!=='!'||expression.left.right.argument.type!=='Identifier')invalid();
+    enabled={...expression,left:expression.left.right};
+  }
+  const replacement=`this.${field}=/*__byokHostEnabled*/${generate(enabled,{compact:true}).code}`;
   return source.slice(0,match.index)+replacement+source.slice(match.index+match[0].length);
 }
 

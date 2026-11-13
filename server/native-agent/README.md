@@ -25,6 +25,8 @@ install.bundle.mjs  # 生成产物，不包含 Cursor bundle
 
 Host 的控制与搜索工厂通过结构定位，不固定分块编号或模块加载器变量名。加载器在模块作用域捕获为唯一别名，避免被原生方法的同名参数或局部变量遮蔽。BYOK Run 先检查接管状态，再沿已安装 Host 的分块依赖加载控制工厂并复用原生接收器；关闭接管后不加载已还原的分块，工厂缺失时明确提示重启 Cursor。普通原生模型不进入这条加载路径。Host 数字分块的变化也会使原生目录缓存和已安装状态失效。
 
+Host 启用补丁识别合并判断和分离拓扑两种结构。对于分离拓扑，仅移除 rollout gate，保留原生 Orbit 限制、private inference 选择及 `isCursorAgentHostEnabled()` 中延迟读取的工作区策略；未知结构仍拒绝安装。结构适配通过不自动加入版本管理的已验收组合，实际运行证据见[维护记录](../../docs/MAINTENANCE_STATUS.md)。
+
 ## 运行中的控制消息
 
 `route.cjs` 在模型查询前建立每个 Run 的取消作用域，连接 Host 动作管理器的停止信号，并启动动作消费。`control-patch.mjs` 复用本机原生 mailbox、`RemoteConversationActionManager`、隐私转换和注入状态消息，把接收器传给 `LocalAgentClient` 的原生执行器。普通原生客户端继续使用其原有接收器。
