@@ -28,19 +28,19 @@ const empty: Overview = {
 export function useOverview(range: {
   startMs: number;
   endMs: number;
-} | null, modelHashes: string[], refreshVersion: number) {
+} | null, modelHashes: string[] | undefined, refreshVersion: number) {
   const {
     revision
   } = invalidation.useSnapshot();
-  const [overview, setOverview] = useState(empty);
+  const [overview, setOverview] = useState<Overview | null>(null);
   const [busy, setBusy] = useState(false);
   const startMs = range?.startMs,
     endMs = range?.endMs;
   useEffect(() => {
-    if (startMs == null || endMs == null) return;
     let active = true;
     setBusy(true);
-    void api.overview({
+    // A null range requests all persisted calls, independently of chart filters.
+    void api.overview(startMs == null || endMs == null ? undefined : {
       startMs,
       endMs,
       modelHashes
@@ -56,7 +56,8 @@ export function useOverview(range: {
     };
   }, [startMs, endMs, modelHashes, refreshVersion, revision]);
   return {
-    overview,
+    overview: overview ?? empty,
+    loaded: overview !== null,
     busy
   };
 }

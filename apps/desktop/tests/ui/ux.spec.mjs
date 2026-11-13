@@ -30,7 +30,7 @@ for (const takeoverEnabled of [false, true]) {
   });
 }
 
-test("successful model test keeps quick start until Cursor takeover is enabled", async ({ page, app }) => {
+test("quick start uses unfiltered successful calls and updates after clearing statistics", async ({ page, app }) => {
   await page.setViewportSize({ width: 820, height: 558 });
   const upstream = createServer((request, response) => {
     request.resume();
@@ -59,16 +59,54 @@ test("successful model test keeps quick start until Cursor takeover is enabled",
     const overview = await (await app.api.get("/__byok-api__/api/overview")).json();
     expect(overview.metrics.successful_calls).toBe(1);
     expect(overview.metrics.failed_calls).toBe(0);
+    const created = await app.api.post("/__byok-api__/api/models", { data: { models: [{
+      type: "openai", display_name: "Unused model", model_id: "unused-test",
+      base_url: "http://127.0.0.1:1/v1", api_key: "fixture", tooltip_data: "test",
+    }] } });
+    expect(created.ok()).toBeTruthy();
     await page.getByRole("link", { name: "运行概览", exact: true }).click();
     await page.reload();
     await expect(page.getByText("已验证", { exact: true })).toBeVisible();
     await expect(page.getByText("未开启", { exact: true })).toBeVisible();
+    const picker = page.getByRole("button", { name: /^筛选项：模型，/ });
+    await picker.click();
+    await page.getByRole("option", { name: /Unused model/ }).click();
+    await page.keyboard.press("Escape");
+    const callCount = page.getByRole("region", { name: "调用统计", exact: true }).getByRole("article").first();
+    await expect(callCount).toContainText("0");
+    await expect(page.getByText("已验证", { exact: true })).toBeVisible();
+    await expect(page.getByText("建议验证", { exact: true })).toHaveCount(0);
     await page.getByRole("switch", { name: "Cursor 接管", exact: true }).click();
     await expect(page.getByRole("switch", { name: "Cursor 接管", exact: true })).toBeChecked();
+    await expect(page.getByText("快速开始", { exact: true })).toHaveCount(0);
+    await picker.click();
+    await page.getByRole("option", { name: /Unused model/ }).click();
+    await page.keyboard.press("Escape");
+    await expect(callCount).toContainText("1");
+    await page.getByRole("button", { name: "自定义", exact: true }).click();
+    await page.getByPlaceholder("如：2026-08-23 09:00、1小时前").fill("2020-01-01 00:00");
+    await page.getByPlaceholder("如：现在、2026-08-23 18:00").fill("2020-01-02 00:00");
+    await page.getByRole("button", { name: "应用", exact: true }).click();
+    await expect(callCount).toContainText("0");
+    await expect(page.getByText("快速开始", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "刷新", exact: true }).click();
+    await expect(page.getByRole("button", { name: "刷新", exact: true })).toBeEnabled();
     await expect(page.getByText("快速开始", { exact: true })).toHaveCount(0);
     await page.reload();
     await expect(page.getByRole("button", { name: "刷新", exact: true })).toBeEnabled();
     await expect(page.getByText("快速开始", { exact: true })).toHaveCount(0);
+
+    // Clearing persisted evidence must invalidate both the chart and onboarding queries.
+    await page.getByRole("link", { name: "系统设置", exact: true }).click();
+    await page.getByRole("button", { name: "观测与存储", exact: true }).click();
+    await page.getByRole("button", { name: "清理存储空间", exact: true }).click();
+    await page.getByRole("button", { name: "清理范围", exact: true }).click();
+    await page.getByRole("option", { name: "清理全部统计数据", exact: true }).click();
+    await page.getByRole("button", { name: "确认清理", exact: true }).click();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect.poll(async () => (await (await app.api.get("/__byok-api__/api/overview")).json()).metrics.successful_calls).toBe(0);
+    await page.getByRole("link", { name: "运行概览", exact: true }).click();
+    await expect(page.getByText("建议验证", { exact: true })).toBeVisible();
   } finally {
     upstream.closeAllConnections();
     await new Promise((resolve, reject) => upstream.close(error => error ? reject(error) : resolve()));

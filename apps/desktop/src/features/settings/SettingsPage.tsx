@@ -175,7 +175,7 @@ export function SettingsPage() {
 
   const content = (
     <div className={styles.page}>
-      {showGroup("general") && <div className={styles.group}>
+      <div className={styles.group} hidden={!showGroup("general")}>
         {category === "all" && <h2 className={styles.groupTitle}>{t("常规与外观")}</h2>}
         <TitledCard title={t("语言")}>
           <div className={styles.settingRow}>
@@ -212,15 +212,15 @@ export function SettingsPage() {
           </div>
         </TitledCard>
         <AppLifecycleSettingsCard />
-      </div>}
+      </div>
 
-      {showGroup("cursor") && <div className={styles.group}>
+      <div className={styles.group} hidden={!showGroup("cursor")}>
         {category === "all" && <h2 className={styles.groupTitle}>{t("Cursor 增强")}</h2>}
         <CommitSettingsCard />
         <TabSettingsCard settings={tabSettings} draft={tabDraft} editing={editingTab} saving={savingTab} onDraftChange={setTabDraft} onEdit={editTab} onCancel={cancelTabEdit} onSave={() => void saveTab()} />
-      </div>}
+      </div>
 
-      {showGroup("network") && <div className={styles.group}>
+      <div className={styles.group} hidden={!showGroup("network")}>
         {category === "all" && <h2 className={styles.groupTitle}>{t("接口与网络")}</h2>}
         <ExternalApiSettingsCard servicePort={ports.service_port} />
         <TitledCard title={t("端口设置")} action={editingPorts ? (
@@ -275,9 +275,9 @@ export function SettingsPage() {
           </div>
         </TitledCard>
         <ProxySettingsCard settings={outboundProxy} draft={proxyDraft} editing={editingProxy} saving={savingProxy} onDraftChange={setProxyDraft} onEdit={editProxy} onCancel={cancelProxyEdit} onSave={() => void saveProxy()} />
-      </div>}
+      </div>
 
-      {showGroup("observability") && <div className={styles.group}>
+      <div className={styles.group} hidden={!showGroup("observability")}>
         {category === "all" && <h2 className={styles.groupTitle}>{t("观测与存储")}</h2>}
         <TitledCard title={t("调用观测")}>
           <div className={styles.settingRow}>
@@ -310,7 +310,7 @@ export function SettingsPage() {
             </button>
           </div>
         </TitledCard>
-      </div>}
+      </div>
 
       <ConfirmDialog
         open={confirmClear}
@@ -351,6 +351,6 @@ export function SettingsPage() {
         ))}
       </div>
     </PageActions>
-    <PageContent title={t("设置")} sections={[{ key: `settings:${category}`, estimatedHeight: category === "all" ? 1200 : 380, content }]} />
+    <PageContent title={t("设置")} sections={[{ key: "settings", estimatedHeight: 1200, content }]} />
   </>;
 }

@@ -1,5 +1,69 @@
 import { test, expect } from "./fixture.mjs";
 
+test("settings categories preserve an unsaved external API key until saved", async ({ page, app }) => {
+  await page.setViewportSize({ width: 820, height: 558 });
+  await page.goto(`${app.origin}/__byok-api__/#/settings`);
+  const card = page.getByText("外部 API", { exact: true }).locator("xpath=ancestor::section[1]");
+  const input = card.locator("input[type=password]");
+  await expect(input).toBeEnabled();
+  await input.fill("unsaved-review-key");
+  await page.getByRole("button", { name: "接口与网络", exact: true }).click();
+  await expect(input).toHaveValue("unsaved-review-key");
+  await page.getByRole("button", { name: "常规与外观", exact: true }).click();
+  await expect(card).toBeHidden();
+  await page.getByRole("button", { name: "接口与网络", exact: true }).click();
+  await expect(input).toHaveValue("unsaved-review-key");
+  await page.getByRole("button", { name: "全部", exact: true }).click();
+  await expect(input).toHaveValue("unsaved-review-key");
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(async () => (await (await app.api.get("/__byok-api__/api/settings/external-api")).json()).api_key).toBe("unsaved-review-key");
+  await page.reload();
+  await expect(input).toHaveValue("unsaved-review-key");
+});
+
+test("settings categories preserve an unsaved Commit model until saved", async ({ page, app }) => {
+  await page.setViewportSize({ width: 820, height: 558 });
+  await page.goto(`${app.origin}/__byok-api__/#/settings`);
+  const card = page.getByText("Commit 提交代码模型设置", { exact: true }).locator("xpath=ancestor::section[1]");
+  const picker = card.getByRole("button", { name: /^筛选项：生成模型，/ });
+  await card.getByRole("button", { name: "编辑", exact: true }).click();
+  await picker.click();
+  await page.getByRole("option", { name: /Acceptance model/ }).click();
+  await page.getByRole("button", { name: "Cursor 增强", exact: true }).click();
+  await expect(picker).toContainText("Acceptance model");
+  await page.getByRole("button", { name: "接口与网络", exact: true }).click();
+  await expect(card).toBeHidden();
+  await page.getByRole("button", { name: "Cursor 增强", exact: true }).click();
+  await expect(picker).toContainText("Acceptance model");
+  await page.getByRole("button", { name: "全部", exact: true }).click();
+  await expect(picker).toContainText("Acceptance model");
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(async () => (await (await app.api.get("/__byok-api__/api/settings/commit?locale=zh-CN")).json()).model_id).toBe(app.model.model_hash);
+  await page.reload();
+  await expect(card.getByText("Acceptance model（gpt-test）", { exact: true })).toBeVisible();
+});
+
+test("settings categories preserve unsaved pricing until saved", async ({ page, app }) => {
+  await page.setViewportSize({ width: 820, height: 558 });
+  await page.goto(`${app.origin}/__byok-api__/#/settings`);
+  const card = page.getByText("Token 定价", { exact: true }).locator("xpath=ancestor::section[1]");
+  const input = card.getByRole("spinbutton").first();
+  await card.getByRole("button", { name: "编辑", exact: true }).click();
+  await input.fill("123");
+  await page.getByRole("button", { name: "观测与存储", exact: true }).click();
+  await expect(input).toHaveValue("123");
+  await page.getByRole("button", { name: "接口与网络", exact: true }).click();
+  await expect(card).toBeHidden();
+  await page.getByRole("button", { name: "观测与存储", exact: true }).click();
+  await expect(input).toHaveValue("123");
+  await page.getByRole("button", { name: "全部", exact: true }).click();
+  await expect(input).toHaveValue("123");
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(card.getByRole("button", { name: "编辑", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(card.getByText("$123", { exact: true })).toBeVisible();
+});
+
 test("settings refresh recovers the model picker after catalog failures", async ({ page, app }) => {
   let failing = true;
   const failed = new Set();
