@@ -41,7 +41,7 @@ export function patchAgentHost(source, bridgePath, control) {
   const method = routers[0].body.body.find(m => m.key?.name === 'run');
   if (!method.async || method.params.length !== 1 || method.params[0].type !== 'Identifier') throw Error('Unsupported Cursor Run signature');
   const turn = method.params[0].name;
-  const injection = `if ((${turn}.runOptions.requestedModel?.modelId||${turn}.modelDetails?.modelId)?.startsWith('byok:')) { await Promise.all(${JSON.stringify(control.chunkIds)}.map(id=>${loader}.e(id))); return require(${JSON.stringify(bridgePath)}).run(${turn}, () => require('../../cursor-local-agent-runtime/dist/main.js'), () => require('vscode').cursor.getPrivacyModeEnum(), this.__byokCreateWebSearch, ${loader}(${control.moduleId}).__byokControl, (__byok,controlled)=>new ${adapters[0].id.name}(__byok.client).run({...controlled,modelDetails:__byok.details,runOptions:__byok.options})); }`;
+  const injection = `if ((${turn}.runOptions.requestedModel?.modelId||${turn}.modelDetails?.modelId)?.startsWith('byok:')) return require(${JSON.stringify(bridgePath)}).run(${turn}, () => require('../../cursor-local-agent-runtime/dist/main.js'), () => require('vscode').cursor.getPrivacyModeEnum(), this.__byokCreateWebSearch, async()=>{await Promise.all(${JSON.stringify(control.chunkIds)}.map(id=>${loader}.e(id)));return ${loader}(${control.moduleId}).__byokControl;}, (__byok,controlled)=>new ${adapters[0].id.name}(__byok.client).run({...controlled,modelDetails:__byok.details,runOptions:__byok.options}));`;
   method.body.body.unshift(...parse(`async function inject(){${injection}}`).program.body[0].body.body);
   const patched = source.slice(0, method.start) + generate(method, {
     compact: true

@@ -59,12 +59,36 @@ function setup(f,execute,runId='run-a') {
     const control={ctx,cancel,id,privacy,receiver,push:action=>receiver.queue.push(action)};
     controls.push(control);return control;
   };
-  const start=()=>f.run(turn,()=>library,()=>2,undefined,createControl,async(routed,controlled)=>{
+  const start=(loadControl=()=>createControl)=>f.run(turn,()=>library,()=>2,undefined,loadControl,async(routed,controlled)=>{
     assert.equal(routed.client.options.__byokConversationActionReceiver,controls[0].receiver);
     return execute(controlled,controls[0]);
   });
-  return {start,turn,parent,manager,updates,controls};
+  return {start,turn,parent,manager,updates,controls,createControl};
 }
+
+test('a stale Host missing the control factory asks for a restart before model lookup',async t=>{
+  let requests=0;
+  const f=await fixture(t,(_,res)=>{requests++;metadata(res)});
+  const s=setup(f,()=>assert.fail('must not invoke a stale runtime'));
+  await assert.rejects(s.start(async()=>undefined),/请重启 Cursor 后重试/);
+  assert.equal(requests,0);
+  assert.equal(s.controls.length,0);
+  assert.equal(s.parent.ctx.signal.aborted,false);
+  s.manager.close();
+});
+
+test('Stop during control loading prevents receiver creation and model lookup',async t=>{
+  let requests=0;
+  const f=await fixture(t,(_,res)=>{requests++;metadata(res)}),loading=deferred(),loaded=deferred();
+  const s=setup(f,()=>assert.fail('must not invoke after Stop'));
+  const pending=s.start(async()=>{loading.resolve();await loaded.promise;return s.createControl;});
+  const rejected=assert.rejects(pending,{name:'AbortError'});
+  await loading.promise;s.manager.stop();loaded.resolve();await rejected;
+  assert.equal(requests,0);
+  assert.equal(s.controls.length,0);
+  assert.equal(s.parent.ctx.signal.aborted,false);
+  s.manager.close();
+});
 
 test('structural patches bind native conversion and ledger notifications, and only replace the empty receiver',async()=>{
   const input=`const modules={${hostControl}};globalThis.modules=modules;`;

@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
+import http from 'node:http';
+import {once} from 'node:events';
 import { createRequire } from 'node:module';
 import { patchAgentHost } from './patch.mjs';
 import { install } from './install.mjs';
@@ -34,6 +36,7 @@ const hostControlLocation = {moduleId:72,searchModuleId:71,chunkIds:[11,900]};
 function registerControl(sandbox) {
   vm.runInNewContext(exposeHostSearch(patchHostControl(`globalThis.controlModules={${hostControl},${searchModule}};`).source).source,sandbox);
 }
+const inlineHost = host.replace('const modules={73', `const modules={${hostControl},${searchModule},73`);
 const runtime = `(()=>{class Model{constructor(p){Object.assign(this,p)}static fromBinary(p){return p}}${localControl};
 function taskModels(o){const provider=o.localProvider;return {parentRequestedModelName:o.modelId,subagentModels:[],requireServerSideSubagent:false,getTaskToolConfig:id=>({id,provider})}}
 function providerSearch(config){return async(ctx,args)=>({answer:await request({path:"/responses",input:args.searchTerm}),documents:[]})}
@@ -186,18 +189,21 @@ test('native router retains every host-owned state object and callback', async (
     log() {},
     loadedChunks: [],
     require: () => ({
-      run: async (turn,load,privacy,search,control,invoke) => invoke({
-        client: {
-          run(t) {
-            received = t;
-            return 'native';
-          }
-        },
-        details: {
-          modelId: 'grok-4.6'
-        },
-        options: {}
-      },turn)
+      run: async (turn,load,privacy,search,loadControl,invoke) => {
+        assert.equal(typeof await loadControl(), 'function');
+        return invoke({
+          client: {
+            run(t) {
+              received = t;
+              return 'native';
+            }
+          },
+          details: {
+            modelId: 'grok-4.6'
+          },
+          options: {}
+        },turn);
+      }
     })
   };
   registerControl(sandbox);
@@ -290,3 +296,77 @@ for (const [name, installer] of [['source', install], ['bundle', installBundled]
   installer(app,data,true);
   assert.equal(fs.existsSync(path.join(app,files[3])),false,'restore does not recreate a chunk removed by Cursor update');
 });
+
+for (const [name, installer] of [['source', install], ['bundle', installBundled]]) {
+  for (const layout of ['chunked', 'inline']) {
+    test(`${name} ${layout} Host rejects disabled first use without loading and runs after re-enable in the same process`, async t => {
+      const directory = temp(t), app = path.join(directory, 'app'), data = path.join(directory, 'data');
+      const files = new Map([
+        ['extensions/cursor-agent-host/dist/main.js', layout === 'inline' ? inlineHost : host],
+        ['extensions/cursor-local-agent-runtime/dist/main.js', runtime],
+        ['out/vs/workbench/workbench.desktop.main.js', workbench],
+        ['product.json', '{}'],
+        ...(layout === 'chunked' ? [['extensions/cursor-agent-host/dist/900.js', controlChunk]] : []),
+      ]);
+      for (const [file, source] of files) {
+        fs.mkdirSync(path.dirname(path.join(app, file)), {recursive:true});
+        fs.writeFileSync(path.join(app, file), source);
+      }
+      fs.mkdirSync(data, {recursive:true});
+      fs.copyFileSync(new URL('./route.cjs', import.meta.url), path.join(data, 'route.cjs'));
+      let requests = 0, invocations = 0;
+      const server = http.createServer((req, res) => {
+        requests++;
+        assert.equal(req.url, '/models/byok%3Afixture');
+        res.writeHead(200, {'content-type':'application/json'});
+        res.end(JSON.stringify({modelId:'fixture-model'}));
+      });
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      t.after(() => { server.closeAllConnections(); server.close(); });
+      const connection = enabled => fs.writeFileSync(path.join(data, 'connection.json'), JSON.stringify({enabled, baseUrl:`http://127.0.0.1:${server.address().port}`, apiKey:'fixture'}));
+      const library = {
+        __byokRefreshModels:async()=>({allModelIds:['fixture-model']}),
+        __byokLocalAgentClient:()=>class {run(turn){invocations++;return turn.modelDetails.modelId;}},
+      };
+      const diskRequire = createRequire(path.join(app, 'extensions/cursor-agent-host/dist/main.js'));
+      const sandbox = {loadedChunks:[], log(){}, require:id=>id==='vscode'
+        ? {cursor:{getPrivacyModeEnum:()=>2}}
+        : id==='../../cursor-local-agent-runtime/dist/main.js' ? library : diskRequire(id)};
+      // Loading a restored chunk really caches the original module for this Host's lifetime.
+      Object.defineProperty(sandbox, 'controlModules', {get:()=>diskRequire('./900.js').modules});
+      const turn = () => {
+        const controller = new AbortController();
+        return {
+          ctx:{withCancel:()=>[{signal:controller.signal}, reason=>controller.abort(reason)]},
+          conversationActionManager:{signal:new AbortController().signal, run:async()=>{}},
+          modelDetails:{modelId:'byok:fixture', clone(){return {modelId:this.modelId};}},
+          runOptions:{}, interactionListener:{sendUpdate:async()=>{}},
+        };
+      };
+      connection(true);
+      assert.equal(installer(app, data).changed, true);
+      vm.runInNewContext(fs.readFileSync(path.join(app, 'extensions/cursor-agent-host/dist/main.js'), 'utf8'), sandbox);
+      const router = new sandbox.Router();
+      connection(false);
+      installer(app, data, true);
+      await assert.rejects(router.run(turn()), /Cursor BYOK 接管未开启/);
+      assert.deepEqual(sandbox.loadedChunks, []);
+      assert.equal(requests, 0);
+      assert.equal(invocations, 0);
+      for (const [file, original] of files) assert.equal(fs.readFileSync(path.join(app, file), 'utf8'), original);
+
+      installer(app, data);
+      connection(true);
+      assert.equal(await router.run(turn()), 'fixture-model');
+      assert.equal(invocations, 1);
+      assert.equal(requests, 1);
+      assert.deepEqual(sandbox.loadedChunks, layout === 'chunked' ? [11,900] : []);
+      connection(false);
+      installer(app, data, true);
+      await assert.rejects(router.run(turn()), /Cursor BYOK 接管未开启/);
+      assert.equal(requests, 1, 'a warm Host also stops before model lookup when disabled');
+      assert.deepEqual(sandbox.loadedChunks, layout === 'chunked' ? [11,900] : []);
+    });
+  }
+}

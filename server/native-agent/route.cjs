@@ -3,8 +3,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {randomUUID} = require('node:crypto');
 
+function readConnection(configPath = path.join(__dirname, 'connection.json')) {
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  if (!config.enabled) throw new Error('Cursor BYOK 接管未开启');
+  return config;
+}
+
 // The Host owns the action stream; this Run owns its receiver and cancellation scope.
-async function run(turn, loadNative, getPrivacyMode, createWebSearch, createControl, invoke) {
+async function run(turn, loadNative, getPrivacyMode, createWebSearch, loadControl, invoke) {
   const [ctx, cancel] = turn.ctx.withCancel();
   const manager = turn.conversationActionManager;
   const stop = () => cancel(manager.signal.reason);
@@ -16,6 +22,11 @@ async function run(turn, loadNative, getPrivacyMode, createWebSearch, createCont
   try {
     if (manager.signal.aborted) stop();
     ctx.signal.throwIfAborted();
+    // Restoring takeover files must not make a running Host cache an unpatched chunk.
+    readConnection();
+    const createControl = await loadControl();
+    ctx.signal.throwIfAborted();
+    if (typeof createControl !== 'function') throw new Error('Cursor 原生接入已变更，请重启 Cursor 后重试');
     control = createControl(ctx, cancel, controlled.runOptions.generationUUID, privacy, update => {
       updates.push(Promise.resolve().then(() => turn.interactionListener.sendUpdate(turn.ctx, update)).catch(error => {
         console.warn('[Cursor BYOK] Context injection state update failed', error);
@@ -38,8 +49,7 @@ exports.run = run;
 async function route(turn, loadNative, getPrivacyMode, createWebSearch, configPath = path.join(__dirname, 'connection.json'), receiver) {
   const selected = turn.runOptions.requestedModel?.modelId || turn.modelDetails?.modelId;
   if (!selected?.startsWith('byok:')) return;
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  if (!config.enabled) throw new Error('Cursor BYOK 接管未开启');
+  const config = readConnection(configPath);
   const response = await fetch(`${config.baseUrl}/models/${encodeURIComponent(selected)}`, {
     headers: {
       Authorization: `Bearer ${config.apiKey}`
