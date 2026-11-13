@@ -28,3 +28,27 @@ test('Host enablement preserves native workspace policy and rejects unknown boun
   assert.throws(()=>patchHostEnablement(source.replace('(gate||privateInference)&&policy','gate||privateInference')),/policy/);
   assert.throws(()=>patchHostEnablement(source+source),/boundary/);
 });
+
+test('topology Host enablement retains deferred workspace decisions and Orbit restrictions', () => {
+  const source=`class Enablement{
+    constructor(gate,orbitDisabled,privateInference,glass,policy){this._isGlass=glass;this.policy=policy;this._topologyEnabled=gate&&!orbitDisabled||privateInference;}
+    isCursorAgentHostEnabled(){return this._topologyEnabled&&(this._isGlass||this._readPolicy()!=="denied")}
+    _readPolicy(){this.policy.reads++;return this.policy.state;}
+  }globalThis.Enablement=Enablement;`;
+  const sandbox={};vm.runInNewContext(patchHostEnablement(source),sandbox);
+  for(const state of ['allowed','pending','denied']){
+    const policy={state,reads:0};
+    const enabled=new sandbox.Enablement(false,false,false,false,policy);
+    assert.equal(policy.reads,0,'policy evaluation remains at the native query boundary');
+    assert.equal(enabled.isCursorAgentHostEnabled(),state!=='denied');
+    assert.equal(policy.reads,1);
+    policy.state='denied';assert.equal(enabled.isCursorAgentHostEnabled(),false);
+  }
+  const policy={state:'allowed',reads:0};
+  assert.equal(new sandbox.Enablement(true,true,false,false,policy).isCursorAgentHostEnabled(),false);
+  assert.equal(new sandbox.Enablement(false,true,true,false,policy).isCursorAgentHostEnabled(),true);
+  assert.equal(new sandbox.Enablement(false,false,false,true,{state:'denied',reads:0}).isCursorAgentHostEnabled(),true);
+  assert.throws(()=>patchHostEnablement(source.replace('gate&&!orbitDisabled||privateInference','gate||privateInference')),/policy/);
+  assert.throws(()=>patchHostEnablement(source.replace('!=="denied"','!=="pending"')),/policy/);
+  assert.throws(()=>patchHostEnablement(source+source),/boundary/);
+});

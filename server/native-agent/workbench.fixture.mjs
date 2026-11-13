@@ -18,3 +18,11 @@ export const workbench = bootstrap + `class ComposerService {
   async createComposerImpl(e){e=e??{};const n='previous',f=this.getModelConfigForNewComposer(e?.partialState?.modelConfig,n);const created={modelConfig:f};this.saved.push(created);return created;}
   getModelConfigForNewComposer(e,t){return e||this.globalModel;}
 }globalThis.ComposerService=ComposerService;`;
+
+export const topologyWorkbench = workbench.replace(
+  'this._agentHostEnabled=(gate||privateInference)&&policy;',
+  'const orbitDisabled=false;this._policy=policy;this._isGlass=false;this._topologyEnabled=gate&&!orbitDisabled||privateInference;',
+).replace(
+  'isCursorAgentHostEnabled(){return this._agentHostEnabled;}',
+  'isCursorAgentHostEnabled(){return this._topologyEnabled&&(this._isGlass||this._readPolicy()!=="denied")}_readPolicy(){return this._policy?"allowed":"denied";}',
+);

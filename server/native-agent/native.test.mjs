@@ -12,7 +12,7 @@ import { patchAgentHost } from './patch.mjs';
 import { install, check, verify } from './install.mjs';
 import { install as installBundled, check as checkBundled, verify as verifyBundled } from './install.bundle.mjs';
 import { catalogEntry } from './catalog.mjs';
-import { workbench } from './workbench.fixture.mjs';
+import { workbench, topologyWorkbench } from './workbench.fixture.mjs';
 import { hostControl, localControl } from './control.fixture.mjs';
 import {patchHostControl} from './control-patch.mjs';
 import {exposeHostSearch} from './search-patch.mjs';
@@ -254,7 +254,9 @@ for (const shadow of ['local', 'parameter']) test(`Host control and search use t
   const router=sandbox.createRouter({managedAgentToolsClient:{runWebSearch:async()=>({answer:'native search',documents:[]})}});
   assert.equal((await router.__byokCreateWebSearch('gpt-5.4')({signal:new AbortController().signal},{searchTerm:'query'},{})).answer,'native search');
 });
-for (const [name, installer, preflight, verifyInstalled] of [['source', install, check, verify], ['bundle', installBundled, checkBundled, verifyBundled]]) test(`${name} installation is idempotent, reversible and never restores an old version over an update`, async t => {
+for (const [boundary, candidateWorkbench] of [['combined',workbench],['topology',topologyWorkbench]])
+for (const [name, installer, preflight, verifyInstalled] of [['source', install, check, verify], ['bundle', installBundled, checkBundled, verifyBundled]]) test(`${name} ${boundary} installation is idempotent, reversible and never restores an old version over an update`, async t => {
+  const workbench=candidateWorkbench;
   const directory = temp(t),
     app = path.join(directory, 'app'),
     data = path.join(directory, 'data');
