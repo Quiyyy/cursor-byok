@@ -17,40 +17,12 @@ function write(file, bytes) {
   fs.writeFileSync(temporary, bytes);
   fs.renameSync(temporary, file);
 }
-export function install(appPath, directory, restore = false) {
-  const app = fs.realpathSync(appPath);
-  const base = path.join(directory, 'installations', hash(app));
-  fs.mkdirSync(base, {
-    recursive: true
-  });
-  const manifestPath = path.join(base, 'manifest.json');
-  const previous = fs.existsSync(manifestPath) ? JSON.parse(read(manifestPath)) : undefined;
-  const readEntry = file => {
-    const resolved = fs.realpathSync(path.join(app, file));
-    if (!resolved.startsWith(app + path.sep) || fs.statSync(resolved).nlink > 1) throw Error('Cursor runtime must be an independent installed file');
-    const current = read(resolved);
-    const index = previous?.files.findIndex(entry => entry.file === file) ?? -1;
-    if (previous?.files[index]?.patched !== hash(current)) {
-      if (['__byokLocalAgentClient', '__byok.client', '__byokNewComposerDefault', '__byokControl'].some(marker => current.includes(marker))) throw Error('Cursor already has an unrecognized BYOK patch; restore its original installation backup first');
-      return {file, current, original:current};
-    }
-    const original = read(path.join(base, `original-${index}.js`));
-    if (hash(original) !== previous.files[index].original) throw Error('Cursor BYOK original backup checksum mismatch');
-    return {file, current, original};
-  };
-  // A Cursor upgrade replaces files: never restore an obsolete backup over it.
-  if (restore) {
-    const entries = (previous?.files.map(entry => entry.file) ?? baseFiles)
-      .filter(file => fs.existsSync(path.join(app, file))).map(readEntry);
-    entries.forEach(({file, original, current}) => {
-      if (original !== current) write(path.join(app, file), original);
-    });
-    if (fs.existsSync(manifestPath)) fs.unlinkSync(manifestPath);
-    return {
-      changed: entries.some(entry => entry.original !== entry.current),
-      restored: true
-    };
-  }
+function readSource(app, file) {
+  const resolved = fs.realpathSync(path.join(app, file));
+  if (!resolved.startsWith(app + path.sep) || fs.statSync(resolved).nlink > 1) throw Error('Cursor runtime must be an independent installed file');
+  return read(resolved);
+}
+function prepare(app, directory, readEntry) {
   const entries = baseFiles.map(readEntry);
   const hostDirectory = path.dirname(baseFiles[0]);
   const candidates = [entries[0], ...fs.readdirSync(path.join(app, hostDirectory))
@@ -73,6 +45,79 @@ export function install(appPath, directory, restore = false) {
   }
   generated.push(JSON.stringify(product, null, 2));
   if (owner.file !== baseFiles[0]) generated.push(control.source);
+  return {files, current, originals, generated, product};
+}
+
+// Structural/package preflight is not a substitute for the maintainer's live-run acceptance.
+export async function check(appPath, directory) {
+  const app = fs.realpathSync(appPath);
+  const {files, originals, generated, product} = prepare(app, directory, file => {
+    const original = readSource(app, file);
+    return {file, original, current:original};
+  });
+  const filename = path.join(app, baseFiles[1]);
+  const library = new Module(filename);
+  library.filename = filename;
+  library.paths = Module._nodeModulePaths(path.dirname(filename));
+  const load = Module._load;
+  try {
+    Module._load = function(id, ...args) { return id === 'vscode' ? {} : load.call(this, id, ...args); };
+    library._compile(generated[1], filename);
+    const native = library.exports;
+    const model = {id:'gpt-5.4', displayName:'BYOK check', contextLength:200000};
+    const metadata = await native.__byokRefreshModels({baseUrl:'http://127.0.0.1:1/v1', apiKey:'fixture', fetchImpl:async()=>Response.json({data:[{...model,object:'model',api_types:['openai_responses'],capabilities:{context_length:200000,supports_tool_use:true,supports_streaming:true}}]})});
+    if (!metadata.allModelIds.includes(model.id)) throw Error('Native model metadata check failed');
+    const [entry] = native.__byokModelCatalog([model]);
+    const details = native.__byokCreateModelDetails(model.id);
+    if (!entry?.toBinary().length || !details.toBinary().length) throw Error('Native model serialization check failed');
+    const Client = native.__byokLocalAgentClient();
+    const client = new Client({localProvider:{kind:'http',endpoints:[{baseUrl:'http://127.0.0.1:1/v1',apiKey:'fixture'}]}, defaultModel:details, availableModels:()=>[details], privacyMode:2, customHeaders:{}, maxRetries:10, enableSmartModeClassifier:true});
+    if (typeof client.run !== 'function') throw Error('Native client Run entry is unavailable');
+  } finally { Module._load = load; }
+  return {version:product.version, commit:product.commit, files:files.map((file,i)=>({file,sha256:hash(originals[i])}))};
+}
+
+export function verify(appPath, directory) {
+  const app = fs.realpathSync(appPath), base = path.join(directory, 'installations', hash(app));
+  const manifest = JSON.parse(read(path.join(base, 'manifest.json')));
+  for (const [i, entry] of manifest.files.entries()) {
+    if (hash(readSource(app, entry.file)) !== entry.patched || hash(read(path.join(base, `original-${i}.js`))) !== entry.original) throw Error(`Cursor BYOK installed file verification failed: ${entry.file}`);
+  }
+  return {version:manifest.version, commit:manifest.commit, files:manifest.files.map(entry=>({file:entry.file,sha256:entry.original}))};
+}
+export function install(appPath, directory, restore = false) {
+  const app = fs.realpathSync(appPath);
+  const base = path.join(directory, 'installations', hash(app));
+  fs.mkdirSync(base, {
+    recursive: true
+  });
+  const manifestPath = path.join(base, 'manifest.json');
+  const previous = fs.existsSync(manifestPath) ? JSON.parse(read(manifestPath)) : undefined;
+  const readEntry = file => {
+    const current = readSource(app, file);
+    const index = previous?.files.findIndex(entry => entry.file === file) ?? -1;
+    if (previous?.files[index]?.patched !== hash(current)) {
+      if (['__byokLocalAgentClient', '__byok.client', '__byokNewComposerDefault', '__byokControl'].some(marker => current.includes(marker))) throw Error('Cursor already has an unrecognized BYOK patch; restore its original installation backup first');
+      return {file, current, original:current};
+    }
+    const original = read(path.join(base, `original-${index}.js`));
+    if (hash(original) !== previous.files[index].original) throw Error('Cursor BYOK original backup checksum mismatch');
+    return {file, current, original};
+  };
+  // A Cursor upgrade replaces files: never restore an obsolete backup over it.
+  if (restore) {
+    const entries = (previous?.files.map(entry => entry.file) ?? baseFiles)
+      .filter(file => fs.existsSync(path.join(app, file))).map(readEntry);
+    entries.forEach(({file, original, current}) => {
+      if (original !== current) write(path.join(app, file), original);
+    });
+    if (fs.existsSync(manifestPath)) fs.unlinkSync(manifestPath);
+    return {
+      changed: entries.some(entry => entry.original !== entry.current),
+      restored: true
+    };
+  }
+  const {files, current, originals, generated, product} = prepare(app, directory, readEntry);
   const manifest = {
     version: product.version,
     commit: product.commit,
@@ -103,7 +148,11 @@ export function install(appPath, directory, restore = false) {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    if (process.argv[4] === 'catalog') {
+    if (process.argv[4] === 'check') {
+      console.log(JSON.stringify(await check(process.argv[2], process.argv[3])));
+    } else if (process.argv[4] === 'verify') {
+      console.log(JSON.stringify(verify(process.argv[2], process.argv[3])));
+    } else if (process.argv[4] === 'catalog') {
       // The exported native picker factory owns effort choices and model-family defaults.
       const models = JSON.parse(fs.readFileSync(0, 'utf8'));
       const original = Module._load;

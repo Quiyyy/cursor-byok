@@ -85,7 +85,7 @@ async fn fixture() -> (tempfile::TempDir, crate::store::Store, axum::Router) {
     ));
     let agent = NativeAgent {
         inner: Arc::new(Inner {
-            app: directory.path().join("unused-cursor"),
+            app: directory.path().join("cursor/resources/app"),
             directory: directory.path().join("native"),
             key: "native-test-key".into(),
             installed: Mutex::new(None),
@@ -105,6 +105,59 @@ async fn fixture() -> (tempfile::TempDir, crate::store::Store, axum::Router) {
         agent,
     );
     (directory, store, router)
+}
+
+#[tokio::test]
+async fn managed_native_gateway_rejects_unverified_cursor_without_changing_takeover_intent() {
+    let (directory, store, router) = fixture().await;
+    let app = directory.path().join("cursor/resources/app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("product.json"),
+        json!({
+            "nameShort":"Cursor", "target":"user", "quality":"stable",
+            "version":"3.30.8", "commit":"unverified-build"
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut pe = [0_u8; 70];
+    pe[..2].copy_from_slice(b"MZ");
+    pe[60..64].copy_from_slice(&64_u32.to_le_bytes());
+    pe[64..68].copy_from_slice(b"PE\0\0");
+    pe[68..70].copy_from_slice(&0x8664_u16.to_le_bytes());
+    std::fs::write(app.join("../../Cursor.exe"), pe).unwrap();
+    let model = store
+        .create_model(&input("http://127.0.0.1:1"))
+        .await
+        .unwrap();
+    store.set_cursor_takeover_enabled(true).await.unwrap();
+    let mut management = crate::store::CursorUpdateSettings {
+        enabled: true,
+        ..Default::default()
+    };
+    store.set_cursor_update_settings(&management).await.unwrap();
+    let request = || {
+        Request::get(format!(
+            "/__byok-native__/models/byok:{}/v1/models",
+            model.model_hash
+        ))
+        .header("authorization", "Bearer native-test-key")
+        .body(Body::empty())
+        .unwrap()
+    };
+    let response = router.clone().oneshot(request()).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = to_bytes(response.into_body(), 4096).await.unwrap();
+    assert!(String::from_utf8_lossy(&body).contains("has not been verified"));
+    assert!(store.cursor_takeover_enabled().await.unwrap());
+    assert_eq!(store.models().await.unwrap().len(), 1);
+    management.enabled = false;
+    store.set_cursor_update_settings(&management).await.unwrap();
+    assert_eq!(
+        router.oneshot(request()).await.unwrap().status(),
+        StatusCode::OK
+    );
 }
 
 #[tokio::test]

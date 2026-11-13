@@ -76,7 +76,10 @@ async fn authorized(
             )));
         }
         return match state.store.cursor_takeover_enabled().await {
-            Ok(true) => Ok(()),
+            Ok(true) => agent
+                .ensure_managed_runtime(&state.store)
+                .await
+                .map_err(|error| Box::new(api_error(StatusCode::CONFLICT, error))),
             Ok(false) => Err(Box::new(api_error(
                 StatusCode::FORBIDDEN,
                 "Cursor takeover is disabled",

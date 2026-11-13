@@ -37,7 +37,7 @@ export function CursorTakeover() {
   const busy = cursorBusy || refreshing;
   // A partially active proxy must still be switchable off.
   const checked = Boolean(status && (status.integration !== "disabled" || status.settings_applied));
-  const degraded = checked && (status?.integration !== "enabled" || status.ca !== "ready");
+  const degraded = Boolean(status?.compatibility_error) || checked && (status?.integration !== "enabled" || status.ca !== "ready");
   const description = !status ? t("正在检查接入") : busy ? t("处理中…")
     : degraded ? t("Cursor 接入需检查") : checked ? t("Cursor 已接管")
     : status.ca !== "ready" ? t("准备 Cursor 接入") : t("Cursor 未接管");
@@ -54,6 +54,7 @@ export function CursorTakeover() {
   const toggle = async (enabled: boolean) => {
     const current = cursorStore.getSnapshot();
     if (current.cursorBusy || current.busy || !current.cursorHarness) return;
+    if (enabled && current.cursorHarness.compatibility_error) { setSetupOpen(true); return; }
     if (enabled && current.cursorHarness.ca !== "ready") {
       setSetupOpen(true);
       return;
@@ -123,7 +124,7 @@ export function CursorTakeover() {
       compact
       open={setupOpen}
       title={degraded ? t("检查 Cursor 接入") : t("准备 Cursor 接入")}
-      banner={error ? <span className={styles.error} role="alert">{error}</span> : undefined}
+      banner={error || status?.compatibility_error ? <span className={styles.error} role="alert">{error || status?.compatibility_error}</span> : undefined}
       onClose={() => setSetupOpen(false)}
       closeLabel={t("关闭")}
       busy={busy}
@@ -141,7 +142,7 @@ export function CursorTakeover() {
           </div>
         </div>}
         <div className={styles.setupActions}>
-          {status?.ca === "ready" && degraded ? (
+          {status?.compatibility_error ? <span>{t("请在系统设置的「Cursor 版本管理」中查看已验证版本和更新配置。")}</span> : status?.ca === "ready" && degraded ? (
             <Button variant="primary" disabled={busy} onClick={() => void reapplyTakeover()}>{t("重新应用接管")}</Button>
           ) : (
             <Button variant="primary" disabled={busy || !status} onClick={() => void (waitingForCaRefresh ? refreshCa() : initializeCa())}>

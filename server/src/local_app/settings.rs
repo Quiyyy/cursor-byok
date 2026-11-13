@@ -33,7 +33,7 @@ fn path() -> Result<PathBuf> {
     }
 }
 
-fn read() -> Result<BTreeMap<String, Value>> {
+pub(super) fn read() -> Result<BTreeMap<String, Value>> {
     let path = path()?;
     let data = match fs::read_to_string(path) {
         Ok(data) => data,
@@ -47,7 +47,7 @@ fn read() -> Result<BTreeMap<String, Value>> {
         .map_err(|error| Error::Config(format!("parse Cursor settings JSONC: {error}")))
 }
 
-fn write(settings: &BTreeMap<String, Value>) -> Result<()> {
+pub(super) fn write(settings: &BTreeMap<String, Value>) -> Result<()> {
     let path = path()?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -57,6 +57,36 @@ fn write(settings: &BTreeMap<String, Value>) -> Result<()> {
     fs::write(&temp, [data.as_slice(), b"\n"].concat())?;
     fs::rename(temp, path)?;
     Ok(())
+}
+
+pub(super) fn update_management_patch() -> BTreeMap<String, Value> {
+    BTreeMap::from([
+        ("update.mode".into(), Value::String("none".into())),
+        (
+            "update.enableWindowsBackgroundUpdates".into(),
+            Value::Bool(false),
+        ),
+        (
+            "cursor.agentHost.updateMode".into(),
+            Value::String("none".into()),
+        ),
+    ])
+}
+
+pub(super) fn restore_update_patch(
+    current: &mut BTreeMap<String, Value>,
+    saved: &crate::store::CursorUpdateSettings,
+) {
+    for (key, applied) in &saved.applied {
+        if current.get(key) != Some(applied) {
+            continue;
+        }
+        if let Some(original) = saved.original.get(key) {
+            current.insert(key.clone(), original.clone());
+        } else {
+            current.remove(key);
+        }
+    }
 }
 
 pub fn write_proxy_settings(proxy_url: &str) -> Result<()> {
@@ -108,4 +138,37 @@ pub fn clear_stale_managed_settings() -> Result<()> {
         clear_proxy_settings()?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::*;
+
+    #[test]
+    fn managed_updates_pin_both_editor_and_harness_and_restore_only_owned_values() {
+        let original = BTreeMap::from([
+            ("update.mode".into(), Value::String("manual".into())),
+            ("cursor.agentHost.updateMode".into(), Value::Null),
+            ("editor.fontSize".into(), Value::from(14)),
+        ]);
+        let applied = update_management_patch();
+        assert_eq!(applied["update.mode"], "none");
+        assert_eq!(applied["cursor.agentHost.updateMode"], "none");
+        assert_eq!(applied["update.enableWindowsBackgroundUpdates"], false);
+        let saved = crate::store::CursorUpdateSettings {
+            enabled: true,
+            original: original.clone(),
+            applied: applied.clone(),
+        };
+        let mut current = original.clone();
+        current.extend(applied.clone());
+        restore_update_patch(&mut current, &saved);
+        assert_eq!(current, original);
+        current.extend(applied);
+        current.insert("update.mode".into(), Value::String("start".into()));
+        restore_update_patch(&mut current, &saved);
+        assert_eq!(current["update.mode"], "start");
+        assert_eq!(current["cursor.agentHost.updateMode"], Value::Null);
+        assert!(!current.contains_key("update.enableWindowsBackgroundUpdates"));
+    }
 }

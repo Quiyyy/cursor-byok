@@ -1,6 +1,7 @@
 //! Installs native routing and new-conversation defaults; never owns Agent state or tools.
 use crate::{Error, Result};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -29,6 +30,17 @@ struct EncodedCatalog {
     available: Vec<String>,
     usable: Vec<String>,
 }
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub(crate) struct NativeCheck {
+    pub version: String,
+    pub commit: String,
+    pub files: Vec<CheckedFile>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct CheckedFile {
+    pub file: String,
+    pub sha256: String,
+}
 struct CachedCatalog {
     input: String,
     fingerprint: Fingerprint,
@@ -47,6 +59,99 @@ struct Inner {
     catalog: Mutex<Option<CachedCatalog>>,
 }
 impl NativeAgent {
+    pub(crate) fn app_path(&self) -> &Path {
+        &self.inner.app
+    }
+    pub(crate) fn patch_revision() -> String {
+        let mut hash = Sha256::new();
+        for source in [INSTALLER, BRIDGE, SEARCH] {
+            hash.update(source);
+        }
+        hex::encode(hash.finalize())
+    }
+    pub(crate) fn in_directory(app: PathBuf, directory: PathBuf) -> Self {
+        Self {
+            inner: Arc::new(Inner {
+                app,
+                directory,
+                key: uuid::Uuid::new_v4().to_string(),
+                installed: Mutex::new(None),
+                catalog: Mutex::new(None),
+            }),
+        }
+    }
+    pub(crate) async fn invalidate(&self) {
+        *self.inner.installed.lock().await = None;
+        *self.inner.catalog.lock().await = None;
+    }
+    pub(crate) async fn deactivate(&self) -> Result<()> {
+        self.invalidate().await;
+        self.write_connection(false, None)
+    }
+    pub(crate) async fn check_candidate(&self, app: &Path) -> Result<NativeCheck> {
+        Ok(serde_json::from_value(
+            self.run_at("check", None, app).await?,
+        )?)
+    }
+    pub(crate) fn verify_originals(&self, checked: &NativeCheck) -> Result<()> {
+        let names: std::collections::BTreeSet<_> =
+            checked.files.iter().map(|f| f.file.as_str()).collect();
+        if names.len() != checked.files.len() || !FILES.iter().all(|name| names.contains(name)) {
+            return Err(Error::Config("incomplete Cursor package preflight".into()));
+        }
+        for entry in &checked.files {
+            let chunk = entry
+                .file
+                .strip_prefix("extensions/cursor-agent-host/dist/")
+                .and_then(|file| file.strip_suffix(".js"))
+                .is_some_and(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()));
+            if !FILES.contains(&entry.file.as_str()) && !chunk {
+                return Err(Error::Config(
+                    "unexpected file in Cursor package preflight".into(),
+                ));
+            }
+            let actual = hex::encode(Sha256::digest(std::fs::read(
+                self.inner.app.join(&entry.file),
+            )?));
+            if actual != entry.sha256 {
+                return Err(Error::Config(format!(
+                    "installed Cursor differs from the checked package: {}",
+                    entry.file
+                )));
+            }
+        }
+        Ok(())
+    }
+    pub(crate) async fn verify_updated(&self, checked: &NativeCheck) -> Result<()> {
+        let actual: NativeCheck = serde_json::from_value(self.run("verify", None).await?)?;
+        if actual.version != checked.version
+            || actual.commit != checked.commit
+            || actual.files != checked.files
+        {
+            return Err(Error::Config(
+                "Cursor patch sources differ from the verified package".into(),
+            ));
+        }
+        Ok(())
+    }
+    pub(crate) async fn verify_catalog(&self) -> Result<()> {
+        let models = self.picker_models(json!([{"id":"gpt-5.4","cursorId":"byok:check","source":"BYOK check","displayName":"BYOK check","contextLength":200000}])).await?;
+        if models.available.len() != 1 || models.usable.len() != 1 {
+            return Err(Error::Config(
+                "native Cursor catalog validation failed".into(),
+            ));
+        }
+        Ok(())
+    }
+    pub(crate) async fn ensure_managed_runtime(&self, store: &crate::store::Store) -> Result<()> {
+        if store.cursor_update_settings().await?.enabled {
+            super::update::ensure_verified_installation(&self.inner.app)?;
+            if !self.is_current().await {
+                return Err(Error::Config("Cursor installation changed; restart managed takeover before using native models".into()));
+            }
+        }
+        Ok(())
+    }
     #[cfg(test)]
     pub(crate) fn for_test(root: &Path) -> Self {
         Self {
@@ -62,15 +167,10 @@ impl NativeAgent {
 
     pub fn managed() -> Result<Self> {
         let app = installed_app_path()?;
-        Ok(Self {
-            inner: Arc::new(Inner {
-                app,
-                directory: crate::config::managed_data_dir()?.join("native-agent"),
-                key: uuid::Uuid::new_v4().to_string(),
-                installed: Mutex::new(None),
-                catalog: Mutex::new(None),
-            }),
-        })
+        Ok(Self::in_directory(
+            app,
+            crate::config::managed_data_dir()?.join("native-agent"),
+        ))
     }
     pub(crate) fn authorized(&self, key: &str) -> bool {
         key.len() == self.inner.key.len()
@@ -83,8 +183,14 @@ impl NativeAgent {
     pub(crate) async fn picker_models(&self, models: serde_json::Value) -> Result<NativeCatalog> {
         use base64::Engine;
         let input = serde_json::to_string(&models)?;
-        let fingerprint = self.fingerprint()?;
+        let installed = self.inner.installed.lock().await;
+        let fingerprint = self.fingerprint();
         let mut cache = self.inner.catalog.lock().await;
+        if installed.is_none() || fingerprint.as_ref().ok() != installed.as_ref() {
+            *cache = None;
+            return Err(Error::Config("Cursor native takeover is not ready or installation files changed; reopen managed takeover".into()));
+        }
+        let fingerprint = fingerprint?;
         if let Some(previous) = &*cache {
             if previous.input == input && previous.fingerprint == fingerprint {
                 return Ok(previous.models.clone());
@@ -196,6 +302,15 @@ impl NativeAgent {
         Ok(result["changed"].as_bool().unwrap_or(false))
     }
     async fn run(&self, mode: &str, input: Option<&[u8]>) -> Result<serde_json::Value> {
+        self.run_at(mode, input, &self.inner.app).await
+    }
+    async fn run_at(
+        &self,
+        mode: &str,
+        input: Option<&[u8]>,
+        app: &Path,
+    ) -> Result<serde_json::Value> {
+        std::fs::create_dir_all(&self.inner.directory)?;
         let script = self.inner.directory.join("install.mjs");
         write_asset(&script, INSTALLER)?;
         write_asset(self.inner.directory.join("route.cjs"), BRIDGE)?;
@@ -204,10 +319,15 @@ impl NativeAgent {
             self.inner.directory.join("THIRD_PARTY_LICENSES.txt"),
             NOTICES,
         )?;
-        let mut command = tokio::process::Command::new(cursor_executable(&self.inner.app));
+        let executable = if cfg!(windows) {
+            app.join("resources/helpers/node.exe")
+        } else {
+            cursor_executable(app)
+        };
+        let mut command = tokio::process::Command::new(executable);
         command
             .arg(&script)
-            .arg(&self.inner.app)
+            .arg(app)
             .arg(&self.inner.directory)
             .arg(mode)
             .env("ELECTRON_RUN_AS_NODE", "1")
@@ -224,12 +344,12 @@ impl NativeAgent {
                 stdin.write_all(input).await?;
             }
         }
-        let output =
-            tokio::time::timeout(std::time::Duration::from_secs(45), child.wait_with_output())
-                .await
-                .map_err(|_| {
-                    Error::Config("Cursor native entry installation timed out".into())
-                })??;
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(120),
+            child.wait_with_output(),
+        )
+        .await
+        .map_err(|_| Error::Config("Cursor native entry installation timed out".into()))??;
         if !output.status.success() {
             return Err(Error::Config(format!(
                 "Cursor native entry: {}",
@@ -351,7 +471,8 @@ mod lifecycle_tests {
                 store: store.clone(),
                 ca: CaManager::in_directory(directory.path().join("ca")),
                 ca_initialization: Mutex::new(()),
-                lifecycle: Mutex::new(()),
+                lifecycle: Arc::new(Mutex::new(())),
+                update: crate::local_app::update::Runtime::new(directory.path().join("updates")),
                 backend_addr: RwLock::new(Some("127.0.0.1:1".parse().unwrap())),
                 tab_mode: Arc::new(RwLock::new(Default::default())),
                 proxy: Mutex::new(ProxyRuntime::default()),

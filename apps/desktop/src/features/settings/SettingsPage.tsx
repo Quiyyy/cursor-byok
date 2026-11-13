@@ -4,6 +4,7 @@ import { PageContent } from "../../shell/layout/PageContent";
 import { PageActions } from "../../shell/PageActions";
 import { AppLifecycleSettingsCard } from "./AppLifecycleSettingsCard";
 import { CommitSettingsCard } from "./CommitSettingsCard";
+import { CursorUpdateSettingsCard } from "./CursorUpdateSettingsCard";
 import { ExternalApiSettingsCard } from "./ExternalApiSettingsCard";
 import { PricingSettingsCard } from "./PricingSettingsCard";
 import { ProxySettingsCard } from "./ProxySettingsCard";
@@ -216,6 +217,7 @@ export function SettingsPage() {
 
       <div className={styles.group} hidden={!showGroup("cursor")}>
         {category === "all" && <h2 className={styles.groupTitle}>{t("Cursor 增强")}</h2>}
+        <CursorUpdateSettingsCard />
         <CommitSettingsCard />
         <TabSettingsCard settings={tabSettings} draft={tabDraft} editing={editingTab} saving={savingTab} onDraftChange={setTabDraft} onEdit={editTab} onCancel={cancelTabEdit} onSave={() => void saveTab()} />
       </div>

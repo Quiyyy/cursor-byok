@@ -13,6 +13,7 @@ export const test = base.extend({
   app: async ({ playwright }, use, testInfo) => {
     const directory = await mkdtemp(path.join(tmpdir(), "byok-ui-"));
     const appData = path.join(directory, "appdata");
+    const cursorApp = path.join(directory, "cursor/resources/app");
     await mkdir(appData);
     const child = spawn(executable, [], {
       cwd: root,
@@ -20,7 +21,7 @@ export const test = base.extend({
       env: {
         ...process.env,
         CURSOR_BYOK_DATA_DIR: directory,
-        CURSOR_APP_DIR: path.join(directory, "missing-cursor"),
+        CURSOR_APP_DIR: cursorApp,
         APPDATA: appData,
         CURSOR_DATABASE_URL: `sqlite://${path.join(directory, "test.db")}`,
         CURSOR_LISTEN_ADDR: "127.0.0.1:0",
@@ -53,7 +54,7 @@ export const test = base.extend({
       }] } });
       expect(response.ok(), await response.text()).toBeTruthy();
       const [model] = await response.json();
-      await use({ origin, api, model });
+      await use({ origin, api, model, directory, appData, cursorApp });
     } finally {
       if (child.pid && child.exitCode === null && child.signalCode === null) {
         const exited = once(child, "exit");

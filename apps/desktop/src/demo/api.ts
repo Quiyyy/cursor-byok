@@ -1,6 +1,7 @@
 import type {
   CallDetail,
   CursorHarnessStatus,
+  CursorUpdateStatus,
   ExternalApiSettings,
   LlmCall,
   Model,
@@ -183,6 +184,11 @@ export function installDemoApi() {
     if (path === "/llm-calls") return json(calls);
     if (path.startsWith("/llm-calls/")) return json(createCallDetail(path.slice("/llm-calls/".length)));
     if (path === "/harness/cursor/status") return json(harnessStatus);
+    if (path === "/cursor-update") return json({
+      supported:false, unsupported_reason:null, enabled:false, current_version:null, current_commit:null,
+      verified_release:null, current_verified:false, unverified_version:null, phase:"idle", busy:false,
+      can_cancel:false, downloaded_bytes:0, total_bytes:null, candidate:null, error:null, recovery_required:false,
+    } satisfies CursorUpdateStatus);
     if (path === "/harness/cursor/ca/initialize") return json(harnessStatus);
     if (path === "/harness/cursor/enabled") {
       const enabled = Boolean((body as { enabled?: unknown } | null)?.enabled);
