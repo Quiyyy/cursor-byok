@@ -3,7 +3,7 @@ import { parse } from '../../apps/desktop/node_modules/@babel/parser/lib/index.j
 import tm from '../../apps/desktop/node_modules/@babel/traverse/lib/index.js';
 import gm from '../../apps/desktop/node_modules/@babel/generator/lib/index.js';
 import { patchHostSearch } from './search-patch.mjs';
-import { patchHostControl, patchLocalControl } from './control-patch.mjs';
+import { patchLocalControl } from './control-patch.mjs';
 const traverse = tm.default ?? tm,
   generate = gm.default ?? gm;
 export function patchTaskModels(source, bridgePath) {
@@ -22,28 +22,38 @@ export function patchTaskModels(source, bridgePath) {
   const wrapped = `function ${factory.id.name}(${input}){return require(${JSON.stringify(bridgePath)}).taskModels(${input},(${input})=>{${body}})}`;
   return source.slice(0, factory.start) + wrapped + source.slice(factory.end);
 }
-export function patchAgentHost(source, bridgePath) {
-  const control = patchHostControl(source);
-  source = control.source;
+export function patchAgentHost(source, bridgePath, control) {
   const routers = [],
     adapters = [];
+  let loader, loaderCapture;
   traverse(parse(source), {
     Class(p) {
       const code = source.slice(p.node.start, p.node.end);
-      if (code.includes('Selected Agent Host turn runtime') && p.node.body.body.some(m => m.key?.name === 'run')) routers.push(p.node);
+      if (code.includes('Selected Agent Host turn runtime') && p.node.body.body.some(m => m.key?.name === 'run')) {
+        routers.push(p.node);
+        const module = p.findParent(v => v.isObjectMethod() && v.node.key.type === 'NumericLiteral');
+        if (module?.node.params.length === 3 && module.node.params[2].type === 'Identifier') {
+          loader = module.scope.generateUid('byokRequire');
+          loaderCapture = {
+            start: module.node.body.directives.at(-1)?.end ?? module.node.body.start + 1,
+            code: `const ${loader}=${module.node.params[2].name};`,
+          };
+        }
+      }
       if (code.includes('this.mintLlmGatewayCredential') && code.includes('this.client.run(')) adapters.push(p.node);
     }
   });
-  if (routers.length !== 1 || adapters.length !== 1) throw Error('Unsupported Cursor: expected one native turn router and client adapter');
+  if (routers.length !== 1 || adapters.length !== 1 || !loader) throw Error('Unsupported Cursor: expected one native turn router and client adapter');
   const method = routers[0].body.body.find(m => m.key?.name === 'run');
   if (!method.async || method.params.length !== 1 || method.params[0].type !== 'Identifier') throw Error('Unsupported Cursor Run signature');
   const turn = method.params[0].name;
-  const injection = `if ((${turn}.runOptions.requestedModel?.modelId||${turn}.modelDetails?.modelId)?.startsWith('byok:')) return require(${JSON.stringify(bridgePath)}).run(${turn}, () => require('../../cursor-local-agent-runtime/dist/main.js'), () => require('vscode').cursor.getPrivacyModeEnum(), this.__byokCreateWebSearch, __webpack_require__(${control.moduleId}).__byokControl, (__byok,controlled)=>new ${adapters[0].id.name}(__byok.client).run({...controlled,modelDetails:__byok.details,runOptions:__byok.options}));`;
+  const injection = `if ((${turn}.runOptions.requestedModel?.modelId||${turn}.modelDetails?.modelId)?.startsWith('byok:')) return require(${JSON.stringify(bridgePath)}).run(${turn}, () => require('../../cursor-local-agent-runtime/dist/main.js'), () => require('vscode').cursor.getPrivacyModeEnum(), this.__byokCreateWebSearch, async()=>{await Promise.all(${JSON.stringify(control.chunkIds)}.map(id=>${loader}.e(id)));return ${loader}(${control.moduleId}).__byokControl;}, (__byok,controlled)=>new ${adapters[0].id.name}(__byok.client).run({...controlled,modelDetails:__byok.details,runOptions:__byok.options}));`;
   method.body.body.unshift(...parse(`async function inject(){${injection}}`).program.body[0].body.body);
   const patched = source.slice(0, method.start) + generate(method, {
     compact: true
   }).code + source.slice(method.end);
-  return patchHostSearch(patched, routers[0].id.name);
+  const captured = patched.slice(0, loaderCapture.start) + loaderCapture.code + patched.slice(loaderCapture.start);
+  return patchHostSearch(captured, routers[0].id.name, control.searchModuleId);
 }
 export function exposeNativeClient(source) {
   source = patchLocalControl(source);

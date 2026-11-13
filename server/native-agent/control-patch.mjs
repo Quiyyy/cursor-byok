@@ -6,6 +6,22 @@ const traverse = tm.default ?? tm, generate = gm.default ?? gm;
 const code = node => generate(node, {compact:true}).code;
 const unsupported = () => { throw Error('Unsupported Cursor native turn control boundary'); };
 
+export function hostControlChunks(source, chunkId) {
+  const chunks = new Set();
+  traverse(parse(source), {CallExpression(p) {
+    const n = p.node;
+    if (n.callee.type !== 'MemberExpression' || n.callee.object.name !== 'Promise' || n.callee.property.name !== 'all') return;
+    const entries = n.arguments[0];
+    if (entries?.type !== 'ArrayExpression') return;
+    const ids = entries.elements.map(e => e?.type === 'CallExpression' && e.callee.type === 'MemberExpression' && e.callee.property.name === 'e' && e.arguments.length === 1 && e.arguments[0].type === 'NumericLiteral' ? e.arguments[0].value : undefined);
+    if (!ids.includes(chunkId)) return;
+    if (ids.some(id => id === undefined)) unsupported();
+    for (const id of ids) chunks.add(id);
+  }});
+  if (!chunks.size) unsupported();
+  return [...chunks];
+}
+
 export function patchHostControl(source) {
   const matches = [];
   traverse(parse(source), {NewExpression(p) {

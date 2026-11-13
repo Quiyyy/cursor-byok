@@ -7,11 +7,20 @@ import http from 'node:http';
 import vm from 'node:vm';
 import {once} from 'node:events';
 import {createRequire} from 'node:module';
-import {patchHostControl,patchLocalControl} from './control-patch.mjs';
+import {patchHostControl,patchLocalControl,hostControlChunks} from './control-patch.mjs';
 import {hostControl,localControl} from './control.fixture.mjs';
 const require=createRequire(import.meta.url);
 const deferred=()=>Promise.withResolvers();
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('control loading follows native chunk dependencies without pinning chunk IDs',()=>{
+  const source=`async function a(){return Promise.all([load.e(12),load.e(841)]).then(load.bind(load,72))}
+  async function b(){return Promise.all([load.e(12),load.e(841),load.e(15)]).then(load.bind(load,73))}
+  async function other(){return Promise.all([load.e(99)]).then(load.bind(load,1))}`;
+  assert.deepEqual(hostControlChunks(source,841),[12,841,15]);
+  assert.throws(()=>hostControlChunks(source,900),/turn control boundary/);
+  assert.throws(()=>hostControlChunks(source.replace('load.e(12)','unknown'),841),/turn control boundary/);
+});
 
 function context(parent) {
   const controller=new AbortController();
@@ -50,12 +59,36 @@ function setup(f,execute,runId='run-a') {
     const control={ctx,cancel,id,privacy,receiver,push:action=>receiver.queue.push(action)};
     controls.push(control);return control;
   };
-  const start=()=>f.run(turn,()=>library,()=>2,undefined,createControl,async(routed,controlled)=>{
+  const start=(loadControl=()=>createControl)=>f.run(turn,()=>library,()=>2,undefined,loadControl,async(routed,controlled)=>{
     assert.equal(routed.client.options.__byokConversationActionReceiver,controls[0].receiver);
     return execute(controlled,controls[0]);
   });
-  return {start,turn,parent,manager,updates,controls};
+  return {start,turn,parent,manager,updates,controls,createControl};
 }
+
+test('a stale Host missing the control factory asks for a restart before model lookup',async t=>{
+  let requests=0;
+  const f=await fixture(t,(_,res)=>{requests++;metadata(res)});
+  const s=setup(f,()=>assert.fail('must not invoke a stale runtime'));
+  await assert.rejects(s.start(async()=>undefined),/请重启 Cursor 后重试/);
+  assert.equal(requests,0);
+  assert.equal(s.controls.length,0);
+  assert.equal(s.parent.ctx.signal.aborted,false);
+  s.manager.close();
+});
+
+test('Stop during control loading prevents receiver creation and model lookup',async t=>{
+  let requests=0;
+  const f=await fixture(t,(_,res)=>{requests++;metadata(res)}),loading=deferred(),loaded=deferred();
+  const s=setup(f,()=>assert.fail('must not invoke after Stop'));
+  const pending=s.start(async()=>{loading.resolve();await loaded.promise;return s.createControl;});
+  const rejected=assert.rejects(pending,{name:'AbortError'});
+  await loading.promise;s.manager.stop();loaded.resolve();await rejected;
+  assert.equal(requests,0);
+  assert.equal(s.controls.length,0);
+  assert.equal(s.parent.ctx.signal.aborted,false);
+  s.manager.close();
+});
 
 test('structural patches bind native conversion and ledger notifications, and only replace the empty receiver',async()=>{
   const input=`const modules={${hostControl}};globalThis.modules=modules;`;

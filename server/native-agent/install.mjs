@@ -7,8 +7,9 @@ import Module, { createRequire } from 'node:module';
 import { patchAgentHost, exposeNativeClient, patchTaskModels } from './patch.mjs';
 import { catalogEntry } from './catalog.mjs';
 import { patchWorkbench, patchHostEnablement } from './workbench.mjs';
-import { patchLocalSearch } from './search-patch.mjs';
-const files = ['extensions/cursor-agent-host/dist/main.js', 'extensions/cursor-local-agent-runtime/dist/main.js', 'out/vs/workbench/workbench.desktop.main.js', 'product.json'];
+import { patchLocalSearch, exposeHostSearch } from './search-patch.mjs';
+import { patchHostControl, hostControlChunks } from './control-patch.mjs';
+const baseFiles = ['extensions/cursor-agent-host/dist/main.js', 'extensions/cursor-local-agent-runtime/dist/main.js', 'out/vs/workbench/workbench.desktop.main.js', 'product.json'];
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const read = file => fs.readFileSync(file, 'utf8');
 function write(file, bytes) {
@@ -24,38 +25,54 @@ export function install(appPath, directory, restore = false) {
   });
   const manifestPath = path.join(base, 'manifest.json');
   const previous = fs.existsSync(manifestPath) ? JSON.parse(read(manifestPath)) : undefined;
-  const current = files.map(file => {
+  const readEntry = file => {
     const resolved = fs.realpathSync(path.join(app, file));
     if (!resolved.startsWith(app + path.sep) || fs.statSync(resolved).nlink > 1) throw Error('Cursor runtime must be an independent installed file');
-    return read(resolved);
-  });
-  const originals = current.map((source, i) => {
-    if (previous?.files[i]?.patched !== hash(source)) {
-      if (source.includes('__byokLocalAgentClient') || source.includes('__byok.client') || source.includes('__byokNewComposerDefault')) throw Error('Cursor already has an unrecognized BYOK patch; restore its original installation backup first');
-      return source;
+    const current = read(resolved);
+    const index = previous?.files.findIndex(entry => entry.file === file) ?? -1;
+    if (previous?.files[index]?.patched !== hash(current)) {
+      if (['__byokLocalAgentClient', '__byok.client', '__byokNewComposerDefault', '__byokControl'].some(marker => current.includes(marker))) throw Error('Cursor already has an unrecognized BYOK patch; restore its original installation backup first');
+      return {file, current, original:current};
     }
-    const original = read(path.join(base, `original-${i}.js`));
-    if (hash(original) !== previous.files[i].original) throw Error('Cursor BYOK original backup checksum mismatch');
-    return original;
-  });
+    const original = read(path.join(base, `original-${index}.js`));
+    if (hash(original) !== previous.files[index].original) throw Error('Cursor BYOK original backup checksum mismatch');
+    return {file, current, original};
+  };
   // A Cursor upgrade replaces files: never restore an obsolete backup over it.
   if (restore) {
-    files.forEach((file, i) => {
-      if (originals[i] !== current[i]) write(path.join(app, file), originals[i]);
+    const entries = (previous?.files.map(entry => entry.file) ?? baseFiles)
+      .filter(file => fs.existsSync(path.join(app, file))).map(readEntry);
+    entries.forEach(({file, original, current}) => {
+      if (original !== current) write(path.join(app, file), original);
     });
     if (fs.existsSync(manifestPath)) fs.unlinkSync(manifestPath);
     return {
-      changed: originals.some((s, i) => s !== current[i]),
+      changed: entries.some(entry => entry.original !== entry.current),
       restored: true
     };
   }
+  const entries = baseFiles.map(readEntry);
+  const hostDirectory = path.dirname(baseFiles[0]);
+  const candidates = [entries[0], ...fs.readdirSync(path.join(app, hostDirectory))
+    .filter(file => /^\d+\.js$/.test(file)).map(file => readEntry(`${hostDirectory}/${file}`))]
+    .filter(entry => entry.original.includes('contextInjection:') && entry.original.includes('onInjectionStateChange'));
+  if (candidates.length !== 1) throw Error('Unsupported Cursor: expected one native turn control bundle');
+  const owner = candidates[0], control = patchHostControl(owner.original);
+  const search = exposeHostSearch(control.source);
+  control.source = search.source;
+  const chunkIds = owner.file === baseFiles[0] ? [] : hostControlChunks(entries[0].original, Number(path.basename(owner.file, '.js')));
+  if (owner.file !== baseFiles[0]) entries.push(owner);
+  const files = entries.map(entry => entry.file);
+  const current = entries.map(entry => entry.current);
+  const originals = entries.map(entry => entry.original);
   const bridge = path.join(directory, 'route.cjs');
-  const generated = [patchAgentHost(originals[0], bridge), patchLocalSearch(patchTaskModels(exposeNativeClient(originals[1]), bridge), path.join(directory, 'search.cjs')), patchHostEnablement(patchWorkbench(originals[2]))];
+  const generated = [patchAgentHost(owner.file === baseFiles[0] ? control.source : originals[0], bridge, {moduleId:control.moduleId, searchModuleId:search.moduleId, chunkIds}), patchLocalSearch(patchTaskModels(exposeNativeClient(originals[1]), bridge), path.join(directory, 'search.cjs')), patchHostEnablement(patchWorkbench(originals[2]))];
   const product = JSON.parse(originals[3]);
   if (product.checksums?.['vs/workbench/workbench.desktop.main.js']) {
     product.checksums['vs/workbench/workbench.desktop.main.js'] = crypto.createHash('sha256').update(generated[2]).digest('base64').replace(/=+$/, '');
   }
   generated.push(JSON.stringify(product, null, 2));
+  if (owner.file !== baseFiles[0]) generated.push(control.source);
   const manifest = {
     version: product.version,
     commit: product.commit,
@@ -93,7 +110,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       Module._load = function (id, ...args) {
         return id === 'vscode' ? {} : original.call(this, id, ...args);
       };
-      const library = createRequire(import.meta.url)(path.join(process.argv[2], files[1]));
+      const library = createRequire(import.meta.url)(path.join(process.argv[2], baseFiles[1]));
       const catalog = {
         available: [],
         usable: []
