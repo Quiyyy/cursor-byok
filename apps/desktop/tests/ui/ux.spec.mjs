@@ -1,4 +1,79 @@
 import { test, expect } from "./fixture.mjs";
+import { createServer } from "node:http";
+
+for (const takeoverEnabled of [false, true]) {
+  test(`failed model tests keep quick start unverified with takeover ${takeoverEnabled ? "on" : "off"}`, async ({ page, app }) => {
+    await page.setViewportSize({ width: 820, height: 558 });
+    // Control only OS integration status; model testing and overview data use the real server.
+    await page.route("**/api/harness/cursor/status", route => route.fulfill({ json: {
+      ca: "ready", integration: takeoverEnabled ? "enabled" : "disabled", settings_applied: takeoverEnabled,
+    } }));
+    await page.goto(`${app.origin}/__byok-api__/#/models`);
+    await page.getByRole("button", { name: "测试", exact: true }).click();
+    await expect(page.getByRole("button", { name: "测试失败", exact: true })).toBeVisible();
+    const overview = await (await app.api.get("/__byok-api__/api/overview")).json();
+    expect(overview.metrics.failed_calls).toBe(1);
+    expect(overview.metrics.successful_calls).toBe(0);
+
+    await page.getByRole("link", { name: "运行概览", exact: true }).click();
+    // Reload also proves that the result is derived from persisted calls, not a local test badge.
+    await page.reload();
+    await expect(page.getByRole("button", { name: "刷新", exact: true })).toBeEnabled();
+    await expect(page.getByText("快速开始", { exact: true })).toBeVisible();
+    await expect(page.getByText("建议验证", { exact: true })).toBeVisible();
+    await expect(page.getByText("已验证", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "不再提示", exact: true }).click();
+    await expect(page.getByText("快速开始", { exact: true })).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole("button", { name: "刷新", exact: true })).toBeEnabled();
+    await expect(page.getByText("快速开始", { exact: true })).toHaveCount(0);
+  });
+}
+
+test("successful model test keeps quick start until Cursor takeover is enabled", async ({ page, app }) => {
+  await page.setViewportSize({ width: 820, height: 558 });
+  const upstream = createServer((request, response) => {
+    request.resume();
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.end([
+      { type: "response.output_text.delta", delta: "ok" },
+      { type: "response.completed", response: { status: "completed", output: [] } },
+    ].map(event => `data: ${JSON.stringify(event)}\n\n`).join(""));
+  });
+  await new Promise(resolve => upstream.listen(0, "127.0.0.1", resolve));
+  try {
+    const updated = await app.api.put(`/__byok-api__/api/models/${app.model.model_hash}`, { data: {
+      ...app.model, base_url: `http://127.0.0.1:${upstream.address().port}/v1`,
+    } });
+    expect(updated.ok(), await updated.text()).toBeTruthy();
+    let enabled = false;
+    const status = () => ({ ca: "ready", integration: enabled ? "enabled" : "disabled", settings_applied: enabled });
+    await page.route("**/api/harness/cursor/status", route => route.fulfill({ json: status() }));
+    await page.route("**/api/harness/cursor/enabled", route => {
+      enabled = route.request().postDataJSON().enabled;
+      return route.fulfill({ json: status() });
+    });
+    await page.goto(`${app.origin}/__byok-api__/#/models`);
+    await page.getByRole("button", { name: "测试", exact: true }).click();
+    await expect(page.getByRole("button", { name: /通过 ·/ })).toBeVisible();
+    const overview = await (await app.api.get("/__byok-api__/api/overview")).json();
+    expect(overview.metrics.successful_calls).toBe(1);
+    expect(overview.metrics.failed_calls).toBe(0);
+    await page.getByRole("link", { name: "运行概览", exact: true }).click();
+    await page.reload();
+    await expect(page.getByText("已验证", { exact: true })).toBeVisible();
+    await expect(page.getByText("未开启", { exact: true })).toBeVisible();
+    await page.getByRole("switch", { name: "Cursor 接管", exact: true }).click();
+    await expect(page.getByRole("switch", { name: "Cursor 接管", exact: true })).toBeChecked();
+    await expect(page.getByText("快速开始", { exact: true })).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole("button", { name: "刷新", exact: true })).toBeEnabled();
+    await expect(page.getByText("快速开始", { exact: true })).toHaveCount(0);
+  } finally {
+    upstream.closeAllConnections();
+    await new Promise((resolve, reject) => upstream.close(error => error ? reject(error) : resolve()));
+  }
+});
 
 test("save and test preserves row test badge without duplicate PUT and flat mode drag handle never overlaps title", async ({ page, app }) => {
   await page.setViewportSize({ width: 820, height: 558 });

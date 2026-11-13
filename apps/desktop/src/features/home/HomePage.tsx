@@ -128,8 +128,8 @@ export function HomePage() {
   const modelOptions = configuredModelOptions(models, plugins, locale);
   const hasModels = modelOptions.length > 0;
   const takeoverActive = cursorHarness?.integration === "enabled";
-  const hasCalls = metrics.llmCalls > 0;
-  const showOnboarding = !onboardingDismissed && (!hasModels || (!takeoverActive && !hasCalls));
+  const hasSuccessfulCalls = metrics.successfulCalls > 0;
+  const showOnboarding = !onboardingDismissed && (!hasModels || !takeoverActive || !hasSuccessfulCalls);
 
   const sections: VirtualPageSection[] = [
     ...(showOnboarding ? [{
@@ -151,10 +151,10 @@ export function HomePage() {
               <Button size="small" variant="ghost" onClick={() => navigate("/providers")}>{t("连接账号")}</Button>
             </div>
           </div>
-          <div className={styles.step} data-done={hasCalls}>
+          <div className={styles.step} data-done={hasSuccessfulCalls}>
             <div className={styles.stepTop}>
               <span className={styles.stepTitle}>{t("2. 验证模型连通")}</span>
-              <span className={styles.stepStatus} data-done={hasCalls}>{hasCalls ? t("已验证") : t("建议验证")}</span>
+              <span className={styles.stepStatus} data-done={hasSuccessfulCalls}>{hasSuccessfulCalls ? t("已验证") : t("建议验证")}</span>
             </div>
             <div className={styles.stepActions}>
               <Button size="small" onClick={() => navigate("/models")}>{t("测试模型")}</Button>
