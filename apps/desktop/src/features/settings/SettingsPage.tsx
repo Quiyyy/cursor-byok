@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type ProxySettings, type ProxySettingsInput, type StatisticsStorage, type StatisticsStorageScope, type TabSettings } from "../../shared/api";
 import { PageContent } from "../../shell/layout/PageContent";
+import { PageActions } from "../../shell/PageActions";
 import { AppLifecycleSettingsCard } from "./AppLifecycleSettingsCard";
 import { CommitSettingsCard } from "./CommitSettingsCard";
 import { ExternalApiSettingsCard } from "./ExternalApiSettingsCard";
@@ -15,16 +16,19 @@ import { Select } from "../../shared/ui/Select";
 import { TitledCard } from "../../shared/ui/TitledCard";
 import { setLocalePreference, useI18n, type LocalePreference } from "../../i18n/store";
 import { useMessage } from "../../shared/ui/message";
-import {callsStore} from "../calls/state";
-import {invalidateOverview} from "../home/useOverview";
+import { callsStore } from "../calls/state";
+import { invalidateOverview } from "../home/useOverview";
 import { settingsStore, useSettingsStore } from "./state";
 import { themeOptions } from "../../shared/theme/theme";
 import styles from "./SettingsPage.module.scss";
+
+type SettingsCategory = "all" | "general" | "cursor" | "network" | "observability";
 
 export function SettingsPage() {
   const { detailed, ports, theme } = useSettingsStore();
   const { preference, locale } = useI18n();
   const message = useMessage();
+  const [category, setCategory] = useState<SettingsCategory>("all");
   const [proxyPort, setProxyPort] = useState(String(ports.proxy_port));
   const [servicePort, setServicePort] = useState(String(ports.service_port));
   const [editingPorts, setEditingPorts] = useState(false);
@@ -159,129 +163,155 @@ export function SettingsPage() {
   const clearDescription = clearScope === "all"
     ? t("所有模型调用汇总及其请求、响应内容都会被删除。模型配置、CA 和应用设置不会受到影响，此操作无法撤销。")
     : t("仅删除模型调用的请求和响应详细内容，保留调用汇总、统计指标和配置。");
+
+  const categories: Array<{ id: SettingsCategory; label: string }> = [
+    { id: "all", label: t("全部") },
+    { id: "general", label: t("常规与外观") },
+    { id: "cursor", label: t("Cursor 增强") },
+    { id: "network", label: t("接口与网络") },
+    { id: "observability", label: t("观测与存储") },
+  ];
+  const showGroup = (target: Exclude<SettingsCategory, "all">) => category === "all" || category === target;
+
   const content = (
     <div className={styles.page}>
-      <TitledCard title={t("调用观测")}>
-        <div className={styles.settingRow}>
-          <div>
-            <strong>{t("详细模式")}</strong>
-            <small>
-              {t("额外保存完整请求和流响应；默认只保存时间、状态与用量。")}
-            </small>
-          </div>
-          <Checkbox
-            label={t("详细模式")}
-            checked={detailed}
-            onChange={(checked) => void settingsStore.updateDetailed(checked)}
-          />
-        </div>
-      </TitledCard>
-      <TitledCard title={t("端口设置")} action={editingPorts ? (
-        <div className={styles.cardActions}>
-          <Button size="small" disabled={savingPorts} onClick={cancelPortEdit}>{t("取消")}</Button>
-          <Button variant="primary" size="small" disabled={savingPorts} onClick={() => void savePorts()}>{savingPorts ? t("保存中…") : t("保存")}</Button>
-        </div>
-      ) : (
-        <button type="button" className={styles.textButton} onClick={editPorts}>{t("编辑")}</button>
-      )}>
-        <div className={styles.portSettings}>
-          <div className={styles.portFields}>
-            {editingPorts ? <><FormField
-              label={t("代理端口")}
-              hint={t("Cursor 使用的本地代理端口；填写 0 时启动时随机选择。")}
-            >
-              <TextInput
-                type="number"
-                min={0}
-                max={65535}
-                step={1}
-                value={proxyPort}
-                onChange={(event) => setProxyPort(event.target.value)}
+      {showGroup("general") && <div className={styles.group}>
+        {category === "all" && <h2 className={styles.groupTitle}>{t("常规与外观")}</h2>}
+        <TitledCard title={t("语言")}>
+          <div className={styles.settingRow}>
+            <div>
+              <strong>{t("界面语言")}</strong>
+              <small>{t("默认跟随操作系统；不支持的系统语言使用英文。当前：{language}", { language: locale === "zh-CN" ? "简体中文" : locale === "pt-BR" ? "Português (Brasil)" : "English" })}</small>
+            </div>
+            <div className={styles.languageControl}>
+              <Select
+                value={preference}
+                ariaLabel={t("界面语言")}
+                options={[
+                  { value: "system", label: t("跟随系统") },
+                  { value: "zh-CN", label: "简体中文" },
+                  { value: "en-US", label: "English" },
+                  { value: "pt-BR", label: "Português (Brasil)" },
+                ]}
+                onChange={(value) => setLocalePreference(value as LocalePreference)}
               />
-            </FormField>
-            <FormField
-              label={t("服务端口")}
-              hint={t(
-                "桌面前端连接的本地管理服务端口；填写 0 时启动时随机选择。",
-              )}
-            >
-              <TextInput
-                type="number"
-                min={0}
-                max={65535}
-                step={1}
-                value={servicePort}
-                onChange={(event) => setServicePort(event.target.value)}
-              />
-            </FormField></> : <>
-              <div className={styles.portValue}><strong>{t("代理端口")}</strong><span>{ports.proxy_port}</span></div>
-              <div className={styles.portValue}><strong>{t("服务端口")}</strong><span>{ports.service_port}</span></div>
-            </>}
+            </div>
           </div>
-          <div className={styles.portFooter}>
-            <small>
-              {t(
-                "端口被占用时会自动选择新的随机端口并保存。修改后需要重启软件才会生效。",
-              )}
-            </small>
+        </TitledCard>
+        <TitledCard title={t("主题")}>
+          <div className={styles.themeActions}>
+            {themeOptions.map(({ id }) => (
+              <button
+                className={theme === id ? styles.selected : ""}
+                key={id}
+                onClick={() => settingsStore.selectTheme(id)}
+              >
+                {id === "default-dark" ? t("默认暗色") : t("默认亮色")}
+              </button>
+            ))}
           </div>
-        </div>
-      </TitledCard>
-      <ExternalApiSettingsCard servicePort={ports.service_port} />
-      <ProxySettingsCard settings={outboundProxy} draft={proxyDraft} editing={editingProxy} saving={savingProxy} onDraftChange={setProxyDraft} onEdit={editProxy} onCancel={cancelProxyEdit} onSave={() => void saveProxy()} />
-      <TabSettingsCard settings={tabSettings} draft={tabDraft} editing={editingTab} saving={savingTab} onDraftChange={setTabDraft} onEdit={editTab} onCancel={cancelTabEdit} onSave={() => void saveTab()} />
-      <CommitSettingsCard />
-      <PricingSettingsCard />
-      <AppLifecycleSettingsCard />
-      <TitledCard title={t("语言")}>
-        <div className={styles.settingRow}>
-          <div>
-            <strong>{t("界面语言")}</strong>
-            <small>{t("默认跟随操作系统；不支持的系统语言使用英文。当前：{language}", { language: locale === "zh-CN" ? "简体中文" : locale === "pt-BR" ? "Português (Brasil)" : "English" })}</small>
+        </TitledCard>
+        <AppLifecycleSettingsCard />
+      </div>}
+
+      {showGroup("cursor") && <div className={styles.group}>
+        {category === "all" && <h2 className={styles.groupTitle}>{t("Cursor 增强")}</h2>}
+        <CommitSettingsCard />
+        <TabSettingsCard settings={tabSettings} draft={tabDraft} editing={editingTab} saving={savingTab} onDraftChange={setTabDraft} onEdit={editTab} onCancel={cancelTabEdit} onSave={() => void saveTab()} />
+      </div>}
+
+      {showGroup("network") && <div className={styles.group}>
+        {category === "all" && <h2 className={styles.groupTitle}>{t("接口与网络")}</h2>}
+        <ExternalApiSettingsCard servicePort={ports.service_port} />
+        <TitledCard title={t("端口设置")} action={editingPorts ? (
+          <div className={styles.cardActions}>
+            <Button size="small" disabled={savingPorts} onClick={cancelPortEdit}>{t("取消")}</Button>
+            <Button variant="primary" size="small" disabled={savingPorts} onClick={() => void savePorts()}>{savingPorts ? t("保存中…") : t("保存")}</Button>
           </div>
-          <div className={styles.languageControl}>
-            <Select
-              value={preference}
-              ariaLabel={t("界面语言")}
-              options={[
-                { value: "system", label: t("跟随系统") },
-                { value: "zh-CN", label: "简体中文" },
-                { value: "en-US", label: "English" },
-                { value: "pt-BR", label: "Português (Brasil)" },
-              ]}
-              onChange={(value) => setLocalePreference(value as LocalePreference)}
+        ) : (
+          <button type="button" className={styles.textButton} onClick={editPorts}>{t("编辑")}</button>
+        )}>
+          <div className={styles.portSettings}>
+            <div className={styles.portFields}>
+              {editingPorts ? <><FormField
+                label={t("代理端口")}
+                hint={t("Cursor 使用的本地代理端口；填写 0 时启动时随机选择。")}
+              >
+                <TextInput
+                  type="number"
+                  min={0}
+                  max={65535}
+                  step={1}
+                  value={proxyPort}
+                  onChange={(event) => setProxyPort(event.target.value)}
+                />
+              </FormField>
+              <FormField
+                label={t("服务端口")}
+                hint={t(
+                  "桌面前端连接的本地管理服务端口；填写 0 时启动时随机选择。",
+                )}
+              >
+                <TextInput
+                  type="number"
+                  min={0}
+                  max={65535}
+                  step={1}
+                  value={servicePort}
+                  onChange={(event) => setServicePort(event.target.value)}
+                />
+              </FormField></> : <>
+                <div className={styles.portValue}><strong>{t("代理端口")}</strong><span>{ports.proxy_port}</span></div>
+                <div className={styles.portValue}><strong>{t("服务端口")}</strong><span>{ports.service_port}</span></div>
+              </>}
+            </div>
+            <div className={styles.portFooter}>
+              <small>
+                {t(
+                  "端口被占用时会自动选择新的随机端口并保存。修改后需要重启软件才会生效。",
+                )}
+              </small>
+            </div>
+          </div>
+        </TitledCard>
+        <ProxySettingsCard settings={outboundProxy} draft={proxyDraft} editing={editingProxy} saving={savingProxy} onDraftChange={setProxyDraft} onEdit={editProxy} onCancel={cancelProxyEdit} onSave={() => void saveProxy()} />
+      </div>}
+
+      {showGroup("observability") && <div className={styles.group}>
+        {category === "all" && <h2 className={styles.groupTitle}>{t("观测与存储")}</h2>}
+        <TitledCard title={t("调用观测")}>
+          <div className={styles.settingRow}>
+            <div>
+              <strong>{t("详细模式")}</strong>
+              <small>
+                {t("额外保存完整请求和流响应；默认只保存时间、状态与用量。")}
+              </small>
+            </div>
+            <Checkbox
+              label={t("详细模式")}
+              checked={detailed}
+              onChange={(checked) => void settingsStore.updateDetailed(checked)}
             />
           </div>
-        </div>
-      </TitledCard>
-      <TitledCard title={t("主题")}>
-        <div className={styles.themeActions}>
-          {themeOptions.map(({ id }) => (
+        </TitledCard>
+        <PricingSettingsCard />
+        <TitledCard title={t("存储管理")}>
+          <div className={styles.storageRow}>
+            <div>
+              <strong>{t("统计数据")}</strong>
+              <small>{storage ? t("调用记录 {calls} 条", { calls: storage.call_count }) : t("计算中…")}</small>
+            </div>
             <button
-              className={theme === id ? styles.selected : ""}
-              key={id}
-              onClick={() => settingsStore.selectTheme(id)}
+              type="button"
+              className={styles.textButton}
+              onClick={() => { setClearScope("details"); setConfirmClear(true); }}
             >
-              {id === "default-dark" ? t("默认暗色") : t("默认亮色")}
+              {t("清理存储空间")}
             </button>
-          ))}
-        </div>
-      </TitledCard>
-      <TitledCard title={t("存储管理")}>
-        <div className={styles.storageRow}>
-          <div>
-            <strong>{t("统计数据")}</strong>
-            <small>{storage ? t("调用记录 {calls} 条", { calls: storage.call_count }) : t("计算中…")}</small>
           </div>
-          <button
-            type="button"
-            className={styles.textButton}
-            onClick={() => { setClearScope("details"); setConfirmClear(true); }}
-          >
-            {t("清理存储空间")}
-          </button>
-        </div>
-      </TitledCard>
+        </TitledCard>
+      </div>}
+
       <ConfirmDialog
         open={confirmClear}
         title={clearTitle}
@@ -306,5 +336,21 @@ export function SettingsPage() {
       </ConfirmDialog>
     </div>
   );
-  return <PageContent title={t("设置")} sections={[{ key: "settings", estimatedHeight: 1200, content }]} />;
+  return <>
+    <PageActions position="filters">
+      <div className={styles.categoryTabs} role="group" aria-label={t("设置分类")}>
+        {categories.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            aria-pressed={category === item.id}
+            onClick={() => setCategory(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </PageActions>
+    <PageContent title={t("设置")} sections={[{ key: `settings:${category}`, estimatedHeight: category === "all" ? 1200 : 380, content }]} />
+  </>;
 }

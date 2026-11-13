@@ -64,9 +64,10 @@ export function cursorModelGroups(models: Model[], grouping: Exclude<CursorModel
   return [...groups.values()];
 }
 
-export function CursorModelCards(props: CursorModelCardsProps) {
+export function CursorModelCards(props: CursorModelCardsProps & { sortable?: boolean }) {
+  const canSort = props.sortable ?? true;
   const builtins = props.models.length === 0 ? null : props.grouping === "flat"
-    ? <ModelGrid {...props} sortable />
+    ? <ModelGrid {...props} sortable={canSort} />
     : <>
       {cursorModelGroups(props.models, props.grouping).map((group) => <CollapsibleGroup
         key={group.key}
@@ -86,14 +87,20 @@ export function CursorModelCards(props: CursorModelCardsProps) {
           onEdit={() => props.onEdit(model)}
           contextControl={contextControl(props, model.model_hash)}
           defaultControl={defaultControl(props, model.model_hash)}
+          isDefault={props.defaultModelId === model.model_hash}
+          onClearDefault={() => props.onSetDefault("")}
           onDuplicate={() => props.onDuplicate(model)}
           onDelete={() => props.onDelete(model)}
         />)}
       </CollapsibleGroup>)}
     </>;
+  const pluginsList = pluginGroups(props.pluginModels);
   return <div className={props.grouping === "flat" ? styles.modelGroups : styles.modelCollection}>
     {builtins}
-    {pluginGroups(props.pluginModels).map((group) => <CollapsibleGroup
+    {props.grouping === "flat" && props.models.length > 0 && pluginsList.length > 0 && (
+      <div className={styles.sectionCaption}>{t("账号模型（按来源分组）")}</div>
+    )}
+    {pluginsList.map((group) => <CollapsibleGroup
       key={`${group.pluginId}:${group.providerId}`}
       label={group.pluginName}
       iconSrc={group.icon}
@@ -162,7 +169,7 @@ function CollapsibleGroup({ label, icon, iconSrc, count, defaultOpen = true, onS
   </section>;
 }
 
-function ModelListRow({ model, disabled, testing, result, onTest, onEdit, contextControl, defaultControl, onDuplicate, onDelete }: {
+function ModelListRow({ model, disabled, testing, result, onTest, onEdit, contextControl, defaultControl, isDefault, onClearDefault, onDuplicate, onDelete }: {
   model: Model;
   disabled: boolean;
   testing: boolean;
@@ -171,6 +178,8 @@ function ModelListRow({ model, disabled, testing, result, onTest, onEdit, contex
   onEdit: () => void;
   contextControl: ReactNode;
   defaultControl: ReactNode;
+  isDefault: boolean;
+  onClearDefault: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
@@ -186,6 +195,7 @@ function ModelListRow({ model, disabled, testing, result, onTest, onEdit, contex
       {defaultControl}
       <TooltipTrigger label={t("编辑连接")}><Button variant="ghost" size="small" className={styles.editAction} aria-label={t("编辑连接")} disabled={disabled || testing} onClick={onEdit}><Icon icon={editIcon} size="1.1em" /></Button></TooltipTrigger>
       <ActionMenu iconOnly label={t("更多")} disabled={disabled || testing} items={[
+        ...(isDefault ? [{ id: "clear-default", label: t("取消默认"), onSelect: onClearDefault }] : []),
         { id: "duplicate", label: t("复制为新模型"), onSelect: onDuplicate },
         { id: "delete", label: t("删除"), onSelect: onDelete },
       ]} />
@@ -283,15 +293,18 @@ function ModelGrid(props: ModelGridProps) {
     {models.map((model) => {
       const result = testResults.get(model.model_hash);
       const testing = testingModelHashes.has(model.model_hash);
+      const isDefault = props.defaultModelId === model.model_hash;
       return <Card className={styles.modelCard} data-model-hash={model.model_hash} key={model.model_hash}>
-        {sortableEnabled && <button type="button" className={styles.sortHandle} disabled={disabled} aria-label={t("拖动排序")} title={t("拖动排序")} onClick={(event) => event.stopPropagation()}>
-          <Icon icon={dragIcon} size="1.25em" />
-        </button>}
         <div className={styles.modelCardContent}>
           <div className={styles.modelCardTop}>
-            <div className={styles.modelCardName}>
-              <span className={styles.modelCardNameText}>{model.display_name}</span>
-              <span className={styles.modelCardModelId}>{model.model_id}</span>
+            <div className={styles.modelCardHeaderLeft}>
+              {sortableEnabled && <button type="button" className={styles.sortHandle} disabled={disabled} aria-label={t("拖动排序")} title={t("拖动排序")} onClick={(event) => event.stopPropagation()}>
+                <Icon icon={dragIcon} size="1.15em" />
+              </button>}
+              <div className={styles.modelCardName}>
+                <span className={styles.modelCardNameText} title={model.display_name}>{model.display_name}</span>
+                <span className={styles.modelCardModelId} title={model.model_id}>{model.model_id}</span>
+              </div>
             </div>
             <span className={styles.modelTypeBadge}>
               <Icon icon={model.type === "anthropic" ? claudeIcon : openAiIcon} />
@@ -307,6 +320,7 @@ function ModelGrid(props: ModelGridProps) {
             {defaultControl(props, model.model_hash)}
             <Button size="small" disabled={disabled || testing} onClick={() => onEdit(model)}>{t("编辑连接")}</Button>
             <ActionMenu iconOnly label={t("更多")} disabled={disabled || testing} items={[
+              ...(isDefault ? [{ id: "clear-default", label: t("取消默认"), onSelect: () => props.onSetDefault("") }] : []),
               { id: "duplicate", label: t("复制为新模型"), onSelect: () => onDuplicate(model) },
               { id: "delete", label: t("删除"), onSelect: () => onDelete(model) },
             ]} />
@@ -330,10 +344,19 @@ function contextControl(props: Pick<CursorModelCardsProps, "modelSettings" | "sa
 }
 
 function defaultControl(props: Pick<CursorModelCardsProps, "defaultModelId" | "defaultModelDisabled" | "savingDefaultModelId" | "onSetDefault" | "disabled">, id: string) {
+  const isDefault = props.defaultModelId === id;
+  const savingThis = props.savingDefaultModelId === id || (isDefault && props.savingDefaultModelId === "");
   return <span className={styles.defaultModelControl}>
-    {props.defaultModelId === id
-      ? <span className={styles.defaultModelLabel}>{t("默认模型")}</span>
-      : <Button variant="ghost" size="small" disabled={props.disabled || props.defaultModelDisabled} onClick={() => props.onSetDefault(id)}>{props.savingDefaultModelId === id ? t("保存中…") : t("设为默认")}</Button>}
+    {isDefault
+      ? <TooltipTrigger label={t("点击取消默认，恢复由 Cursor 管理")}>
+        <button
+          type="button"
+          className={styles.defaultModelBadge}
+          disabled={props.disabled || props.defaultModelDisabled}
+          onClick={() => props.onSetDefault("")}
+        >{savingThis ? t("保存中…") : t("默认模型")}</button>
+      </TooltipTrigger>
+      : <Button variant="ghost" size="small" disabled={props.disabled || props.defaultModelDisabled} onClick={() => props.onSetDefault(id)}>{savingThis ? t("保存中…") : t("设为默认")}</Button>}
   </span>;
 }
 

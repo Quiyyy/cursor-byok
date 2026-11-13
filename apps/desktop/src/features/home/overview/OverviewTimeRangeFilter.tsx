@@ -75,6 +75,7 @@ export function OverviewTimeRangeFilter({ value, quick, customOpen, customStart,
   const parsedEnd = parseTimeInput(customEnd);
   const customValid = parsedStart !== null && parsedEnd !== null && parsedStart < parsedEnd;
   return <div className={styles.root} aria-label={t("概览时间范围")}>
+    <div className={styles.modelPicker}><ModelSelect mode="multiple" label={t("模型")} value={selectedModels} options={modelOptions} onChange={onSelectedModelsChange} /></div>
     <div className={styles.compactPicker}><Select ariaLabel={t("概览时间范围")} value={value}
       options={[...presets, { value: "custom", label: t("自定义") }]}
       onChange={(next) => next === "custom" ? onCustomOpenChange(true) : onSelect(next as Exclude<OverviewRangePreset, "custom">)} /></div>
@@ -86,16 +87,16 @@ export function OverviewTimeRangeFilter({ value, quick, customOpen, customStart,
         onClick={() => onSelect(preset.value)}
       >{preset.label}</button>)}
     </div>
-      <button
-        className={`${controls.secondary} ${styles.customButton}`}
-        ref={customButton}
-        type="button"
-        aria-haspopup="dialog"
-        aria-controls={customOpen ? popoverId : undefined}
-        aria-expanded={customOpen}
-        aria-pressed={value === "custom"}
-        onClick={() => onCustomOpenChange(!customOpen)}
-      >{t("自定义")}</button>
+    <button
+      className={`${controls.secondary} ${styles.customButton}`}
+      ref={customButton}
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls={customOpen ? popoverId : undefined}
+      aria-expanded={customOpen}
+      aria-pressed={value === "custom"}
+      onClick={() => onCustomOpenChange(!customOpen)}
+    >{t("自定义")}</button>
     <TooltipTrigger label={t("刷新")}><button className={controls.iconButton} aria-label={t("刷新")} disabled={busy} onClick={onRefresh}>
       <Icon className={busy ? controls.spin : ""} icon={refreshIcon} size="1.1em" />
     </button></TooltipTrigger>
@@ -125,7 +126,7 @@ export function OverviewTimeRangeFilter({ value, quick, customOpen, customStart,
       </div>
       <label><span>{t("开始时间")}</span><input type="text" placeholder={t("如：2026-08-23 09:00、1小时前")} value={customStart} onChange={(event) => onCustomStartChange(event.target.value)} /></label>
       <label><span>{t("结束时间")}</span><input type="text" placeholder={t("如：现在、2026-08-23 18:00")} value={customEnd} onChange={(event) => onCustomEndChange(event.target.value)} /></label>
-      <div className={styles.filterRow}><ModelSelect mode="multiple" label={t("模型")} value={selectedModels} options={modelOptions} onChange={onSelectedModelsChange} /></div>
+      {!customValid && (customStart.trim() !== "" || customEnd.trim() !== "") && <span className={styles.validationHint}>{t("请输入有效的时间范围，且开始时间早于结束时间")}</span>}
       <div className={styles.popoverActions}>
         <button type="button" className={controls.secondary} onClick={() => onCustomOpenChange(false)}>{t("取消")}</button>
         <button type="button" className={controls.primary} disabled={!customValid} onClick={onCustomApply}>{t("应用")}</button>

@@ -3,7 +3,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
-import { chevronDownIcon } from "./icons";
+import { checkIcon, chevronDownIcon } from "./icons";
 import { moreActionsIcon } from "./workbenchIcons";
 import styles from "./ActionMenu.module.scss";
 
@@ -12,6 +12,7 @@ export type ActionMenuItem =
       id: string;
       label: string;
       type?: "action";
+      checked?: boolean;
       disabled?: boolean;
       onSelect: () => void;
     }
@@ -128,14 +129,16 @@ export function ActionMenu({ label, items, disabled, iconOnly = false }: {
           <button
             key={item.id}
             type="button"
-            role="menuitem"
+            role={item.checked !== undefined ? "menuitemradio" : "menuitem"}
+            aria-checked={item.checked}
             disabled={item.disabled}
             onClick={() => {
               close();
               item.onSelect();
             }}
           >
-            {item.label}
+            <span>{item.label}</span>
+            {item.checked && <Icon icon={checkIcon} size="1em" />}
           </button>
         ))}
       </div>,

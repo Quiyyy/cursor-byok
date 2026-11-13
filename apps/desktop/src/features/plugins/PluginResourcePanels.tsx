@@ -323,11 +323,18 @@ function ResourceRow({ item, actions, canRefresh, disabled, onAction, onRefresh,
       <div className={styles.resourceIdentity}><strong title={item.displayName}>{item.displayName}</strong><StateBadge state={item.state} /></div>
       {item.selected && <small>{t("当前账号")}</small>}
       {item.description && <span>{pluginText(item.description, locale)}</span>}
-      {item.metrics.map((metric) => <span key={metric.id}>
-        {metric.unit === "percent"
+      {item.state.status !== "ready" && item.state.message && <span className={item.state.status === "cooling" ? styles.cooling : styles.invalid}>{item.state.message}</span>}
+      {item.state.retryAtMs != null && <span className={styles.cooling}>{t("预计恢复：{time}", { time: formatActionDate(item.state.retryAtMs, locale) })}</span>}
+      {item.metrics.map((metric) => {
+        const base = metric.unit === "percent"
           ? t("{label} 剩余 {percent}%", { label: pluginText(metric.label, locale), percent: Math.round(metric.value) })
-          : `${pluginText(metric.label, locale)}: ${metric.value}`}
-      </span>)}
+          : `${pluginText(metric.label, locale)}: ${metric.value}`;
+        return <span key={metric.id}>
+          {metric.resetAtMs != null
+            ? `${base} · ${t("重置于 {time}", { time: formatActionDate(metric.resetAtMs, locale) })}`
+            : base}
+        </span>;
+      })}
       {item.links?.map(link => <Button key={link.url} size="small" onClick={() => void api.openExternalUrl(link.url)}>{pluginText(link.label, locale)}</Button>)}
     </div>
     <div className={styles.actions}>

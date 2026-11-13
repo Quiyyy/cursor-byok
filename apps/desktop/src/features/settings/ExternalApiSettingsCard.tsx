@@ -55,7 +55,12 @@ export function ExternalApiSettingsCard({ servicePort }: { servicePort: number }
       </FormField>
       <div className={styles.address}>
         <strong>{t("基础地址")}</strong>
-        <code>{address}</code>
+        <div className={styles.addressValue}>
+          <code>{address}</code>
+          <Button size="small" onClick={() => void api.copyCursorText(address).then(() => message(t("基础地址已复制"))).catch((cause) => message(cause instanceof Error ? cause.message : String(cause)))}>
+            {t("复制地址")}
+          </Button>
+        </div>
       </div>
     </div>
   </TitledCard>;

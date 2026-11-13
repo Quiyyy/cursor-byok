@@ -147,10 +147,18 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+}
+.modelCardHeaderLeft {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
 }
 .modelCardName {
   min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -205,25 +213,63 @@
   white-space: nowrap;
   font-size: type.$font-size-xs;
 }
-.defaultModelLabel {
+.defaultModelBadge {
+  padding: 2px 8px;
   color: var(--vscode-textLink-foreground);
+  background: color-mix(in srgb, var(--vscode-textLink-foreground) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--vscode-textLink-foreground) 32%, transparent);
+  border-radius: 999px;
+  font-size: type.$font-size-xs;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--vscode-textLink-foreground) 18%, transparent);
+    border-color: color-mix(in srgb, var(--vscode-textLink-foreground) 52%, transparent);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+.sectionCaption {
+  padding: 4px 2px 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: type.$font-size-xs;
   font-weight: 500;
 }
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  input {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
 .sortHandle {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 1;
-  width: 30px;
-  height: 30px;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin: -2px 0 0 -4px;
   display: grid;
   place-items: center;
   padding: 0;
-  color: transparent;
+  color: var(--vscode-descriptionForeground);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
-  opacity: 0;
+  border-radius: 5px;
+  opacity: 0.55;
   cursor: grab;
   touch-action: none;
   transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease, background-color 160ms ease;
@@ -240,7 +286,7 @@
   }
   &:disabled {
     cursor: not-allowed;
-    opacity: 0.3;
+    opacity: 0.25;
   }
 }
 .sortGhost {

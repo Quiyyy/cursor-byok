@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { LlmCall } from "../../shared/api";
 import { DataTable, type DataTableColumn } from "../../shared/ui/DataTable";
 import { Button } from "../../shared/ui/Button";
@@ -8,7 +9,16 @@ import styles from "./CallTable.module.scss";
 
 const milliseconds = (value: number | null) => value === null ? "—" : `${(value / 1000).toFixed(2)} s`;
 
-export function CallTable({ calls, onDetails }: { calls: LlmCall[]; onDetails: (call: LlmCall) => void }) {
+function callSourceLabel(source: LlmCall["source"]) {
+  switch (source) {
+    case "native_agent": return "Agent";
+    case "commit": return "Commit";
+    case "external_api": return "API";
+    case "model_test": return t("模型测试");
+  }
+}
+
+export function CallTable({ calls, emptyText, onDetails }: { calls: LlmCall[]; emptyText?: ReactNode; onDetails: (call: LlmCall) => void }) {
   const { locale } = useI18n();
   const columns: DataTableColumn<LlmCall>[] = [
     {
@@ -20,12 +30,18 @@ export function CallTable({ calls, onDetails }: { calls: LlmCall[]; onDetails: (
     },
     {
       key: "model", header: t("模型"),
-      render: (call) => <div className={styles.model}><span>{call.display_name}</span><span className={styles.secondary}>{call.model_id}</span></div>,
+      render: (call) => <div className={styles.model}>
+        <span>{call.display_name}</span>
+        <span className={styles.secondary}>{`${callSourceLabel(call.source)} · ${call.model_id}`}</span>
+      </div>,
       title: (call) => call.model_id,
     },
     {
       key: "status", header: t("状态"),
-      render: (call) => <span className={[styles.status, styles[call.status]].filter(Boolean).join(" ")}>{callStatusLabel(call.status)}</span>,
+      render: (call) => <div className={styles.statusCell}>
+        <span className={[styles.status, styles[call.status]].filter(Boolean).join(" ")}>{callStatusLabel(call.status)}</span>
+        {call.status === "failed" && call.error_message && <span className={styles.errorSnippet}>{call.error_message}</span>}
+      </div>,
       title: (call) => call.error_message ?? undefined,
     },
     { key: "ttft", header: t("首 Token"), render: (call) => milliseconds(call.ttft_ms), className: styles.numeric },
@@ -33,5 +49,5 @@ export function CallTable({ calls, onDetails }: { calls: LlmCall[]; onDetails: (
     { key: "tokens", header: "Token", render: (call) => call.total_tokens === null ? "—" : formatCompactInteger(call.total_tokens), className: styles.numeric },
     { key: "actions", header: t("操作"), sticky: "right", render: (call) => <Button size="small" onClick={() => onDetails(call)}>{t("详情")}</Button> },
   ];
-  return <DataTable className={styles.table} rows={calls} columns={columns} rowKey={(call) => call.call_id} minWidth={680} emptyText={t("没有匹配的调用记录")} />;
+  return <DataTable className={styles.table} rows={calls} columns={columns} rowKey={(call) => call.call_id} minWidth={540} emptyText={emptyText ?? t("没有匹配的调用记录")} onRowClick={onDetails} />;
 }

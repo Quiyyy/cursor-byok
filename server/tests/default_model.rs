@@ -197,7 +197,7 @@ async fn configured_default_reaches_cursor_and_disables_auto_nudges() {
     );
     store.delete_model(&model.model_hash).await.unwrap();
     let (status, _) = request(
-        router,
+        router.clone(),
         "POST",
         "/aiserver.v1.AiService/GetDefaultModel",
         json!({}),
@@ -206,5 +206,36 @@ async fn configured_default_reaches_cursor_and_disables_auto_nudges() {
     assert!(
         status.is_client_error(),
         "An unavailable default must not silently become Auto"
+    );
+
+    let (status, body) = request(
+        router.clone(),
+        "PUT",
+        settings_path,
+        json!({"model_id": ""}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&body).unwrap()["model_id"],
+        ""
+    );
+
+    let response = router
+        .oneshot(
+            Request::post("/aiserver.v1.AiService/GetDefaultModel")
+                .header("content-type", "application/proto")
+                .header("x-cursor-byok-default-only", "1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let cleared =
+        DefaultModel::decode(to_bytes(response.into_body(), 1024).await.unwrap()).unwrap();
+    assert!(
+        cleared.model.is_empty(),
+        "Clearing the default model override must restore Cursor native selection"
     );
 }

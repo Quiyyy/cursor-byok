@@ -15,7 +15,10 @@
   .textItem {
     width: 100%;
     min-height: 30px;
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     padding: 5px 8px;
     text-align: left;
     border: 0;
@@ -27,6 +30,11 @@
   button {
     color: var(--vscode-dropdown-foreground);
     background: transparent;
+
+    &[aria-checked="true"] {
+      color: var(--vscode-textLink-foreground);
+      font-weight: 500;
+    }
 
     &:hover:not(:disabled) {
       background: var(--vscode-list-activeSelectionBackground);

@@ -1,0 +1,88 @@
+@use "../../styles/typography" as type;
+
+.onboarding {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.onboardingHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  strong {
+    color: var(--vscode-foreground);
+    font-size: type.$font-size-base;
+    font-weight: 600;
+  }
+}
+
+.dismissButton {
+  padding: 2px 4px;
+  color: var(--vscode-descriptionForeground);
+  background: transparent;
+  border: 0;
+  font-size: type.$font-size-xs;
+
+  &:hover {
+    color: var(--vscode-foreground);
+  }
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+
+  @container (max-width: 620px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.step {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--vscode-foreground) 3%, transparent);
+  border: 1px solid var(--vscode-sideBar-border);
+  border-radius: 6px;
+
+  &[data-done="true"] {
+    border-color: color-mix(in srgb, var(--vscode-testing-iconPassed, #73c991) 45%, var(--vscode-sideBar-border));
+  }
+}
+
+.stepTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.stepTitle {
+  color: var(--vscode-foreground);
+  font-size: type.$font-size-xs;
+  font-weight: 600;
+}
+
+.stepStatus {
+  flex: 0 0 auto;
+  color: var(--vscode-descriptionForeground);
+  font-size: type.$font-size-2xs;
+
+  &[data-done="true"] {
+    color: var(--vscode-testing-iconPassed, #73c991);
+  }
+}
+
+.stepActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
