@@ -9,8 +9,8 @@ function apply(source, edits) {
   for(const edit of edits.sort((a,b)=>b.start-a.start)) source=source.slice(0,edit.start)+edit.code+source.slice(edit.end);
   return source;
 }
-export function patchHostSearch(source, routerName) {
-  let factory, module, construction, network, privateInference;
+export function exposeHostSearch(source) {
+  let factory, module;
   traverse(parse(source), {
     FunctionDeclaration(p) {
       const body=source.slice(p.node.start,p.node.end);
@@ -18,13 +18,25 @@ export function patchHostSearch(source, routerName) {
       if(factory)unsupported();
       factory=p.node;
       module=p.findParent(parent=>parent.isObjectMethod()&&parent.node.key.type==='NumericLiteral')?.node;
-    },
+    }
+  });
+  if(!factory||!module||module.params.length!==3||module.params.some(p=>p.type!=='Identifier'))unsupported();
+  const [,exports,require]=module.params.map(p=>p.name);
+  const registration=`${require}.d(${exports},{__byokWebSearch:()=>${factory.id.name}});`;
+  const start=module.body.directives.at(-1)?.end??module.body.start+1;
+  return {moduleId:module.key.value,source:source.slice(0,start)+registration+source.slice(start)};
+}
+export function patchHostSearch(source, routerName, moduleId) {
+  let construction, network, privateInference, loader;
+  traverse(parse(source), {
     NewExpression(p) {
       if(p.node.callee.name!==routerName)return;
       const binding=p.scope.getBinding(routerName)?.path.node;
       if(binding?.type!=='ClassDeclaration'||!source.slice(binding.start,binding.end).includes('Selected Agent Host turn runtime'))return;
       if(construction)unsupported();
       construction=p.node;
+      const ownerModule=p.findParent(v=>v.isObjectMethod()&&v.node.key.type==='NumericLiteral')?.node;
+      if(ownerModule?.params.length===3&&ownerModule.params[2].type==='Identifier')loader=ownerModule.params[2].name;
       const owner=p.getFunctionParent();
       owner?.traverse({ObjectProperty(property) {
         if(property.node.key.name==='privateInference') {
@@ -39,12 +51,9 @@ export function patchHostSearch(source, routerName) {
       }});
     },
   });
-  if(!factory||!module||!construction||!network||!privateInference||module.params.length!==3||module.params.some(p=>p.type!=='Identifier'))unsupported();
-  const [,exports,require]=module.params.map(p=>p.name);
-  const registration=`${require}.d(${exports},{__byokWebSearch:()=>${factory.id.name}});`;
-  const wrapped=`Object.assign(${code(construction)},{__byokCreateWebSearch:modelId=>void 0===${privateInference}&&${network}.managedAgentToolsClient?__webpack_require__(${module.key.value}).__byokWebSearch(${network}.managedAgentToolsClient,{modelId}):undefined})`;
-  const registrationStart=module.body.directives.at(-1)?.end??module.body.start+1;
-  return apply(source,[{start:registrationStart,end:registrationStart,code:registration},{start:construction.start,end:construction.end,code:wrapped}]);
+  if(!construction||!network||!privateInference||!loader)unsupported();
+  const wrapped=`Object.assign(${code(construction)},{__byokCreateWebSearch:modelId=>void 0===${privateInference}&&${network}.managedAgentToolsClient?${loader}(${moduleId}).__byokWebSearch(${network}.managedAgentToolsClient,{modelId}):undefined})`;
+  return apply(source,[{start:construction.start,end:construction.end,code:wrapped}]);
 }
 export function patchLocalSearch(source, searchPath) {
   const matches=[];

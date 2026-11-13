@@ -21,7 +21,9 @@ build.mjs           # 生成嵌入 Rust 的安装器与第三方许可
 install.bundle.mjs  # 生成产物，不包含 Cursor bundle
 ```
 
-修改已安装的 `extensions/cursor-agent-host/dist/main.js`、`extensions/cursor-local-agent-runtime/dist/main.js` 和 `out/vs/workbench/workbench.desktop.main.js`。两个扩展入口选择原生客户端、导出已有工厂并绑定搜索回调；Workbench 入口启用 Host，并为新建前台对话读取 BYOK 默认模型。`product.json` 的对应校验和随入口一同备份、更新和恢复。
+修改已安装的 `extensions/cursor-agent-host/dist/main.js`、包含原生控制与搜索工厂的 Host 数字分块、`extensions/cursor-local-agent-runtime/dist/main.js` 和 `out/vs/workbench/workbench.desktop.main.js`。两个扩展入口选择原生客户端、导出已有工厂并绑定搜索回调；Workbench 入口启用 Host，并为新建前台对话读取 BYOK 默认模型。实际修改的分块和 `product.json` 的对应校验和随入口一同备份、更新和恢复。
+
+Host 的控制与搜索工厂通过结构定位，不固定分块编号或模块加载器变量名。工厂位于延迟分块时，BYOK Run 先沿已安装 Host 的分块依赖加载代码，再复用原生接收器；普通原生模型不进入这条加载路径。Host 数字分块的变化也会使原生目录缓存和已安装状态失效。
 
 ## 运行中的控制消息
 

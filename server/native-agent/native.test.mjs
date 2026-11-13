@@ -12,17 +12,28 @@ import { install as installBundled } from './install.bundle.mjs';
 import { catalogEntry } from './catalog.mjs';
 import { workbench } from './workbench.fixture.mjs';
 import { hostControl, localControl } from './control.fixture.mjs';
+import {patchHostControl} from './control-patch.mjs';
+import {exposeHostSearch} from './search-patch.mjs';
 const require = createRequire(import.meta.url);
 const {
   route
 } = require('./route.cjs');
-const host = `class Adapter {constructor(client){this.client=client;this.mintLlmGatewayCredential=null;}run(t){return this.client.run(t);}}
+const searchModule = `71(module,exports,load){"use strict";function search(client,options){if((function(){return this})()!==undefined)throw Error('strict mode lost');return async(ctx,args,call)=>{const result=await client.runWebSearch({searchTerm:args.searchTerm,modelId:options.modelId,callSignature:undefined},{signal:ctx.signal});return {answer:result.answer,documents:result.documents.map(d=>d)}}}}`;
+const controlChunk = `exports.id=900;exports.ids=[900];exports.modules={${hostControl},${searchModule}};`;
+const host = `const modules={73(module,exports,load){class Adapter {constructor(client){this.client=client;this.mintLlmGatewayCredential=null;}run(t){return this.client.run(t);}}
 class Router {async run(t){log('Selected Agent Host turn runtime');return 'official';}} globalThis.Router=Router;
-const modules={${hostControl},71(module,exports,load){"use strict";function search(client,options){if((function(){return this})()!==undefined)throw Error('strict mode lost');return async(ctx,args,call)=>{const result=await client.runWebSearch({searchTerm:args.searchTerm,modelId:options.modelId,callSignature:undefined},{signal:ctx.signal});return {answer:result.answer,documents:result.documents.map(d=>d)}}}}};
+function createRouter(network,privateInference){const create=()=>{const options={runtimeCapabilities:network.runtimeCapabilities,privateInference};return new Router(network.agentClient,options)};return create()};globalThis.createRouter=createRouter;
+function unrelated(){class Router{}return new Router}
+function nativeLazyImport(){return Promise.all([load.e(11),load.e(900)]).then(load.bind(load,72))}
+}};
 const cache={};function __webpack_require__(id){if(!cache[id]){const out={};modules[id]({},out,__webpack_require__);cache[id]=out;}return cache[id]}
 __webpack_require__.d=(out,entries)=>{for(const [key,get]of Object.entries(entries))Object.defineProperty(out,key,{get})};
-function createRouter(network,privateInference){const create=()=>{const options={runtimeCapabilities:network.runtimeCapabilities,privateInference};return new Router(network.agentClient,options)};return create()};globalThis.createRouter=createRouter;
-function unrelated(){class Router{}return new Router}`;
+__webpack_require__.e=async id=>{globalThis.loadedChunks?.push(id);if(id===900)Object.assign(modules,globalThis.controlModules)};
+__webpack_require__(73);globalThis.loadNativeControl=()=>__webpack_require__.e(900);`;
+const hostControlLocation = {moduleId:72,searchModuleId:71,chunkIds:[11,900]};
+function registerControl(sandbox) {
+  vm.runInNewContext(exposeHostSearch(patchHostControl(`globalThis.controlModules={${hostControl},${searchModule}};`).source).source,sandbox);
+}
 const runtime = `(()=>{class Model{constructor(p){Object.assign(this,p)}static fromBinary(p){return p}}${localControl};
 function taskModels(o){const provider=o.localProvider;return {parentRequestedModelName:o.modelId,subagentModels:[],requireServerSideSubagent:false,getTaskToolConfig:id=>({id,provider})}}
 function providerSearch(config){return async(ctx,args)=>({answer:await request({path:"/responses",input:args.searchTerm}),documents:[]})}
@@ -173,6 +184,7 @@ test('native router retains every host-owned state object and callback', async (
   let received;
   const sandbox = {
     log() {},
+    loadedChunks: [],
     require: () => ({
       run: async (turn,load,privacy,search,control,invoke) => invoke({
         client: {
@@ -188,17 +200,23 @@ test('native router retains every host-owned state object and callback', async (
       },turn)
     })
   };
-  vm.runInNewContext(patchAgentHost(host, '/test/route.cjs'), sandbox);
+  registerControl(sandbox);
+  vm.runInNewContext(patchAgentHost(host, '/test/route.cjs', hostControlLocation), sandbox);
   const turn = Object.fromEntries(['ctx', 'conversationState', 'action', 'resources', 'blobStore', 'conversationActionManager', 'checkpointHandler', 'interactionListener', 'mcpTools'].map(k => [k, {}]));
   turn.modelDetails={modelId:'byok:test'};
   turn.runOptions={};
+  assert.equal(await new sandbox.Router().run({...turn,modelDetails:{modelId:'official'}}),'official');
+  assert.deepEqual(sandbox.loadedChunks,[],'ordinary native turns do not load the BYOK control factory');
   assert.equal(await new sandbox.Router().run(turn), 'native');
+  assert.deepEqual(sandbox.loadedChunks, [11,900]);
   for (const key of Object.keys(turn).filter(key=>!['modelDetails','runOptions'].includes(key))) assert.equal(received[key], turn[key]);
 });
 
 test('each patched Host router retains its own authenticated search client', async () => {
   const sandbox={log(){},require:()=>({})};
-  vm.runInNewContext(patchAgentHost(host,'/test/route.cjs'),sandbox);
+  registerControl(sandbox);
+  vm.runInNewContext(patchAgentHost(host,'/test/route.cjs',hostControlLocation),sandbox);
+  await sandbox.loadNativeControl();
   const ctx={signal:new AbortController().signal};
   const routers=['account-a','account-b'].map(account=>sandbox.createRouter({managedAgentToolsClient:{runWebSearch:async(query,options)=>{assert.equal(query.modelId,'grok-4.6');assert.equal(options.signal,ctx.signal);return {answer:account,documents:[]};}}}));
   const results=await Promise.all(routers.map(router=>router.__byokCreateWebSearch('grok-4.6')(ctx,{searchTerm:'query'},{})));
@@ -210,12 +228,12 @@ for (const [name, installer] of [['source', install], ['bundle', installBundled]
   const directory = temp(t),
     app = path.join(directory, 'app'),
     data = path.join(directory, 'data');
-  const files = ['extensions/cursor-agent-host/dist/main.js', 'extensions/cursor-local-agent-runtime/dist/main.js', 'out/vs/workbench/workbench.desktop.main.js'];
+  const files = ['extensions/cursor-agent-host/dist/main.js', 'extensions/cursor-local-agent-runtime/dist/main.js', 'out/vs/workbench/workbench.desktop.main.js','extensions/cursor-agent-host/dist/900.js'];
   files.forEach((f, i) => {
     fs.mkdirSync(path.dirname(path.join(app, f)), {
       recursive: true
     });
-    fs.writeFileSync(path.join(app, f), [host, runtime, workbench][i]);
+    fs.writeFileSync(path.join(app, f), [host, runtime, workbench, controlChunk][i]);
   });
   fs.writeFileSync(path.join(app, 'product.json'), JSON.stringify({
     version: 'test',
@@ -224,6 +242,7 @@ for (const [name, installer] of [['source', install], ['bundle', installBundled]
   }));
   const originalProduct = fs.readFileSync(path.join(app, 'product.json'), 'utf8');
   assert.equal(installer(app, data).changed, true);
+  assert.match(fs.readFileSync(path.join(app, files[3]),'utf8'),/__byokControl/);
   const context = {fn:()=>Symbol('aiService')};
   vm.runInNewContext(fs.readFileSync(path.join(app, files[2]), 'utf8'), context);
   assert.equal(new context.HostEnablement(false,false,true).isCursorAgentHostEnabled(),true);
@@ -241,11 +260,23 @@ for (const [name, installer] of [['source', install], ['bundle', installBundled]
   assert.equal(installer(app, data, true).restored, true);
   assert.equal(fs.readFileSync(path.join(app, files[0]), 'utf8'), host);
   assert.equal(fs.readFileSync(path.join(app, files[2]), 'utf8'), workbench);
+  assert.equal(fs.readFileSync(path.join(app, files[3]), 'utf8'), controlChunk);
+  // A missing or ambiguous control bundle fails before any installed file is changed.
+  fs.writeFileSync(path.join(app, files[3]),'exports.modules={};');
+  assert.throws(()=>installer(app,data),/control bundle/);
+  assert.equal(fs.readFileSync(path.join(app, files[0]),'utf8'),host);
+  fs.writeFileSync(path.join(app, files[3]),controlChunk);
+  const duplicate=path.join(app,'extensions/cursor-agent-host/dist/901.js');
+  fs.writeFileSync(duplicate,controlChunk);
+  assert.throws(()=>installer(app,data),/control bundle/);
+  fs.unlinkSync(duplicate);
   assert.equal(fs.readFileSync(path.join(app, 'product.json'), 'utf8'), originalProduct);
   installer(app, data);
   fs.writeFileSync(path.join(app, files[0]), host + '\n// Updated Cursor');
+  fs.writeFileSync(path.join(app, files[3]),controlChunk+'\n// Updated control chunk');
   installer(app, data, true);
   assert.equal(fs.readFileSync(path.join(app, files[0]), 'utf8'), host + '\n// Updated Cursor');
+  assert.equal(fs.readFileSync(path.join(app, files[3]), 'utf8'), controlChunk+'\n// Updated control chunk');
   fs.writeFileSync(path.join(app, files[2]), 'const unsupportedWorkbench=true;');
   assert.throws(() => installer(app, data), /new-conversation/);
   assert.equal(fs.readFileSync(path.join(app, files[0]), 'utf8'), host + '\n// Updated Cursor');
@@ -253,4 +284,9 @@ for (const [name, installer] of [['source', install], ['bundle', installBundled]
   fs.writeFileSync(path.join(app, files[1]), 'const unsupported=true;');
   assert.throws(() => installer(app, data), /native (LocalAgentClient|turn control boundary)/);
   assert.equal(fs.readFileSync(path.join(app, files[0]), 'utf8'), host + '\n// Updated Cursor');
+  fs.writeFileSync(path.join(app,files[1]),runtime);
+  installer(app,data);
+  fs.unlinkSync(path.join(app,files[3]));
+  installer(app,data,true);
+  assert.equal(fs.existsSync(path.join(app,files[3])),false,'restore does not recreate a chunk removed by Cursor update');
 });

@@ -7,11 +7,20 @@ import http from 'node:http';
 import vm from 'node:vm';
 import {once} from 'node:events';
 import {createRequire} from 'node:module';
-import {patchHostControl,patchLocalControl} from './control-patch.mjs';
+import {patchHostControl,patchLocalControl,hostControlChunks} from './control-patch.mjs';
 import {hostControl,localControl} from './control.fixture.mjs';
 const require=createRequire(import.meta.url);
 const deferred=()=>Promise.withResolvers();
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('control loading follows native chunk dependencies without pinning chunk IDs',()=>{
+  const source=`async function a(){return Promise.all([load.e(12),load.e(841)]).then(load.bind(load,72))}
+  async function b(){return Promise.all([load.e(12),load.e(841),load.e(15)]).then(load.bind(load,73))}
+  async function other(){return Promise.all([load.e(99)]).then(load.bind(load,1))}`;
+  assert.deepEqual(hostControlChunks(source,841),[12,841,15]);
+  assert.throws(()=>hostControlChunks(source,900),/turn control boundary/);
+  assert.throws(()=>hostControlChunks(source.replace('load.e(12)','unknown'),841),/turn control boundary/);
+});
 
 function context(parent) {
   const controller=new AbortController();

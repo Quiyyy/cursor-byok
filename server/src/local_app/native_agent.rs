@@ -18,7 +18,7 @@ const FILES: [&str; 4] = [
     "out/vs/workbench/workbench.desktop.main.js",
     "product.json",
 ];
-type Fingerprint = Vec<(SystemTime, u64)>;
+type Fingerprint = Vec<(PathBuf, SystemTime, u64)>;
 #[derive(Clone, Default)]
 pub(crate) struct NativeCatalog {
     pub available: Vec<Vec<u8>>,
@@ -114,11 +114,23 @@ impl NativeAgent {
         Ok(models)
     }
     fn fingerprint(&self) -> Result<Fingerprint> {
-        FILES
-            .iter()
+        let mut files: Vec<PathBuf> = FILES.iter().map(PathBuf::from).collect();
+        let host = PathBuf::from("extensions/cursor-agent-host/dist");
+        for entry in std::fs::read_dir(self.inner.app.join(&host))? {
+            let name = entry?.file_name();
+            if name.to_str().is_some_and(|name| {
+                name.strip_suffix(".js")
+                    .is_some_and(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+            }) {
+                files.push(host.join(name));
+            }
+        }
+        files.sort();
+        files
+            .into_iter()
             .map(|file| {
-                let m = std::fs::metadata(self.inner.app.join(file))?;
-                Ok((m.modified()?, m.len()))
+                let m = std::fs::metadata(self.inner.app.join(&file))?;
+                Ok((file, m.modified()?, m.len()))
             })
             .collect()
     }
@@ -285,6 +297,29 @@ mod lifecycle_tests {
         ca::CaManager, proxy::ProxyRuntime, CaState, CursorHarness, IntegrationState,
     };
     use parking_lot::RwLock;
+
+    #[tokio::test]
+    async fn changing_a_host_chunk_invalidates_the_installed_runtime() {
+        let directory = tempfile::tempdir().unwrap();
+        let native = NativeAgent::for_test(directory.path());
+        for file in FILES {
+            let file = native.inner.app.join(file);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, "original").unwrap();
+        }
+        let chunk = native
+            .inner
+            .app
+            .join("extensions/cursor-agent-host/dist/900.js");
+        std::fs::write(&chunk, "control").unwrap();
+        *native.inner.installed.lock().await = Some(native.fingerprint().unwrap());
+        assert!(native.is_current().await);
+        std::fs::write(&chunk, "updated control").unwrap();
+        assert!(!native.is_current().await);
+        *native.inner.installed.lock().await = Some(native.fingerprint().unwrap());
+        std::fs::rename(&chunk, chunk.with_file_name("901.js")).unwrap();
+        assert!(!native.is_current().await);
+    }
 
     #[tokio::test]
     async fn reading_ready_status_never_installs_or_writes_connection() {
