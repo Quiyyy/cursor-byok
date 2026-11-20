@@ -107,6 +107,7 @@ test("quick start uses unfiltered successful calls and updates after clearing st
     await expect(page.getByText("建议验证", { exact: true })).toHaveCount(0);
     await page.getByRole("switch", { name: "Cursor 接管", exact: true }).click();
     await expect(page.getByRole("switch", { name: "Cursor 接管", exact: true })).toBeChecked();
+    await expect(page.getByRole("status").filter({ hasText: "请保存工作后重启 Cursor" })).toBeVisible();
     await expect(page.getByText("快速开始", { exact: true })).toHaveCount(0);
     await picker.click();
     await page.getByRole("option", { name: /Unused model/ }).click();

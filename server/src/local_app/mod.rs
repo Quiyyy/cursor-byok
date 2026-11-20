@@ -2,7 +2,6 @@
 mod account;
 mod ca;
 mod native_agent;
-mod process;
 mod proxy;
 mod settings;
 pub mod update;
@@ -233,22 +232,7 @@ impl CursorHarness {
             .backend_addr
             .read()
             .ok_or_else(|| Error::Config("desktop management server is not ready".into()))?;
-        let proxy = self.inner.proxy.lock().await;
-        let native_changed = self.inner.native.enable(backend_addr).await?;
-        let settings_applied = proxy
-            .url()
-            .as_deref()
-            .map(settings::settings_match)
-            .transpose()?
-            .unwrap_or(false);
-        if !settings_applied || native_changed {
-            // Terminating Cursor only makes the freshly written http.proxy take effect
-            // sooner; it is optional, so a failed probe or kill must not block takeover.
-            if let Err(error) = process::terminate_cursor().await {
-                tracing::warn!(%error, "could not terminate Cursor before applying proxy settings");
-            }
-        }
-        drop(proxy);
+        self.inner.native.enable(backend_addr).await?;
         self.enable_transport(backend_addr).await
     }
 
