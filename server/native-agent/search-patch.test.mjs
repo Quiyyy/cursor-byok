@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {createRequire} from 'node:module';
 import {patchLocalSearch,patchHostSearch} from './search-patch.mjs';
+import {BundlePatch} from './bundle-patch.mjs';
 import {patchHostEnablement} from './workbench.mjs';
 const search=createRequire(import.meta.url)('./search.cjs');
 
@@ -10,14 +11,19 @@ test('native tool binding prefers the Host callback without replacing its tool e
   const source=`function renamed(config){return async(ctx,args)=>({answer:await request({path:"/responses",input:args.searchTerm}),documents:[]})}function tools(options){return {webSearch:renamed({modelId:options.modelId})}}globalThis.tools=tools;`;
   let requests=0;
   const sandbox={require:()=>search,request:async()=>{requests++;return 'provider';}};
-  vm.runInNewContext(patchLocalSearch(source,'/search.cjs'),sandbox);
+  const patch = new BundlePatch(source);
+  patchLocalSearch(patch, '/search.cjs');
+  vm.runInNewContext(patch.apply(),sandbox);
   const ctx={signal:new AbortController().signal};
   const result=await sandbox.tools({modelId:'gpt',localProvider:{__byokWebSearch:async()=>({answer:'official',documents:[]})}}).webSearch(ctx,{},{});
   assert.equal(result.answer,'official');assert.equal(requests,0);
   assert.equal((await sandbox.tools({modelId:'gpt'}).webSearch(ctx,{},{})).answer,'provider');
   assert.equal(requests,1);
-  assert.throws(()=>patchLocalSearch('function unrelated(){}','/search.cjs'),/WebSearch/);
-  assert.throws(()=>patchHostSearch('class Router{}','Router'),/WebSearch/);
+  assert.throws(()=>patchLocalSearch(new BundlePatch('function unrelated(){}'),'/search.cjs'),/WebSearch/);
+  const missing = new BundlePatch('({1(loader){class Router{};new Router;}})');
+  const factory = missing.ast.program.body[0].expression.properties[0];
+  assert.throws(() => missing.withFactoryScope(factory, scope =>
+    patchHostSearch(missing, scope, factory.body.body[0], 1)), /WebSearch/);
 });
 
 test('Host enablement preserves native workspace policy and rejects unknown boundaries', () => {

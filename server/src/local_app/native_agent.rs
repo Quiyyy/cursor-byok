@@ -335,6 +335,9 @@ impl NativeAgent {
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+        if mode == "install" {
+            command.arg(Self::patch_revision());
+        }
         #[cfg(windows)]
         command.creation_flags(0x08000000);
         let mut child = command.spawn()?;

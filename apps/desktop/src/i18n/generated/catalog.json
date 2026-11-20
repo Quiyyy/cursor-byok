@@ -614,8 +614,8 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 41,
-          "column": 33
+          "line": 44,
+          "column": 43
         }
       ]
     },
@@ -626,12 +626,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 117,
+          "line": 120,
           "column": 90
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 152,
+          "line": 155,
           "column": 94
         }
       ]
@@ -1184,6 +1184,18 @@
           "file": "features/models/CursorModelEditor.tsx",
           "line": 159,
           "column": 42
+        }
+      ]
+    },
+    "26c23f96d953f6e6": {
+      "source": "正在开启接管…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/cursor/CursorTakeover.tsx",
+          "line": 41,
+          "column": 45
         }
       ]
     },
@@ -2097,12 +2109,12 @@
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 129,
+          "line": 132,
           "column": 19
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 156,
+          "line": 159,
           "column": 80
         },
         {
@@ -2721,8 +2733,8 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 43,
-          "column": 51
+          "line": 46,
+          "column": 52
         }
       ]
     },
@@ -2916,7 +2928,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 149,
+          "line": 152,
           "column": 100
         }
       ]
@@ -3015,7 +3027,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 136,
+          "line": 139,
           "column": 20
         }
       ]
@@ -3488,7 +3500,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 126,
+          "line": 129,
           "column": 25
         }
       ]
@@ -3710,6 +3722,18 @@
         }
       ]
     },
+    "6fc3d8873882f3e4": {
+      "source": "正在准备证书…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/cursor/CursorTakeover.tsx",
+          "line": 43,
+          "column": 28
+        }
+      ]
+    },
     "70314b6dc000079d": {
       "source": "通过 · {speed} tokens/s",
       "kind": "template",
@@ -3731,7 +3755,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 146,
+          "line": 149,
           "column": 95
         }
       ]
@@ -4242,7 +4266,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 145,
+          "line": 148,
           "column": 49
         }
       ]
@@ -4401,8 +4425,8 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 42,
-          "column": 18
+          "line": 45,
+          "column": 47
         }
       ]
     },
@@ -4480,12 +4504,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 104,
-          "column": 36
+          "line": 107,
+          "column": 67
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 120,
+          "line": 123,
           "column": 64
         }
       ]
@@ -4509,7 +4533,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 140,
+          "line": 143,
           "column": 20
         }
       ]
@@ -4830,7 +4854,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 149,
+          "line": 152,
           "column": 83
         }
       ]
@@ -4890,8 +4914,8 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 42,
-          "column": 48
+          "line": 45,
+          "column": 77
         }
       ]
     },
@@ -4970,6 +4994,18 @@
           "file": "features/plugins/PluginManagementPage.tsx",
           "line": 325,
           "column": 9
+        }
+      ]
+    },
+    "9db72fe0ec38188e": {
+      "source": "正在关闭接管…",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/cursor/CursorTakeover.tsx",
+          "line": 42,
+          "column": 33
         }
       ]
     },
@@ -5262,7 +5298,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 149,
+          "line": 152,
           "column": 38
         }
       ]
@@ -5555,12 +5591,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 43,
-          "column": 31
+          "line": 46,
+          "column": 32
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 126,
+          "line": 129,
           "column": 45
         }
       ]
@@ -5642,7 +5678,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 133,
+          "line": 136,
           "column": 42
         }
       ]
@@ -5694,7 +5730,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 118,
+          "line": 121,
           "column": 10
         },
         {
@@ -6060,7 +6096,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 156,
+          "line": 159,
           "column": 103
         }
       ]
@@ -6669,11 +6705,6 @@
       "placeholders": [],
       "refs": [
         {
-          "file": "features/cursor/CursorTakeover.tsx",
-          "line": 41,
-          "column": 54
-        },
-        {
           "file": "features/models/CursorSettingsPage.tsx",
           "line": 414,
           "column": 241
@@ -6848,7 +6879,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 158,
+          "line": 161,
           "column": 18
         }
       ]
@@ -7357,7 +7388,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 159,
+          "line": 162,
           "column": 16
         }
       ]
@@ -7395,7 +7426,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 156,
+          "line": 159,
           "column": 53
         }
       ]
@@ -7498,12 +7529,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 105,
+          "line": 108,
           "column": 45
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 109,
+          "line": 112,
           "column": 25
         }
       ]

@@ -28,19 +28,22 @@ function integrationStatusLabel(integration: IntegrationState, settingsApplied: 
 
 /** Cursor integration is global and remains available independently of the active page. */
 export function CursorTakeover() {
-  const { cursorHarness: status, cursorBusy, busy: refreshing, error } = useCursorStore();
+  const { cursorHarness: status, operation, busy: refreshing, error } = useCursorStore();
   const message = useMessage();
   const switchId = useId();
   const [setupOpen, setSetupOpen] = useState(false);
   const [caCommand, setCaCommand] = useState<string | null>(null);
   const [waitingForCaRefresh, setWaitingForCaRefresh] = useState(false);
-  const busy = cursorBusy || refreshing;
+  const busy = operation !== null || refreshing;
   // A partially active proxy must still be switchable off.
   const checked = Boolean(status && (status.integration !== "disabled" || status.settings_applied));
   const degraded = Boolean(status?.compatibility_error) || checked && (status?.integration !== "enabled" || status.ca !== "ready");
-  const description = !status ? t("正在检查接入") : busy ? t("处理中…")
-    : degraded ? t("Cursor 接入需检查") : checked ? t("Cursor 已接管")
-    : status.ca !== "ready" ? t("准备 Cursor 接入") : t("Cursor 未接管");
+  const progress = operation === "enable" ? t("正在开启接管…")
+    : operation === "disable" ? t("正在关闭接管…")
+    : operation === "ca" ? t("正在准备证书…")
+    : refreshing || (!status && !error) ? t("正在检查接入") : null;
+  const description = progress ?? (degraded ? t("Cursor 接入需检查") : checked ? t("Cursor 已接管")
+    : status?.ca !== "ready" ? t("准备 Cursor 接入") : t("Cursor 未接管"));
 
   useEffect(() => {
     if (caCommand) void api.copyCursorText(caCommand).catch((cause) => message(errorText(cause)));
@@ -53,7 +56,7 @@ export function CursorTakeover() {
 
   const toggle = async (enabled: boolean) => {
     const current = cursorStore.getSnapshot();
-    if (current.cursorBusy || current.busy || !current.cursorHarness) return;
+    if (current.operation || current.busy || !current.cursorHarness) return;
     if (enabled && current.cursorHarness.compatibility_error) { setSetupOpen(true); return; }
     if (enabled && current.cursorHarness.ca !== "ready") {
       setSetupOpen(true);
@@ -101,7 +104,7 @@ export function CursorTakeover() {
   return <>
     <div className={styles.control} data-degraded={degraded || undefined}>
       <div className={styles.labelGroup}>
-        <label htmlFor={switchId}>{t("Cursor 接管")}</label>
+        <label htmlFor={switchId} aria-live="polite">{progress ?? t("Cursor 接管")}</label>
         {degraded && <TooltipTrigger label={t("查看接入诊断")}>
           <button
             type="button"

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {createRequire} from 'node:module';
 import {patchTaskModels} from './patch.mjs';
+import {BundlePatch} from './bundle-patch.mjs';
 const {taskModels} = createRequire(import.meta.url)('./route.cjs');
 const native = options => ({
   parentRequestedModelName: options.modelId,
@@ -34,11 +35,13 @@ test('ordinary endpoints and explicitly different models keep native routing', (
 test('patch locates the native Task factory structurally and preserves its closures', () => {
   const source = `const secret=42;function renamed(o){const provider=o.localProvider;return {parentRequestedModelName:o.modelId,subagentModels:o.availableModels,requireServerSideSubagent:false,getTaskToolConfig:id=>({id,secret,provider})}}globalThis.factory=renamed;`;
   const sandbox = {require: () => ({taskModels})};
-  vm.runInNewContext(patchTaskModels(source, '/bridge.cjs'), sandbox);
+  const patch = new BundlePatch(source);
+  patchTaskModels(patch, '/bridge.cjs');
+  vm.runInNewContext(patch.apply(), sandbox);
   const result = sandbox.factory(options('byok:a'));
   assert.equal(result.parentRequestedModelName, 'byok:a');
   assert.equal(result.getTaskToolConfig('byok:a').id, 'gpt-5.4');
   assert.equal(result.getTaskToolConfig('byok:a').secret, 42);
-  assert.throws(() => patchTaskModels('function unrelated(){}', '/bridge'), /Task/);
-  assert.throws(() => patchTaskModels(source + source.replaceAll('renamed', 'second').replace('const secret=42;', ''), '/bridge'), /Task/);
+  assert.throws(() => patchTaskModels(new BundlePatch('function unrelated(){}'), '/bridge'), /Task/);
+  assert.throws(() => patchTaskModels(new BundlePatch(source + source.replaceAll('renamed', 'second').replace('const secret=42;', '')), '/bridge'), /Task/);
 });

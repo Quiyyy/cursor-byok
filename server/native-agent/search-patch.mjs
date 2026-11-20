@@ -1,19 +1,14 @@
 // Bind each router to its own native authenticated client; no process-wide client registry.
-import {parse} from '../../apps/desktop/node_modules/@babel/parser/lib/index.js';
-import tm from '../../apps/desktop/node_modules/@babel/traverse/lib/index.js';
 import gm from '../../apps/desktop/node_modules/@babel/generator/lib/index.js';
-const traverse=tm.default??tm, generate=gm.default??gm;
+const generate=gm.default??gm;
 const code=node=>generate(node,{compact:true}).code;
 const unsupported=()=>{throw Error('Unsupported Cursor native WebSearch boundary');};
-function apply(source, edits) {
-  for(const edit of edits.sort((a,b)=>b.start-a.start)) source=source.slice(0,edit.start)+edit.code+source.slice(edit.end);
-  return source;
-}
-export function exposeHostSearch(source) {
+export function exposeHostSearch(patch) {
   let factory, module;
-  traverse(parse(source), {
+  patch.visit({
+    noScope: true,
     FunctionDeclaration(p) {
-      const body=source.slice(p.node.start,p.node.end);
+      const body=patch.source.slice(p.node.start,p.node.end);
       if(!body.includes('.runWebSearch(')||!body.includes('callSignature:')||!body.includes('documents:'))return;
       if(factory)unsupported();
       factory=p.node;
@@ -24,15 +19,14 @@ export function exposeHostSearch(source) {
   const [,exports,require]=module.params.map(p=>p.name);
   const registration=`${require}.d(${exports},{__byokWebSearch:()=>${factory.id.name}});`;
   const start=module.body.directives.at(-1)?.end??module.body.start+1;
-  return {moduleId:module.key.value,source:source.slice(0,start)+registration+source.slice(start)};
+  patch.replace(start, start, registration);
+  return module.key.value;
 }
-export function patchHostSearch(source, routerName, moduleId) {
+export function patchHostSearch(patch, factory, router, moduleId) {
   let construction, network, privateInference, loader, loaderCapture;
-  traverse(parse(source), {
+  factory.traverse({
     NewExpression(p) {
-      if(p.node.callee.name!==routerName)return;
-      const binding=p.scope.getBinding(routerName)?.path.node;
-      if(binding?.type!=='ClassDeclaration'||!source.slice(binding.start,binding.end).includes('Selected Agent Host turn runtime'))return;
+      if(p.node.callee.name!==router.id.name || p.scope.getBinding(router.id.name)?.path.node!==router)return;
       if(construction)unsupported();
       construction=p.node;
       const ownerModule=p.findParent(v=>v.isObjectMethod()&&v.node.key.type==='NumericLiteral');
@@ -57,20 +51,22 @@ export function patchHostSearch(source, routerName, moduleId) {
   });
   if(!construction||!network||!privateInference||!loader)unsupported();
   const wrapped=`Object.assign(${code(construction)},{__byokCreateWebSearch:modelId=>void 0===${privateInference}&&${network}.managedAgentToolsClient?${loader}(${moduleId}).__byokWebSearch(${network}.managedAgentToolsClient,{modelId}):undefined})`;
-  return apply(source,[loaderCapture,{start:construction.start,end:construction.end,code:wrapped}]);
+  patch.replace(loaderCapture.start, loaderCapture.end, loaderCapture.code);
+  patch.replace(construction.start, construction.end, wrapped);
 }
-export function patchLocalSearch(source, searchPath) {
+export function patchLocalSearch(patch, searchPath) {
   const matches=[];
-  traverse(parse(source), {ObjectProperty(p) {
+  patch.visit({ObjectProperty(p) {
     if(p.node.key.name!=='webSearch'||p.node.value.type!=='CallExpression'||p.node.value.callee.type!=='Identifier')return;
     const value=p.node.value, factory=p.scope.getBinding(value.callee.name)?.path.node;
     if(factory?.type!=='FunctionDeclaration')return;
-    const body=source.slice(factory.start,factory.end);
+    const body=patch.source.slice(factory.start,factory.end);
     if(!body.includes('"/responses"')||!body.includes('.searchTerm'))return;
     const model=value.arguments[0]?.properties?.find(property=>property.key?.name==='modelId')?.value;
     if(model?.type!=='MemberExpression'||model.object.type!=='Identifier'||model.property.name!=='modelId')unsupported();
     matches.push({start:value.start,end:value.end,code:`require(${JSON.stringify(searchPath)}).prefer(${model.object.name}.localProvider?.__byokWebSearch,${code(value)})`});
   }});
   if(matches.length!==1)unsupported();
-  return apply(source,matches);
+  const [match] = matches;
+  patch.replace(match.start, match.end, match.code);
 }

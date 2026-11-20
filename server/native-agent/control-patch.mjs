@@ -1,15 +1,12 @@
 // Reuse the installed Host's action conversion, mailbox, injection ledger and UI messages.
-import {parse} from '../../apps/desktop/node_modules/@babel/parser/lib/index.js';
-import tm from '../../apps/desktop/node_modules/@babel/traverse/lib/index.js';
 import gm from '../../apps/desktop/node_modules/@babel/generator/lib/index.js';
-const traverse = tm.default ?? tm, generate = gm.default ?? gm;
+const generate = gm.default ?? gm;
 const code = node => generate(node, {compact:true}).code;
 const unsupported = () => { throw Error('Unsupported Cursor native turn control boundary'); };
 
-export function hostControlChunks(source, chunkId) {
+export function hostControlChunks(patch, chunkId) {
   const chunks = new Set();
-  traverse(parse(source), {CallExpression(p) {
-    const n = p.node;
+  patch.visitNodes('CallExpression', n => {
     if (n.callee.type !== 'MemberExpression' || n.callee.object.name !== 'Promise' || n.callee.property.name !== 'all') return;
     const entries = n.arguments[0];
     if (entries?.type !== 'ArrayExpression') return;
@@ -17,14 +14,14 @@ export function hostControlChunks(source, chunkId) {
     if (!ids.includes(chunkId)) return;
     if (ids.some(id => id === undefined)) unsupported();
     for (const id of ids) chunks.add(id);
-  }});
+  });
   if (!chunks.size) unsupported();
   return [...chunks];
 }
 
-export function patchHostControl(source) {
+export function patchHostControl(patch) {
   const matches = [];
-  traverse(parse(source), {NewExpression(p) {
+  patch.visit({noScope: true, NewExpression(p) {
     const options = p.node.arguments[3];
     if (options?.type !== 'ObjectExpression' || !options.properties.some(v => v.key?.name === 'contextInjection')) return;
     const method = p.findParent(v => v.isClassMethod() && v.node.key.name === 'run');
@@ -33,7 +30,7 @@ export function patchHostControl(source) {
     const receiver = p.parentPath.isVariableDeclarator() ? p.parentPath.node.id.name : undefined;
     const mailbox = p.node.arguments[1];
     let convert, update;
-    method.traverse({CallExpression(call) {
+    method.traverse({noScope: true, CallExpression(call) {
       const n = call.node;
       if (n.callee.type === 'MemberExpression' && n.callee.object.name === receiver && n.callee.property.name === 'push') {
         if (convert || n.arguments[0]?.type !== 'CallExpression' || n.arguments[0].arguments.length !== 2) unsupported();
@@ -52,13 +49,14 @@ export function patchHostControl(source) {
   const [, exports, require] = module.params.map(v => v.name);
   const factory = `(ctx,cancel,runId,privacy,send)=>{const receiver=new (${code(receiver)})(ctx,${code(mailbox)},()=>cancel('cancel_action'),{contextInjection:{activeRunId:runId,onInjectionStateChange:(id,state)=>send(${code(update)}(privacy,id,state))}});return {receiver,push:action=>receiver.push((${code(convert)})(action,privacy))}}`;
   const position = module.body.directives.at(-1)?.end ?? module.body.start + 1;
-  return {moduleId:module.key.value, source:source.slice(0,position) + `${require}.d(${exports},{__byokControl:()=>${factory}});` + source.slice(position)};
+  patch.replace(position, position, `${require}.d(${exports},{__byokControl:()=>${factory}});`);
+  return module.key.value;
 }
 
-export function patchLocalControl(source) {
+export function patchLocalControl(patch) {
   const matches = [];
-  traverse(parse(source), {Class(p) {
-    const body = source.slice(p.node.start,p.node.end);
+  patch.visit({Class(p) {
+    const body = patch.source.slice(p.node.start,p.node.end);
     if (!body.includes('this.reasoningReplayLatch') || !body.includes('this.resolveModel(')) return;
     const run = p.get('body.body').find(v => v.isClassMethod() && v.node.key.name === 'run');
     run?.traverse({NewExpression(expr) {
@@ -74,5 +72,5 @@ export function patchLocalControl(source) {
   }});
   if (matches.length !== 1) unsupported();
   const empty = matches[0];
-  return source.slice(0,empty.start) + `(this.options.__byokConversationActionReceiver??${code(empty)})` + source.slice(empty.end);
+  patch.replace(empty.start, empty.end, `(this.options.__byokConversationActionReceiver??${code(empty)})`);
 }
