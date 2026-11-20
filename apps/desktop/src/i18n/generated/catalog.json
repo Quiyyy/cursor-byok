@@ -614,7 +614,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 44,
+          "line": 45,
           "column": 43
         }
       ]
@@ -626,12 +626,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 120,
+          "line": 124,
           "column": 90
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 155,
+          "line": 159,
           "column": 94
         }
       ]
@@ -1194,7 +1194,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 41,
+          "line": 42,
           "column": 45
         }
       ]
@@ -2109,12 +2109,12 @@
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 132,
+          "line": 136,
           "column": 19
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 159,
+          "line": 163,
           "column": 80
         },
         {
@@ -2733,7 +2733,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 46,
+          "line": 47,
           "column": 52
         }
       ]
@@ -2928,7 +2928,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 152,
+          "line": 156,
           "column": 100
         }
       ]
@@ -3027,7 +3027,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 139,
+          "line": 143,
           "column": 20
         }
       ]
@@ -3500,7 +3500,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 129,
+          "line": 133,
           "column": 25
         }
       ]
@@ -3729,7 +3729,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 43,
+          "line": 44,
           "column": 28
         }
       ]
@@ -3755,7 +3755,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 149,
+          "line": 153,
           "column": 95
         }
       ]
@@ -4266,7 +4266,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 148,
+          "line": 152,
           "column": 49
         }
       ]
@@ -4425,7 +4425,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 45,
+          "line": 46,
           "column": 47
         }
       ]
@@ -4504,12 +4504,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 107,
+          "line": 111,
           "column": 67
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 123,
+          "line": 127,
           "column": 64
         }
       ]
@@ -4533,7 +4533,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 143,
+          "line": 147,
           "column": 20
         }
       ]
@@ -4854,7 +4854,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 152,
+          "line": 156,
           "column": 83
         }
       ]
@@ -4904,18 +4904,6 @@
           "file": "features/plugins/PluginResourcePanels.tsx",
           "line": 158,
           "column": 147
-        }
-      ]
-    },
-    "9c2dfe51aadb7beb": {
-      "source": "Cursor 已接管",
-      "kind": "text",
-      "placeholders": [],
-      "refs": [
-        {
-          "file": "features/cursor/CursorTakeover.tsx",
-          "line": 45,
-          "column": 77
         }
       ]
     },
@@ -5004,7 +4992,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 42,
+          "line": 43,
           "column": 33
         }
       ]
@@ -5298,7 +5286,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 152,
+          "line": 156,
           "column": 38
         }
       ]
@@ -5591,12 +5579,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 46,
+          "line": 47,
           "column": 32
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 129,
+          "line": 133,
           "column": 45
         }
       ]
@@ -5678,7 +5666,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 136,
+          "line": 140,
           "column": 42
         }
       ]
@@ -5730,7 +5718,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 121,
+          "line": 125,
           "column": 10
         },
         {
@@ -6096,7 +6084,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 159,
+          "line": 163,
           "column": 103
         }
       ]
@@ -6347,6 +6335,18 @@
           "file": "features/calls/CallDetails.tsx",
           "line": 85,
           "column": 51
+        }
+      ]
+    },
+    "c53ee1494434986e": {
+      "source": "接管已就绪。如果当前窗口看不到 BYOK 模型，请保存工作后重启 Cursor。",
+      "kind": "text",
+      "placeholders": [],
+      "refs": [
+        {
+          "file": "features/cursor/CursorTakeover.tsx",
+          "line": 41,
+          "column": 23
         }
       ]
     },
@@ -6879,7 +6879,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 161,
+          "line": 165,
           "column": 18
         }
       ]
@@ -7388,7 +7388,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 162,
+          "line": 166,
           "column": 16
         }
       ]
@@ -7426,7 +7426,7 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 159,
+          "line": 163,
           "column": 53
         }
       ]
@@ -7529,12 +7529,12 @@
       "refs": [
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 108,
+          "line": 112,
           "column": 45
         },
         {
           "file": "features/cursor/CursorTakeover.tsx",
-          "line": 112,
+          "line": 116,
           "column": 25
         }
       ]

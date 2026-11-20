@@ -38,11 +38,12 @@ export function CursorTakeover() {
   // A partially active proxy must still be switchable off.
   const checked = Boolean(status && (status.integration !== "disabled" || status.settings_applied));
   const degraded = Boolean(status?.compatibility_error) || checked && (status?.integration !== "enabled" || status.ca !== "ready");
+  const enabledHint = t("接管已就绪。如果当前窗口看不到 BYOK 模型，请保存工作后重启 Cursor。");
   const progress = operation === "enable" ? t("正在开启接管…")
     : operation === "disable" ? t("正在关闭接管…")
     : operation === "ca" ? t("正在准备证书…")
     : refreshing || (!status && !error) ? t("正在检查接入") : null;
-  const description = progress ?? (degraded ? t("Cursor 接入需检查") : checked ? t("Cursor 已接管")
+  const description = progress ?? (degraded ? t("Cursor 接入需检查") : checked ? enabledHint
     : status?.ca !== "ready" ? t("准备 Cursor 接入") : t("Cursor 未接管"));
 
   useEffect(() => {
@@ -54,6 +55,14 @@ export function CursorTakeover() {
     if (nextError) message(nextError, { duration: 5000 });
   };
 
+  const applyTakeover = async (enabled: boolean) => {
+    const updated = await cursorStore.setCursorEnabled(enabled);
+    if (!updated) reportStoreError();
+    else if (enabled && cursorStore.getSnapshot().cursorHarness?.integration === "enabled") {
+      message(enabledHint, { duration: 6000 });
+    }
+    return updated;
+  };
   const toggle = async (enabled: boolean) => {
     const current = cursorStore.getSnapshot();
     if (current.operation || current.busy || !current.cursorHarness) return;
@@ -62,8 +71,7 @@ export function CursorTakeover() {
       setSetupOpen(true);
       return;
     }
-    const updated = await cursorStore.setCursorEnabled(enabled);
-    if (!updated) reportStoreError();
+    await applyTakeover(enabled);
   };
   const initializeCa = async () => {
     const next = await cursorStore.initializeCursorCa();
@@ -87,11 +95,7 @@ export function CursorTakeover() {
     }
   };
   const reapplyTakeover = async () => {
-    const updated = await cursorStore.setCursorEnabled(true);
-    if (!updated) {
-      reportStoreError();
-      return;
-    }
+    if (!(await applyTakeover(true))) return;
     const next = cursorStore.getSnapshot().cursorHarness;
     if (next?.ca === "ready" && next.integration === "enabled") setSetupOpen(false);
   };
