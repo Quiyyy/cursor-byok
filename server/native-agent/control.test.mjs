@@ -8,6 +8,7 @@ import vm from 'node:vm';
 import {once} from 'node:events';
 import {createRequire} from 'node:module';
 import {patchHostControl,patchLocalControl,hostControlChunks} from './control-patch.mjs';
+import {BundlePatch} from './bundle-patch.mjs';
 import {hostControl,localControl} from './control.fixture.mjs';
 const require=createRequire(import.meta.url);
 const deferred=()=>Promise.withResolvers();
@@ -17,9 +18,10 @@ test('control loading follows native chunk dependencies without pinning chunk ID
   const source=`async function a(){return Promise.all([load.e(12),load.e(841)]).then(load.bind(load,72))}
   async function b(){return Promise.all([load.e(12),load.e(841),load.e(15)]).then(load.bind(load,73))}
   async function other(){return Promise.all([load.e(99)]).then(load.bind(load,1))}`;
-  assert.deepEqual(hostControlChunks(source,841),[12,841,15]);
-  assert.throws(()=>hostControlChunks(source,900),/turn control boundary/);
-  assert.throws(()=>hostControlChunks(source.replace('load.e(12)','unknown'),841),/turn control boundary/);
+  const patch = new BundlePatch(source);
+  assert.deepEqual(hostControlChunks(patch,841),[12,841,15]);
+  assert.throws(()=>hostControlChunks(patch,900),/turn control boundary/);
+  assert.throws(()=>hostControlChunks(new BundlePatch(source.replace('load.e(12)','unknown')),841),/turn control boundary/);
 });
 
 function context(parent) {
@@ -92,22 +94,25 @@ test('Stop during control loading prevents receiver creation and model lookup',a
 
 test('structural patches bind native conversion and ledger notifications, and only replace the empty receiver',async()=>{
   const input=`const modules={${hostControl}};globalThis.modules=modules;`;
-  const patched=patchHostControl(input),sandbox={};
-  vm.runInNewContext(patched.source,sandbox);
+  const patch = new BundlePatch(input), sandbox = {};
+  const moduleId = patchHostControl(patch);
+  vm.runInNewContext(patch.apply(),sandbox);
   const exports={},loader={d:(out,values)=>{for(const [key,get]of Object.entries(values))Object.defineProperty(out,key,{get})}};
-  sandbox.modules[patched.moduleId]({},exports,loader);
+  sandbox.modules[moduleId]({},exports,loader);
   const events=[],control=exports.__byokControl({},()=>{},'generation',2,v=>events.push(v));
   control.push('steer');
   assert.equal(control.receiver.action.action,'steer');assert.equal(control.receiver.action.privacy,2);
   assert.equal(control.receiver.options.contextInjection.activeRunId,'generation');
   control.receiver.options.contextInjection.onInjectionStateChange('id',{kind:'delivered'});
   assert.equal(events[0].privacy,2);assert.equal(events[0].id,'id');
-  const Client=vm.runInNewContext(patchLocalControl(localControl)+';Client');
+  const runtime = new BundlePatch(localControl);
+  patchLocalControl(runtime);
+  const Client=vm.runInNewContext(runtime.apply()+';Client');
   const receiver={peek:async()=> 'steer'};
   assert.equal(new Client({__byokConversationActionReceiver:receiver}).run(),receiver);
   assert.equal(await new Client().run().peek(),undefined,'ordinary native clients retain their receiver');
-  for(const source of ['',input.replaceAll('contextInjectionState','renamed'),input+'const duplicate={'+hostControl+'};'])assert.throws(()=>patchHostControl(source),/turn control boundary/);
-  for(const source of ['',localControl.replace('async peek(ctx){}','async peek(ctx){return 1}')])assert.throws(()=>patchLocalControl(source),/turn control boundary/);
+  for(const source of ['',input.replaceAll('contextInjectionState','renamed'),input+'const duplicate={'+hostControl+'};'])assert.throws(()=>patchHostControl(new BundlePatch(source)),/turn control boundary/);
+  for(const source of ['',localControl.replace('async peek(ctx){}','async peek(ctx){return 1}')])assert.throws(()=>patchLocalControl(new BundlePatch(source)),/turn control boundary/);
 });
 
 test('Stop aborts streaming HTTP; delayed old output cannot reach the next Run',async t=>{

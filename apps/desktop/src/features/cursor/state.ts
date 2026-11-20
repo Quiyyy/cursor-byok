@@ -3,13 +3,13 @@ import { createStore } from "../../shared/store/createStore";
 import type { CursorHarnessStatus } from "../../shared/api";
 type CursorState = {
   cursorHarness: CursorHarnessStatus | null;
-  cursorBusy: boolean;
+  operation: "enable" | "disable" | "ca" | null;
   busy: boolean;
   error: string | null;
 };
 const state = createStore<CursorState>({
   cursorHarness: null,
-  cursorBusy: false,
+  operation: null,
   busy: false,
   error: null
 });
@@ -41,7 +41,7 @@ export const cursorStore = {
   },
   async initializeCursorCa() {
     update({
-      cursorBusy: true,
+      operation: "ca",
       error: null
     });
     try {
@@ -57,13 +57,13 @@ export const cursorStore = {
       return null;
     } finally {
       update({
-        cursorBusy: false
+        operation: null
       });
     }
   },
   async setCursorEnabled(enabled: boolean) {
     update({
-      cursorBusy: true,
+      operation: enabled ? "enable" : "disable",
       error: null
     });
     try {
@@ -78,7 +78,7 @@ export const cursorStore = {
       return false;
     } finally {
       update({
-        cursorBusy: false
+        operation: null
       });
     }
   }

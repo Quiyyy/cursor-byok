@@ -4,10 +4,11 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import Module, { createRequire } from 'node:module';
-import { patchAgentHost, exposeNativeClient, patchTaskModels } from './patch.mjs';
+import { BundlePatch } from './bundle-patch.mjs';
+import { patchAgentHost, patchLocalRuntime } from './patch.mjs';
 import { catalogEntry } from './catalog.mjs';
 import { patchWorkbench, patchHostEnablement } from './workbench.mjs';
-import { patchLocalSearch, exposeHostSearch } from './search-patch.mjs';
+import { exposeHostSearch } from './search-patch.mjs';
 import { patchHostControl, hostControlChunks } from './control-patch.mjs';
 const baseFiles = ['extensions/cursor-agent-host/dist/main.js', 'extensions/cursor-local-agent-runtime/dist/main.js', 'out/vs/workbench/workbench.desktop.main.js', 'product.json'];
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -22,30 +23,76 @@ function readSource(app, file) {
   if (!resolved.startsWith(app + path.sep) || fs.statSync(resolved).nlink > 1) throw Error('Cursor runtime must be an independent installed file');
   return read(resolved);
 }
-function prepare(app, directory, readEntry) {
+// Only the native bundles need expensive full-file AST transforms. The Workbench
+// and product checksum are cheap to regenerate from the current installation.
+function patchHostBundles(host, owner, bridge) {
+  const patch = new BundlePatch(owner.original);
+  const moduleId = patchHostControl(patch);
+  const searchModuleId = exposeHostSearch(patch);
+  if (owner === host) {
+    patchAgentHost(patch, bridge, {moduleId, searchModuleId, chunkIds: []});
+    return {main: patch.apply()};
+  }
+  const chunk = patch.apply();
+  const main = new BundlePatch(host.original);
+  const chunkIds = hostControlChunks(main, Number(path.basename(owner.file, '.js')));
+  patchAgentHost(main, bridge, {moduleId, searchModuleId, chunkIds});
+  return {main: main.apply(), chunk};
+}
+
+function nativeBundles(host, runtime, owner, directory, cache) {
+  const separate = owner.file !== host.file;
+  const inputs = separate ? [host, runtime, owner] : [host, runtime];
+  const key = cache && hash(JSON.stringify([cache.revision, directory,
+    ...inputs.map(entry => [entry.file, hash(entry.original)])]));
+  if (cache) {
+    try {
+      const saved = JSON.parse(read(cache.file));
+      if (saved.key === key && saved.files.length === inputs.length &&
+          saved.files.every(file => typeof file.source === 'string' && hash(file.source) === file.sha256)) {
+        return {sources: saved.files.map(file => file.source), cached: true};
+      }
+    } catch { /* A missing or damaged cache can be regenerated from the installation. */ }
+  }
+
+  const bridge = path.join(directory, 'route.cjs');
+  const patchedHost = patchHostBundles(host, owner, bridge);
+  const sources = [
+    patchedHost.main,
+    patchLocalRuntime(runtime.original, bridge, path.join(directory, 'search.cjs')),
+  ];
+  if (separate) sources.push(patchedHost.chunk);
+  if (cache) {
+    try {
+      write(cache.file, JSON.stringify({key, files: sources.map(source => ({source, sha256: hash(source)}))}));
+    } catch (error) {
+      console.error('Could not save Cursor native patch cache:', error.message);
+    }
+  }
+  return {sources, cached: false};
+}
+
+function prepare(app, directory, readEntry, cache) {
   const entries = baseFiles.map(readEntry);
   const hostDirectory = path.dirname(baseFiles[0]);
   const candidates = [entries[0], ...fs.readdirSync(path.join(app, hostDirectory))
     .filter(file => /^\d+\.js$/.test(file)).map(file => readEntry(`${hostDirectory}/${file}`))]
     .filter(entry => entry.original.includes('contextInjection:') && entry.original.includes('onInjectionStateChange'));
   if (candidates.length !== 1) throw Error('Unsupported Cursor: expected one native turn control bundle');
-  const owner = candidates[0], control = patchHostControl(owner.original);
-  const search = exposeHostSearch(control.source);
-  control.source = search.source;
-  const chunkIds = owner.file === baseFiles[0] ? [] : hostControlChunks(entries[0].original, Number(path.basename(owner.file, '.js')));
+  const owner = candidates[0];
+  const {sources, cached} = nativeBundles(entries[0], entries[1], owner, directory, cache);
   if (owner.file !== baseFiles[0]) entries.push(owner);
   const files = entries.map(entry => entry.file);
   const current = entries.map(entry => entry.current);
   const originals = entries.map(entry => entry.original);
-  const bridge = path.join(directory, 'route.cjs');
-  const generated = [patchAgentHost(owner.file === baseFiles[0] ? control.source : originals[0], bridge, {moduleId:control.moduleId, searchModuleId:search.moduleId, chunkIds}), patchLocalSearch(patchTaskModels(exposeNativeClient(originals[1]), bridge), path.join(directory, 'search.cjs')), patchHostEnablement(patchWorkbench(originals[2]))];
+  const generated = [sources[0], sources[1], patchHostEnablement(patchWorkbench(originals[2]))];
   const product = JSON.parse(originals[3]);
   if (product.checksums?.['vs/workbench/workbench.desktop.main.js']) {
     product.checksums['vs/workbench/workbench.desktop.main.js'] = crypto.createHash('sha256').update(generated[2]).digest('base64').replace(/=+$/, '');
   }
   generated.push(JSON.stringify(product, null, 2));
-  if (owner.file !== baseFiles[0]) generated.push(control.source);
-  return {files, current, originals, generated, product};
+  if (owner.file !== baseFiles[0]) generated.push(sources[2]);
+  return {files, current, originals, generated, product, cached};
 }
 
 // Structural/package preflight is not a substitute for the maintainer's live-run acceptance.
@@ -85,7 +132,8 @@ export function verify(appPath, directory) {
   }
   return {version:manifest.version, commit:manifest.commit, files:manifest.files.map(entry=>({file:entry.file,sha256:entry.original}))};
 }
-export function install(appPath, directory, restore = false) {
+export function install(appPath, directory, restore = false, revision) {
+  directory = path.resolve(directory);
   const app = fs.realpathSync(appPath);
   const base = path.join(directory, 'installations', hash(app));
   fs.mkdirSync(base, {
@@ -117,7 +165,8 @@ export function install(appPath, directory, restore = false) {
       restored: true
     };
   }
-  const {files, current, originals, generated, product} = prepare(app, directory, readEntry);
+  const cache = revision ? {file: path.join(base, 'native-bundles.json'), revision} : undefined;
+  const {files, current, originals, generated, product, cached} = prepare(app, directory, readEntry, cache);
   const manifest = {
     version: product.version,
     commit: product.commit,
@@ -143,6 +192,7 @@ export function install(appPath, directory, restore = false) {
   }
   return {
     changed: generated.some((s, i) => s !== current[i]),
+    cached,
     ...manifest
   };
 }
@@ -180,7 +230,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         catalog.usable.push(Buffer.from(details.toBinary()).toString('base64'));
       }
       console.log(JSON.stringify(catalog));
-    } else console.log(JSON.stringify(install(process.argv[2], process.argv[3], process.argv[4] === 'restore')));
+    } else console.log(JSON.stringify(install(process.argv[2], process.argv[3], process.argv[4] === 'restore', process.argv[5])));
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

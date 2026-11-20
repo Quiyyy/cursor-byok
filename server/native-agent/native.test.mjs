@@ -9,6 +9,7 @@ import http from 'node:http';
 import {once} from 'node:events';
 import { createRequire } from 'node:module';
 import { patchAgentHost } from './patch.mjs';
+import { BundlePatch } from './bundle-patch.mjs';
 import { install, check, verify } from './install.mjs';
 import { install as installBundled, check as checkBundled, verify as verifyBundled } from './install.bundle.mjs';
 import { catalogEntry } from './catalog.mjs';
@@ -33,8 +34,16 @@ __webpack_require__.d=(out,entries)=>{for(const [key,get]of Object.entries(entri
 __webpack_require__.e=async id=>{globalThis.loadedChunks?.push(id);if(id===900)Object.assign(modules,globalThis.controlModules)};
 __webpack_require__(73);globalThis.loadNativeControl=()=>__webpack_require__.e(900);`;
 const hostControlLocation = {moduleId:72,searchModuleId:71,chunkIds:[11,900]};
+function patchedHost(source, bridge) {
+  const patch = new BundlePatch(source);
+  patchAgentHost(patch, bridge, hostControlLocation);
+  return patch.apply();
+}
 function registerControl(sandbox) {
-  vm.runInNewContext(exposeHostSearch(patchHostControl(`globalThis.controlModules={${hostControl},${searchModule}};`).source).source,sandbox);
+  const patch = new BundlePatch(`globalThis.controlModules={${hostControl},${searchModule}};`);
+  patchHostControl(patch);
+  exposeHostSearch(patch);
+  vm.runInNewContext(patch.apply(), sandbox);
 }
 const inlineHost = host.replace('const modules={73', `const modules={${hostControl},${searchModule},73`);
 const runtime = `(()=>{class Model{constructor(p){Object.assign(this,p)}static fromBinary(p){return p}toBinary(){return new Uint8Array([1])}}${localControl};
@@ -207,7 +216,7 @@ test('native router retains every host-owned state object and callback', async (
     })
   };
   registerControl(sandbox);
-  vm.runInNewContext(patchAgentHost(host, '/test/route.cjs', hostControlLocation), sandbox);
+  vm.runInNewContext(patchedHost(host, '/test/route.cjs'), sandbox);
   const turn = Object.fromEntries(['ctx', 'conversationState', 'action', 'resources', 'blobStore', 'conversationActionManager', 'checkpointHandler', 'interactionListener', 'mcpTools'].map(k => [k, {}]));
   turn.modelDetails={modelId:'byok:test'};
   turn.runOptions={};
@@ -221,7 +230,7 @@ test('native router retains every host-owned state object and callback', async (
 test('each patched Host router retains its own authenticated search client', async () => {
   const sandbox={log(){},require:()=>({})};
   registerControl(sandbox);
-  vm.runInNewContext(patchAgentHost(host,'/test/route.cjs',hostControlLocation),sandbox);
+  vm.runInNewContext(patchedHost(host,'/test/route.cjs'),sandbox);
   await sandbox.loadNativeControl();
   const ctx={signal:new AbortController().signal};
   const routers=['account-a','account-b'].map(account=>sandbox.createRouter({managedAgentToolsClient:{runWebSearch:async(query,options)=>{assert.equal(query.modelId,'grok-4.6');assert.equal(options.signal,ctx.signal);return {answer:account,documents:[]};}}}));
@@ -248,7 +257,7 @@ for (const shadow of ['local', 'parameter']) test(`Host control and search use t
     }}),
   };
   registerControl(sandbox);
-  vm.runInNewContext(patchAgentHost(shadowed,'/test/route.cjs',hostControlLocation),sandbox);
+  vm.runInNewContext(patchedHost(shadowed,'/test/route.cjs'),sandbox);
   assert.equal(await new sandbox.Router().run({modelDetails:{modelId:'byok:fixture'},runOptions:{}}),'native');
   assert.deepEqual(sandbox.loadedChunks,[11,900]);
   const router=sandbox.createRouter({managedAgentToolsClient:{runWebSearch:async()=>({answer:'native search',documents:[]})}});
@@ -277,7 +286,10 @@ for (const [name, installer, preflight, verifyInstalled] of [['source', install,
   assert.equal(checked.files.length, 5);
   assert.equal(fs.existsSync(data), false, 'preflight must not write a backup or installation');
   for(const [i,file] of files.entries()) assert.equal(fs.readFileSync(path.join(app,file),'utf8'),[host,runtime,workbench,controlChunk][i]);
-  assert.equal(installer(app, data).changed, true);
+  const enable = (revision = 'test-revision') => installer(app, data, false, revision);
+  const first = enable();
+  assert.equal(first.changed, true);
+  assert.equal(first.cached, false);
   assert.deepEqual(verifyInstalled(app, data), checked);
   assert.match(fs.readFileSync(path.join(app, files[3]),'utf8'),/__byokControl/);
   const context = {fn:()=>Symbol('aiService')};
@@ -292,28 +304,46 @@ for (const [name, installer, preflight, verifyInstalled] of [['source', install,
   });
   assert.equal((await service.createComposerImpl()).modelConfig.modelName, 'byok:packaged');
   assert.equal(JSON.parse(fs.readFileSync(path.join(app, 'product.json'))).checksums['vs/workbench/workbench.desktop.main.js'], crypto.createHash('sha256').update(fs.readFileSync(path.join(app, files[2]))).digest('base64').replace(/=+$/, ''));
-  assert.equal(installer(app, data).changed, false);
+  const repeated = enable();
+  assert.equal(repeated.changed, false);
+  assert.equal(repeated.cached, true);
   assert.throws(() => installer(app, path.join(directory, 'another-owner')), /unrecognized BYOK patch/);
   assert.equal(installer(app, data, true).restored, true);
   assert.equal(fs.readFileSync(path.join(app, files[0]), 'utf8'), host);
   assert.equal(fs.readFileSync(path.join(app, files[2]), 'utf8'), workbench);
   assert.equal(fs.readFileSync(path.join(app, files[3]), 'utf8'), controlChunk);
+  assert.equal(enable().cached, true, 'reuse output after a clean restore');
+  assert.deepEqual(verifyInstalled(app, data), checked);
+  const refreshed = enable('updated-installer');
+  assert.equal(refreshed.cached, false, 'installer changes invalidate previous output');
+  assert.equal(refreshed.changed, false);
+  installer(app, data, true);
+  const cacheFile = path.join(data, 'installations',
+    crypto.createHash('sha256').update(fs.realpathSync(app)).digest('hex'), 'native-bundles.json');
+  const damaged = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+  damaged.files[0].source = 'incorrect cached output';
+  fs.writeFileSync(cacheFile, JSON.stringify(damaged));
+  assert.equal(enable('updated-installer').cached, false);
+  assert.deepEqual(verifyInstalled(app, data), checked);
+  installer(app, data, true);
   // A missing or ambiguous control bundle fails before any installed file is changed.
   fs.writeFileSync(path.join(app, files[3]),'exports.modules={};');
-  assert.throws(()=>installer(app,data),/control bundle/);
+  assert.throws(()=>enable('updated-installer'),/control bundle/);
   assert.equal(fs.readFileSync(path.join(app, files[0]),'utf8'),host);
   fs.writeFileSync(path.join(app, files[3]),controlChunk);
   const duplicate=path.join(app,'extensions/cursor-agent-host/dist/901.js');
   fs.writeFileSync(duplicate,controlChunk);
-  assert.throws(()=>installer(app,data),/control bundle/);
+  assert.throws(()=>enable('updated-installer'),/control bundle/);
   fs.unlinkSync(duplicate);
   assert.equal(fs.readFileSync(path.join(app, 'product.json'), 'utf8'), originalProduct);
-  installer(app, data);
+  assert.equal(enable('updated-installer').cached, true);
   fs.writeFileSync(path.join(app, files[0]), host + '\n// Updated Cursor');
   fs.writeFileSync(path.join(app, files[3]),controlChunk+'\n// Updated control chunk');
   installer(app, data, true);
   assert.equal(fs.readFileSync(path.join(app, files[0]), 'utf8'), host + '\n// Updated Cursor');
   assert.equal(fs.readFileSync(path.join(app, files[3]), 'utf8'), controlChunk+'\n// Updated control chunk');
+  assert.equal(enable('updated-installer').cached, false, 'changed native sources rebuild at the same version');
+  installer(app, data, true);
   fs.writeFileSync(path.join(app, files[2]), 'const unsupportedWorkbench=true;');
   assert.throws(() => installer(app, data), /new-conversation/);
   assert.equal(fs.readFileSync(path.join(app, files[0]), 'utf8'), host + '\n// Updated Cursor');
@@ -376,7 +406,7 @@ for (const [name, installer] of [['source', install], ['bundle', installBundled]
         };
       };
       connection(true);
-      assert.equal(installer(app, data).changed, true);
+      assert.equal(installer(app, data, false, 'test-revision').changed, true);
       vm.runInNewContext(fs.readFileSync(path.join(app, 'extensions/cursor-agent-host/dist/main.js'), 'utf8'), sandbox);
       const router = new sandbox.Router();
       connection(false);
@@ -387,7 +417,7 @@ for (const [name, installer] of [['source', install], ['bundle', installBundled]
       assert.equal(invocations, 0);
       for (const [file, original] of files) assert.equal(fs.readFileSync(path.join(app, file), 'utf8'), original);
 
-      installer(app, data);
+      assert.equal(installer(app, data, false, 'test-revision').cached, true);
       connection(true);
       assert.equal(await router.run(turn()), 'fixture-model');
       assert.equal(invocations, 1);

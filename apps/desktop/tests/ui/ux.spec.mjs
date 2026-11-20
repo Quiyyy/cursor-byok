@@ -1,6 +1,35 @@
 import { test, expect } from "./fixture.mjs";
 import { createServer } from "node:http";
 
+test("takeover shows the pending operation until the server confirms the switch", async ({ page, app }) => {
+  const status = enabled => ({ ca: "ready", integration: enabled ? "enabled" : "disabled", settings_applied: enabled });
+  const checking = Promise.withResolvers();
+  await page.route("**/api/harness/cursor/status", async route => {
+    await checking.promise;
+    await route.fulfill({ json: status(false) });
+  });
+  const requests = [Promise.withResolvers(), Promise.withResolvers()];
+  await page.route("**/api/harness/cursor/enabled", async route => {
+    const enabled = route.request().postDataJSON().enabled;
+    await requests[enabled ? 0 : 1].promise;
+    await route.fulfill({ json: status(enabled) });
+  });
+  await page.goto(`${app.origin}/__byok-api__/#/models`);
+  const toggle = page.getByRole("switch", { name: "Cursor 接管", exact: true });
+  await expect(page.getByText("正在检查接入", { exact: true })).toBeVisible();
+  await expect(toggle).toBeDisabled();
+  checking.resolve();
+  for (const [i, label] of ["正在开启接管…", "正在关闭接管…"].entries()) {
+    await toggle.click();
+    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+    await expect(toggle).toBeDisabled();
+    await expect(toggle).toBeChecked({ checked: i === 1 });
+    requests[i].resolve();
+    await expect(toggle).toBeChecked({ checked: i === 0 });
+    await expect(toggle).toBeEnabled();
+  }
+});
+
 for (const takeoverEnabled of [false, true]) {
   test(`failed model tests keep quick start unverified with takeover ${takeoverEnabled ? "on" : "off"}`, async ({ page, app }) => {
     await page.setViewportSize({ width: 820, height: 558 });
